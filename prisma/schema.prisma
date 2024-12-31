@@ -1,0 +1,412 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Assets, Tags, Inspections & Alerts
+
+model Asset {
+  id                     String                  @id @default(cuid(2))
+  createdOn              DateTime                @default(now())
+  modifiedOn             DateTime                @updatedAt
+  active                 Boolean                 @default(true)
+  name                   String
+  product                Product                 @relation(fields: [productId], references: [id])
+  productId              String
+  tag                    Tag?                    @relation(fields: [tagId], references: [id])
+  tagId                  String?
+  location               String
+  placement              String
+  serialNumber           String
+  consumables            Consumable[]
+  inspections            Inspection[]
+  alerts                 Alert[]
+  setupQuestionResponses AssetQuestionResponse[]
+  site                   Site                    @relation(fields: [siteId], references: [id])
+  siteId                 String                  @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  client                 Client                  @relation(fields: [clientId], references: [id])
+  clientId               String                  @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+}
+
+model Consumable {
+  id         String    @id @default(cuid(2))
+  createdOn  DateTime  @default(now())
+  modifiedOn DateTime  @updatedAt
+  asset      Asset?    @relation(fields: [assetId], references: [id])
+  assetId    String?
+  product    Product   @relation(fields: [productId], references: [id])
+  productId  String
+  expiresOn  DateTime?
+  site       Site      @relation(fields: [siteId], references: [id])
+  siteId     String    @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  client     Client    @relation(fields: [clientId], references: [id])
+  clientId   String    @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+}
+
+model Tag {
+  id           String    @id @default(cuid(2))
+  createdOn    DateTime  @default(now())
+  modifiedOn   DateTime  @updatedAt
+  setupOn      DateTime?
+  serialNumber String
+  assets       Asset[]
+  alerts       Alert[]
+  site         Site?     @relation(fields: [siteId], references: [id])
+  siteId       String?   @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  client       Client?   @relation(fields: [clientId], references: [id])
+  clientId     String?   @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+}
+
+model Inspection {
+  id          String                  @id @default(cuid(2))
+  createdOn   DateTime                @default(now())
+  modifiedOn  DateTime                @updatedAt
+  asset       Asset                   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId     String
+  inspector   Person                  @relation(fields: [inspectorId], references: [id])
+  inspectorId String                  @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  status      InspectionStatus        @default(PENDING)
+  useragent   String?
+  ipv4        String?                 @db.Inet
+  ipv6        String?                 @db.Inet
+  latitude    Float?
+  longitude   Float?
+  comments    String?
+  responses   AssetQuestionResponse[]
+  site        Site                    @relation(fields: [siteId], references: [id])
+  siteId      String                  @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  client      Client                  @relation(fields: [clientId], references: [id])
+  clientId    String                  @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+}
+
+enum InspectionStatus {
+  PENDING
+  COMPLETE
+}
+
+model AssetQuestion {
+  id                 String                    @id @default(cuid(2))
+  createdOn          DateTime                  @default(now())
+  modifiedOn         DateTime                  @updatedAt
+  active             Boolean                   @default(true)
+  type               AssetQuestionType
+  required           Boolean                   @default(false)
+  order              Int?
+  prompt             String
+  value_type         AssetQuestionResponseType
+  productCategory    ProductCategory?          @relation(fields: [productCategoryId], references: [id])
+  productCategoryId  String?
+  product            Product?                  @relation(fields: [productId], references: [id])
+  productId          String?
+  assetAlertCriteria AssetAlertCriterion[]
+  responses          AssetQuestionResponse[]
+}
+
+model AssetQuestionResponse {
+  id              String        @id @default(cuid(2))
+  createdOn       DateTime      @default(now())
+  modifiedOn      DateTime      @updatedAt
+  value           Json
+  assetQuestion   AssetQuestion @relation(fields: [assetQuestionId], references: [id])
+  assetQuestionId String
+  asset           Asset?        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId         String?
+  inspection      Inspection?   @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectionId    String?
+  responder       Person        @relation(fields: [responderId], references: [id])
+  responderId     String        @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  site            Site          @relation(fields: [siteId], references: [id])
+  siteId          String        @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  client          Client        @relation(fields: [clientId], references: [id])
+  clientId        String        @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+}
+
+enum AssetQuestionType {
+  SETUP
+  INSPECTION
+}
+
+enum AssetQuestionResponseType {
+  BINARY
+  INDETERMINATE_BINARY
+  TEXT
+  TEXTAREA
+  DATE
+  NUMBER
+  IMAGE
+}
+
+model AssetAlertCriterion {
+  id              String        @id @default(cuid(2))
+  createdOn       DateTime      @default(now())
+  modifiedOn      DateTime      @updatedAt
+  assetQuestion   AssetQuestion @relation(fields: [assetQuestionId], references: [id], onDelete: Cascade)
+  assetQuestionId String
+  rule            Json
+  alertLevel      AlertLevel    @default(INFO)
+  alert           Alert?
+}
+
+model Alert {
+  id                    String              @id @default(cuid(2))
+  createdOn             DateTime            @default(now())
+  modifiedOn            DateTime            @updatedAt
+  alertLevel            AlertLevel          @default(INFO)
+  asset                 Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId               String
+  tag                   Tag?                @relation(fields: [tagId], references: [id])
+  tagId                 String?
+  assetAlertCriterion   AssetAlertCriterion @relation(fields: [assetAlertCriterionId], references: [id], onDelete: Cascade)
+  assetAlertCriterionId String              @unique
+  resolved              Boolean             @default(false)
+  resolutionNote        String?
+  site                  Site                @relation(fields: [siteId], references: [id])
+  siteId                String
+  client                Client              @relation(fields: [clientId], references: [id])
+  clientId              String
+}
+
+enum AlertLevel {
+  URGENT
+  INFO
+}
+
+// Product Requests
+
+model ProductRequest {
+  id                      String                   @id @default(cuid(2))
+  createdOn               DateTime                 @default(now())
+  modifiedOn              DateTime                 @updatedAt
+  status                  ProductRequestStatus     @default(NEW)
+  requestor               Person                   @relation(fields: [requestorId], references: [id])
+  requestorId             String                   @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  productRequestApprovals ProductRequestApproval[]
+  productRequestItems     ProductRequestItem[]
+  site                    Site                     @relation(fields: [siteId], references: [id])
+  siteId                  String                   @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  client                  Client                   @relation(fields: [clientId], references: [id])
+  clientId                String                   @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+}
+
+enum ProductRequestStatus {
+  NEW
+  APPROVED
+  RECEIVED
+  PROCESSING
+  FULFILLED
+  CANCELLED
+  COMPLETE
+}
+
+model ProductRequestApproval {
+  id               String         @id @default(cuid(2))
+  createdOn        DateTime       @default(now())
+  modifiedOn       DateTime       @updatedAt
+  approved         Boolean
+  approver         Person         @relation(fields: [approverId], references: [id])
+  approverId       String         @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  productRequest   ProductRequest @relation(fields: [productRequestId], references: [id], onDelete: Cascade)
+  productRequestId String
+  site             Site           @relation(fields: [siteId], references: [id])
+  siteId           String         @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  client           Client         @relation(fields: [clientId], references: [id])
+  clientId         String         @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+}
+
+model ProductRequestItem {
+  id               String         @id @default(cuid(2))
+  createdOn        DateTime       @default(now())
+  modifiedOn       DateTime       @updatedAt
+  productRequest   ProductRequest @relation(fields: [productRequestId], references: [id], onDelete: Cascade)
+  productRequestId String
+  product          Product        @relation(fields: [productId], references: [id])
+  productId        String
+  quantity         Int
+  addedBy          Person         @relation(fields: [addedById], references: [id])
+  addedById        String         @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  site             Site           @relation(fields: [siteId], references: [id])
+  siteId           String         @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  client           Client         @relation(fields: [clientId], references: [id])
+  clientId         String         @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+}
+
+// Clients, Sites & People
+
+model Address {
+  id      String  @id @default(cuid(2))
+  street1 String
+  street2 String?
+  city    String
+  state   String
+  zip     String
+  client  Client?
+  site    Site?
+}
+
+model Client {
+  id                      String                   @id @default(cuid(2))
+  externalId              String                   @unique @default(cuid(2))
+  createdOn               DateTime                 @default(now())
+  modifiedOn              DateTime                 @updatedAt
+  status                  ClientStatus             @default(PENDING)
+  startedOn               DateTime
+  name                    String
+  address                 Address                  @relation(fields: [addressId], references: [id])
+  addressId               String                   @unique
+  phoneNumber             String
+  homeUrl                 String?
+  sites                   Site[]
+  people                  Person[]
+  assets                  Asset[]
+  consumables             Consumable[]
+  inspections             Inspection[]
+  tags                    Tag[]
+  assetQuestionResponses  AssetQuestionResponse[]
+  alerts                  Alert[]
+  productRequests         ProductRequest[]
+  productRequestApprovals ProductRequestApproval[]
+  productRequestItems     ProductRequestItem[]
+  productCategories       ProductCategory[]
+  manufacturers           Manufacturer[]
+  products                Product[]
+}
+
+enum ClientStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+model Site {
+  id                      String                   @id @default(cuid(2))
+  externalId              String                   @unique @default(cuid(2))
+  createdOn               DateTime                 @default(now())
+  modifiedOn              DateTime                 @updatedAt
+  name                    String
+  address                 Address                  @relation(fields: [addressId], references: [id])
+  addressId               String                   @unique
+  phoneNumber             String
+  primary                 Boolean                  @default(false)
+  parentSite              Site?                    @relation("ParentSiteSubsite", fields: [parentSiteId], references: [id], onDelete: Restrict)
+  parentSiteId            String?
+  subsites                Site[]                   @relation("ParentSiteSubsite")
+  assets                  Asset[]
+  consumables             Consumable[]
+  productRequests         ProductRequest[]
+  tags                    Tag[]
+  people                  Person[]
+  inspections             Inspection[]
+  assetQuestionResponses  AssetQuestionResponse[]
+  alerts                  Alert[]
+  client                  Client                   @relation(fields: [clientId], references: [id])
+  clientId                String
+  productRequestApprovals ProductRequestApproval[]
+  productRequestItems     ProductRequestItem[]
+}
+
+model Person {
+  id                      String                   @id @default(cuid(2))
+  createdOn               DateTime                 @default(now())
+  modifiedOn              DateTime                 @updatedAt
+  firstName               String
+  lastName                String
+  email                   String
+  username                String?
+  idpId                   String?                  @unique
+  productRequests         ProductRequest[]
+  productRequestApprovals ProductRequestApproval[]
+  productRequestItems     ProductRequestItem[]
+  inspections             Inspection[]
+  assetQuestionResponses  AssetQuestionResponse[]
+  site                    Site                     @relation(fields: [siteId], references: [id])
+  siteId                  String
+  client                  Client                   @relation(fields: [clientId], references: [id])
+  clientId                String
+}
+
+// Products
+
+model ProductCategory {
+  id             String          @id @default(cuid(2))
+  createdOn      DateTime        @default(now())
+  modifiedOn     DateTime        @updatedAt
+  active         Boolean         @default(true)
+  name           String
+  shortName      String?
+  description    String?
+  icon           String?
+  color          String?
+  assetQuestions AssetQuestion[]
+  products       Product[]
+  client         Client?         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId       String?
+}
+
+model Manufacturer {
+  id         String    @id @default(cuid(2))
+  createdOn  DateTime  @default(now())
+  modifiedOn DateTime  @updatedAt
+  active     Boolean   @default(true)
+  name       String
+  homeUrl    String?
+  products   Product[]
+  client     Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId   String?
+}
+
+model AnsiCategory {
+  id          String    @id @default(cuid(2))
+  createdOn   DateTime  @default(now())
+  modifiedOn  DateTime  @updatedAt
+  name        String
+  description String
+  products    Product[]
+}
+
+model Product {
+  id                  String               @id @default(cuid(2))
+  createdOn           DateTime             @default(now())
+  modifiedOn          DateTime             @updatedAt
+  active              Boolean              @default(true)
+  manufacturer        Manufacturer         @relation(fields: [manufacturerId], references: [id])
+  manufacturerId      String
+  type                ProductType
+  name                String
+  description         String?
+  sku                 String?
+  productUrl          String?
+  imageUrl            String?
+  productCategory     ProductCategory      @relation(fields: [productCategoryId], references: [id])
+  productCategoryId   String
+  // Specific to consumables
+  parentProduct       Product?             @relation("PrimaryConsumableProduct", fields: [parentProductId], references: [id], onDelete: Cascade)
+  parentProductId     String?
+  consumableProducts  Product[]            @relation("PrimaryConsumableProduct")
+  quantity            Int?
+  price               Float?
+  ansiCategory        AnsiCategory?        @relation(fields: [ansiCategoryId], references: [id])
+  ansiCategoryId      String?
+  perishable          Boolean              @default(false)
+  ansiMinimumRequired Boolean              @default(false)
+  assets              Asset[]
+  consumables         Consumable[]
+  productRequestItems ProductRequestItem[]
+  assetQuestions      AssetQuestion[]
+  client              Client?              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId            String?
+}
+
+enum ProductType {
+  CONSUMABLE
+  PRIMARY
+}

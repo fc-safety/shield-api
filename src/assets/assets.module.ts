@@ -1,0 +1,10 @@
+import { Module } from '@nestjs/common';
+import { AssetsModule as AssetsResourceModule } from './assets/assets.module';
+import { InspectionsModule } from './inspections/inspections.module';
+import { ConsumablesModule } from './consumables/consumables.module';
+import { TagsModule } from './tags/tags.module';
+
+@Module({
+  imports: [AssetsResourceModule, InspectionsModule, ConsumablesModule, TagsModule],
+})
+export class AssetsModule {}

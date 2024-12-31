@@ -1,0 +1,90 @@
+import { Prisma } from '@prisma/client';
+import { createZodDto } from 'nestjs-zod';
+import {
+  buildFixedQuerySchema,
+  prismaBoolFilter,
+  prismaDateTimeFilter,
+  prismaEnumFilter,
+  prismaNumberFilter,
+  PrismaOrderEmum,
+  prismaStringFilter,
+} from 'src/common/validation';
+import { z } from 'zod';
+
+const QueryProductFiltersSchema = z
+  .object({
+    id: prismaStringFilter(z.string()),
+    createdOn: prismaDateTimeFilter(z.coerce.date()),
+    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    active: prismaBoolFilter(z.boolean()),
+    manufacturer: z
+      .object({
+        id: prismaStringFilter(z.string()),
+      })
+      .partial(),
+    type: prismaEnumFilter(z.enum(['PRIMARY', 'CONSUMABLE'])),
+    name: prismaStringFilter(z.string()),
+    description: prismaStringFilter(z.string()),
+    sku: prismaStringFilter(z.string()),
+    productUrl: prismaStringFilter(z.string()),
+    imageUrl: prismaStringFilter(z.string()),
+    productCategory: z
+      .object({
+        id: prismaStringFilter(z.string()),
+      })
+      .partial(),
+    parentProduct: z
+      .object({
+        id: prismaStringFilter(z.string()),
+      })
+      .partial(),
+    quantity: prismaNumberFilter(z.number().int()),
+    price: prismaNumberFilter(z.number()),
+    ansiCategory: z
+      .object({
+        id: prismaStringFilter(z.string()),
+      })
+      .partial(),
+    perishable: prismaBoolFilter(z.boolean()),
+    ansiMinimumRequired: prismaBoolFilter(z.boolean()),
+  })
+  .partial() satisfies z.Schema<Prisma.ProductWhereInput>;
+
+const QueryProductOrderSchema = z.object({
+  id: PrismaOrderEmum,
+  createdOn: PrismaOrderEmum,
+  updatedOn: PrismaOrderEmum,
+  active: PrismaOrderEmum,
+  manufacturer: z.object({
+    id: PrismaOrderEmum,
+    name: PrismaOrderEmum,
+  }),
+  type: PrismaOrderEmum,
+  name: PrismaOrderEmum,
+  description: PrismaOrderEmum,
+  sku: PrismaOrderEmum,
+  productUrl: PrismaOrderEmum,
+  imageUrl: PrismaOrderEmum,
+  productCategory: z.object({
+    id: PrismaOrderEmum,
+    name: PrismaOrderEmum,
+  }),
+  parentProduct: z.object({
+    id: PrismaOrderEmum,
+    name: PrismaOrderEmum,
+  }),
+  quantity: PrismaOrderEmum,
+  price: PrismaOrderEmum,
+  ansiCategory: z.object({
+    id: PrismaOrderEmum,
+    name: PrismaOrderEmum,
+  }),
+  perishable: PrismaOrderEmum,
+  ansiMinimumRequired: PrismaOrderEmum,
+}) satisfies z.Schema<Prisma.ProductOrderByWithRelationInput>;
+
+export class QueryProductDto extends createZodDto(
+  QueryProductFiltersSchema.extend(
+    buildFixedQuerySchema(QueryProductOrderSchema),
+  ),
+) {}

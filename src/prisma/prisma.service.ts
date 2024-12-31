@@ -1,0 +1,245 @@
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { Cache } from 'cache-manager';
+import { ClsService } from 'nestjs-cls';
+import { TVisibility } from 'src/auth/permissions';
+import { StatelessUser } from 'src/auth/user.schema';
+import { CommonClsStore } from '../common/types';
+
+interface Person {
+  id: string;
+  idpId: string | null;
+  siteId: string;
+  clientId: string;
+  visibility: TVisibility;
+}
+
+@Injectable()
+export class PrismaService extends PrismaClient implements OnModuleInit {
+  constructor(
+    protected readonly cls: ClsService<CommonClsStore>,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) {
+    super();
+  }
+
+  async onModuleInit() {
+    await this.$connect();
+  }
+
+  public extended() {
+    return this.$extends(extensions.restExtensions());
+  }
+
+  public async forUser() {
+    const user = this.cls.get('user');
+    invariant(user, 'No user in CLS');
+    const [clientId, siteId] = await Promise.all([
+      this.getUserClientId(user),
+      this.getUserSiteId(user),
+    ]);
+
+    const cacheKey = `person:idpId:${user.idpId}`;
+    const createOrUpdatePerson = async () => {
+      const prisma = this.bypassRLS();
+
+      const existingPerson = await prisma.person.findUnique({
+        where: { idpId: user.idpId },
+      });
+
+      const data = {
+        idpId: user.idpId,
+        firstName: user.givenName ?? '',
+        lastName: user.familyName ?? '',
+        email: user.email,
+        username: user.username,
+        site: {
+          connect: {
+            id: siteId,
+          },
+        },
+        client: {
+          connect: {
+            id: clientId,
+          },
+        },
+      };
+
+      if (existingPerson) {
+        return await prisma.person.update({
+          where: { id: existingPerson.id },
+          data,
+        });
+      } else {
+        return await prisma.person.create({ data });
+      }
+    };
+
+    const person = await this.getFromCacheOrDefault<Person>(
+      cacheKey,
+      createOrUpdatePerson().then(({ id, siteId, clientId, idpId }) => ({
+        id,
+        siteId,
+        clientId,
+        idpId,
+        visibility: user.visibility,
+      })),
+      60 * 60 * 1000, // 1 hour
+    );
+
+    return this.extended().$extends(extensions.forUser(person));
+  }
+
+  public bypassRLS() {
+    return this.extended().$extends(extensions.bypassRLS());
+  }
+
+  /**
+   * Bypasses RLS if user is global admin, otherwise isolates data based on user's client.
+   *
+   * @returns `this.bypassRLS()` if the user is a global admin, else `await this.forClient()`
+   */
+  public async forAdminOrUser() {
+    const user = this.cls.get('user');
+    if (user?.isGlobalAdmin()) {
+      return this.bypassRLS();
+    } else {
+      return await this.forUser();
+    }
+  }
+
+  private async getFromCacheOrDefault<
+    T extends string | number | boolean | object,
+  >(
+    cacheKey: string,
+    defaultValue: T | Promise<T> | (() => T | Promise<T>),
+    timeout?: number,
+  ) {
+    const cachedValue = await this.cache.get<T>(cacheKey);
+
+    if (cachedValue !== undefined) {
+      return cachedValue;
+    }
+
+    const valueOrPromise =
+      typeof defaultValue === 'function' ? defaultValue() : defaultValue;
+    const value: T = await valueOrPromise;
+    await this.cache.set(cacheKey, value, timeout);
+    return value;
+  }
+
+  private async getUserClientId(user: StatelessUser) {
+    return await this.getFromCacheOrDefault<string>(
+      `clientId:externalId:${user.clientId}`,
+      this.bypassRLS()
+        .client.findUnique({
+          where: { externalId: user.clientId },
+        })
+        .then((clientOrNull) => clientOrNull?.id ?? 'null'),
+      60 * 60 * 1000,
+    ); // 1 hour
+  }
+
+  private async getUserSiteId(user: StatelessUser) {
+    return await this.getFromCacheOrDefault<string>(
+      `siteId:externalId:${user.siteId}`,
+      this.bypassRLS()
+        .site.findUnique({
+          where: { externalId: user.siteId },
+        })
+        .then((siteOrNull) => siteOrNull?.id ?? 'null'),
+      60 * 60 * 1000,
+    ); // 1 hour
+  }
+}
+
+export const extensions = {
+  bypassRLS: () => {
+    return Prisma.defineExtension((prisma) =>
+      prisma.$extends({
+        query: {
+          $allModels: {
+            async $allOperations({ args, query }) {
+              const [, result] = await prisma.$transaction([
+                prisma.$executeRaw`SELECT set_config('app.bypass_rls', 'on', TRUE)`,
+                query(args),
+              ]);
+              return result;
+            },
+          },
+        },
+      }),
+    );
+  },
+
+  forUser: (person: Person) => {
+    return Prisma.defineExtension((prisma) =>
+      prisma.$extends({
+        query: {
+          $allModels: {
+            async $allOperations({ args, query, operation, model }) {
+              if (
+                ['create', 'update'].includes(operation) &&
+                'data' in args &&
+                ['Manufacturer', 'ProductCategory', 'Product'].includes(model)
+              ) {
+                args.data = {
+                  ...args.data,
+                  client: { connect: { id: person.clientId } },
+                };
+              }
+
+              const [, , , , , result] = await prisma.$transaction([
+                prisma.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
+                prisma.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
+                // TODO: Add support for multiple sites
+                prisma.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.siteId}, TRUE)`,
+                prisma.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
+                prisma.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
+                query(args),
+              ]);
+              return result;
+            },
+          },
+        },
+      }),
+    );
+  },
+
+  restExtensions: () => {
+    return Prisma.defineExtension((prisma) =>
+      prisma.$extends({
+        name: 'restExtensions',
+        model: {
+          $allModels: {
+            async findManyForPage<T>(
+              this: T,
+              args: Prisma.Args<T, 'findMany'>,
+            ): Promise<{
+              results: Prisma.Result<T, Prisma.Args<T, 'findMany'>, 'findMany'>;
+              count: number;
+              limit?: number;
+              offset?: number;
+            }> {
+              const context = Prisma.getExtensionContext(this);
+              return Promise.all([
+                (context as any).count({ where: args?.where }),
+                (context as any).findMany(args),
+              ]).then(([count, results]) => ({
+                results,
+                count,
+                limit: results.length,
+                offset: args?.skip,
+              }));
+            },
+          },
+        },
+      }),
+    );
+  },
+};
+
+function invariant<T>(condition: T, message: string): asserts condition {
+  if (!condition) throw new Error(message);
+}

@@ -1,0 +1,61 @@
+import { Injectable } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
+import { CommonClsStore } from 'src/common/types';
+import { as404OrThrow } from 'src/common/utils';
+import { buildPrismaFindArgs } from 'src/common/validation';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateProductDto } from './dto/create-product.dto';
+import { QueryProductDto } from './dto/query-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
+
+@Injectable()
+export class ProductsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    protected readonly cls: ClsService<CommonClsStore>,
+  ) {}
+
+  async create(createProductDto: CreateProductDto) {
+    return this.prisma
+      .forAdminOrUser()
+      .then((prisma) => prisma.product.create({ data: createProductDto }));
+  }
+
+  async findAll(queryProductDto?: QueryProductDto) {
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.product.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.product>(queryProductDto, {
+          include: {
+            manufacturer: true,
+            productCategory: true,
+          },
+        }),
+      ),
+    );
+  }
+
+  async findOne(id: string) {
+    return this.prisma
+      .forAdminOrUser()
+      .then((prisma) =>
+        prisma.product.findUniqueOrThrow({ where: { id } }).catch(as404OrThrow),
+      );
+  }
+
+  async update(id: string, updateProductDto: UpdateProductDto) {
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.product
+        .update({
+          where: { id },
+          data: updateProductDto,
+        })
+        .catch(as404OrThrow),
+    );
+  }
+
+  async remove(id: string) {
+    return this.prisma
+      .forAdminOrUser()
+      .then((prisma) => prisma.product.delete({ where: { id } }));
+  }
+}
