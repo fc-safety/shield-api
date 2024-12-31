@@ -7,6 +7,7 @@ import { configSchema } from './config';
 import { ApiConfigModule } from './config/api-config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ProductsModule } from './products/products.module';
     AssetsModule,
     ProductsModule,
     ClientsModule,
+    HealthModule,
   ],
   controllers: [],
   providers: [],
