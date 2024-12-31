@@ -14,6 +14,9 @@ RUN npm i --ignore-scripts @swc/core-linux-x64-gnu
 # Bundle app source
 COPY . .
 
+# Generate Prisma types for app build.
+RUN npx prisma generate
+
 # Creates a "dist" folder with the production build
 RUN npm run build
 
