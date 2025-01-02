@@ -133,10 +133,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     return await this.getFromCacheOrDefault<string>(
       `clientId:externalId:${user.clientId}`,
       this.bypassRLS()
-        .client.findUnique({
+        .client.findUniqueOrThrow({
           where: { externalId: user.clientId },
         })
-        .then((clientOrNull) => clientOrNull?.id ?? 'null'),
+        .then((client) => client.id),
       60 * 60 * 1000,
     ); // 1 hour
   }
@@ -145,10 +145,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     return await this.getFromCacheOrDefault<string>(
       `siteId:externalId:${user.siteId}`,
       this.bypassRLS()
-        .site.findUnique({
+        .site.findUniqueOrThrow({
           where: { externalId: user.siteId },
         })
-        .then((siteOrNull) => siteOrNull?.id ?? 'null'),
+        .then((site) => site.id),
       60 * 60 * 1000,
     ); // 1 hour
   }

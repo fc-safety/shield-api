@@ -1,6 +1,3 @@
--- TODO: RLS seems to be causing problem with invalid boolean expressions. This is probably
--- something to do with not handling values when they don't exist.
-
 CREATE OR REPLACE FUNCTION validate_client(client_id TEXT) RETURNS BOOLEAN AS $$
 DECLARE
     current_client_id TEXT;
@@ -19,9 +16,9 @@ DECLARE
     current_site_id TEXT;
     allowed_site_ids TEXT[];
 BEGIN
-    current_user_visibility := current_setting('app.current_user_visibility')::TEXT;
-    current_site_id := current_setting('app.current_site_id')::TEXT;
-    allowed_site_ids := string_to_array(current_setting('app.allowed_site_ids')::TEXT, ',');
+    current_user_visibility := current_setting('app.current_user_visibility', TRUE)::TEXT;
+    current_site_id := current_setting('app.current_site_id', TRUE)::TEXT;
+    allowed_site_ids := string_to_array(current_setting('app.allowed_site_ids', TRUE)::TEXT, ',');
 
     -- Perform the check
     RETURN (current_user_visibility IN ('single-site', 'self') AND current_site_id = site_id)
@@ -32,7 +29,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION restrict_self() RETURNS BOOLEAN AS $$
 BEGIN
-    RETURN current_setting('app.current_user_visibility')::TEXT = 'self';
+    RETURN current_setting('app.current_user_visibility', TRUE)::TEXT = 'self';
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
@@ -40,7 +37,7 @@ CREATE OR REPLACE FUNCTION is_owner(person_id TEXT) RETURNS BOOLEAN AS $$
 DECLARE
     current_person_id TEXT;
 BEGIN
-    current_person_id := current_setting('app.current_person_id')::TEXT;
+    current_person_id := current_setting('app.current_person_id', TRUE)::TEXT;
 
     -- Perform the check
     RETURN person_id = current_person_id;

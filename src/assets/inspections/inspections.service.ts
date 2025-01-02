@@ -21,7 +21,6 @@ export class InspectionsService {
       useragent: this.cls.get('useragent'),
       ipv4: this.cls.get('ipv4'),
       ipv6: this.cls.get('ipv6'),
-      // TODO: grab location info
     };
 
     return this.prisma
