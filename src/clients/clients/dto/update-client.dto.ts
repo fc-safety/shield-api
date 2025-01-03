@@ -1,4 +1,17 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateClientDto } from './create-client.dto';
+import { createZodDto } from 'nestjs-zod';
+import { createAddressSchema } from 'src/common/schema';
+import { z } from 'zod';
+import { CreateClientSchema } from './create-client.dto';
 
-export class UpdateClientDto extends PartialType(CreateClientDto) {}
+export const UpdateClientSchema = CreateClientSchema.omit({
+  externalId: true,
+  address: true,
+})
+  .extend({
+    address: z.object({
+      update: createAddressSchema.partial(),
+    }),
+  })
+  .partial();
+
+export class UpdateClientDto extends createZodDto(UpdateClientSchema) {}

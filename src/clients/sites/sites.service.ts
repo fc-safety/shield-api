@@ -17,19 +17,26 @@ export class SitesService {
   }
 
   async findAll(querySiteDto?: QuerySiteDto) {
-    return this.prisma
-      .forAdminOrUser()
-      .then((prisma) =>
-        prisma.site.findManyForPage(
-          buildPrismaFindArgs<typeof prisma.site>(querySiteDto),
-        ),
-      );
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.site.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.site>(querySiteDto, {
+          include: {
+            address: true,
+          },
+        }),
+      ),
+    );
   }
 
   async findOne(id: string) {
     return this.prisma
       .forAdminOrUser()
-      .then((prisma) => prisma.site.findUniqueOrThrow({ where: { id } }))
+      .then((prisma) =>
+        prisma.site.findUniqueOrThrow({
+          where: { id },
+          include: { address: true },
+        }),
+      )
       .catch(as404OrThrow);
   }
 

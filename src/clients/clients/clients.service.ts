@@ -15,21 +15,33 @@ export class ClientsService {
   }
 
   findAll(queryClientDto?: QueryClientDto) {
-    return this.prisma
-      .bypassRLS()
-      .client.findManyForPage(
-        buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto),
-      );
+    return this.prisma.bypassRLS().client.findManyForPage(
+      buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
+        include: {
+          address: true,
+        },
+      }),
+    );
   }
 
-  findOne(id: string) {
+  async findOne(id: string) {
     return this.prisma
       .bypassRLS()
-      .client.findUniqueOrThrow({ where: { id } })
+      .client.findUniqueOrThrow({
+        where: { id },
+        include: {
+          address: true,
+          sites: {
+            include: {
+              address: true,
+            },
+          },
+        },
+      })
       .catch(as404OrThrow);
   }
 
-  update(id: string, updateClientDto: UpdateClientDto) {
+  async update(id: string, updateClientDto: UpdateClientDto) {
     return this.prisma
       .bypassRLS()
       .client.update({

@@ -3,7 +3,7 @@ import { createZodDto } from 'nestjs-zod';
 import { createAddressSchema } from 'src/common/schema';
 import { z } from 'zod';
 
-const CreateClientSchema = z.object({
+export const CreateClientSchema = z.object({
   externalId: z.string().optional(),
   name: z.string(),
   startedOn: z.coerce.date(),
