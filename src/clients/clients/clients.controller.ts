@@ -34,7 +34,6 @@ export class ClientsController {
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateClientDto: UpdateClientDto) {
-    console.log(updateClientDto);
     return this.clientsService.update(id, updateClientDto);
   }
 
