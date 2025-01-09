@@ -5,7 +5,7 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // For Docker deployments.
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
@@ -26,7 +26,7 @@ model Asset {
   product                Product                 @relation(fields: [productId], references: [id])
   productId              String
   tag                    Tag?                    @relation(fields: [tagId], references: [id])
-  tagId                  String?
+  tagId                  String?                 @unique
   location               String
   placement              String
   serialNumber           String
@@ -61,7 +61,8 @@ model Tag {
   modifiedOn   DateTime  @updatedAt
   setupOn      DateTime?
   serialNumber String
-  assets       Asset[]
+  asset        Asset?
+  assetId      String?
   alerts       Alert[]
   site         Site?     @relation(fields: [siteId], references: [id])
   siteId       String?   @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))

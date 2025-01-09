@@ -33,6 +33,11 @@ export class ManufacturersService {
       prisma.manufacturer
         .findUniqueOrThrow({
           where: { id },
+          include: {
+            products: {
+              include: { productCategory: true },
+            },
+          },
         })
         .catch(as404OrThrow),
     );

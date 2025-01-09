@@ -6,8 +6,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CreateTagDto } from './dto/create-tag.dto';
+import { QueryTagDto } from './dto/query-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { TagsService } from './tags.service';
 
@@ -21,22 +23,22 @@ export class TagsController {
   }
 
   @Get()
-  findAll() {
-    return this.tagsService.findAll();
+  findAll(@Query() queryTagDto?: QueryTagDto) {
+    return this.tagsService.findAll(queryTagDto);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.tagsService.findOne(+id);
+    return this.tagsService.findOne(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateTagDto: UpdateTagDto) {
-    return this.tagsService.update(+id, updateTagDto);
+    return this.tagsService.update(id, updateTagDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.tagsService.remove(+id);
+    return this.tagsService.remove(id);
   }
 }
