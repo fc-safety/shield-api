@@ -35,9 +35,9 @@ model Asset {
   alerts                 Alert[]
   setupQuestionResponses AssetQuestionResponse[]
   site                   Site                    @relation(fields: [siteId], references: [id])
-  siteId                 String                  @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  siteId                 String                  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client                 Client                  @relation(fields: [clientId], references: [id])
-  clientId               String                  @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+  clientId               String                  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 model Consumable {
@@ -50,9 +50,9 @@ model Consumable {
   productId  String
   expiresOn  DateTime?
   site       Site      @relation(fields: [siteId], references: [id])
-  siteId     String    @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  siteId     String    @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client     Client    @relation(fields: [clientId], references: [id])
-  clientId   String    @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+  clientId   String    @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 model Tag {
@@ -65,9 +65,9 @@ model Tag {
   assetId      String?
   alerts       Alert[]
   site         Site?     @relation(fields: [siteId], references: [id])
-  siteId       String?   @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  siteId       String?   @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client       Client?   @relation(fields: [clientId], references: [id])
-  clientId     String?   @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+  clientId     String?   @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 model Inspection {
@@ -77,7 +77,7 @@ model Inspection {
   asset       Asset                   @relation(fields: [assetId], references: [id], onDelete: Cascade)
   assetId     String
   inspector   Person                  @relation(fields: [inspectorId], references: [id])
-  inspectorId String                  @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  inspectorId String                  @default(dbgenerated("current_setting('app.current_person_id'::text)"))
   status      InspectionStatus        @default(PENDING)
   useragent   String?
   ipv4        String?                 @db.Inet
@@ -87,9 +87,9 @@ model Inspection {
   comments    String?
   responses   AssetQuestionResponse[]
   site        Site                    @relation(fields: [siteId], references: [id])
-  siteId      String                  @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  siteId      String                  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client      Client                  @relation(fields: [clientId], references: [id])
-  clientId    String                  @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+  clientId    String                  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 enum InspectionStatus {
@@ -106,7 +106,7 @@ model AssetQuestion {
   required           Boolean                   @default(false)
   order              Int?
   prompt             String
-  value_type         AssetQuestionResponseType
+  valueType          AssetQuestionResponseType
   productCategory    ProductCategory?          @relation(fields: [productCategoryId], references: [id])
   productCategoryId  String?
   product            Product?                  @relation(fields: [productId], references: [id])
@@ -127,11 +127,11 @@ model AssetQuestionResponse {
   inspection      Inspection?   @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
   inspectionId    String?
   responder       Person        @relation(fields: [responderId], references: [id])
-  responderId     String        @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  responderId     String        @default(dbgenerated("current_setting('app.current_person_id'::text)"))
   site            Site          @relation(fields: [siteId], references: [id])
-  siteId          String        @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  siteId          String        @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client          Client        @relation(fields: [clientId], references: [id])
-  clientId        String        @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+  clientId        String        @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 enum AssetQuestionType {
@@ -192,13 +192,13 @@ model ProductRequest {
   modifiedOn              DateTime                 @updatedAt
   status                  ProductRequestStatus     @default(NEW)
   requestor               Person                   @relation(fields: [requestorId], references: [id])
-  requestorId             String                   @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  requestorId             String                   @default(dbgenerated("current_setting('app.current_person_id'::text)"))
   productRequestApprovals ProductRequestApproval[]
   productRequestItems     ProductRequestItem[]
   site                    Site                     @relation(fields: [siteId], references: [id])
-  siteId                  String                   @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  siteId                  String                   @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client                  Client                   @relation(fields: [clientId], references: [id])
-  clientId                String                   @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+  clientId                String                   @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 enum ProductRequestStatus {
@@ -217,13 +217,13 @@ model ProductRequestApproval {
   modifiedOn       DateTime       @updatedAt
   approved         Boolean
   approver         Person         @relation(fields: [approverId], references: [id])
-  approverId       String         @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  approverId       String         @default(dbgenerated("current_setting('app.current_person_id'::text)"))
   productRequest   ProductRequest @relation(fields: [productRequestId], references: [id], onDelete: Cascade)
   productRequestId String
   site             Site           @relation(fields: [siteId], references: [id])
-  siteId           String         @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  siteId           String         @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client           Client         @relation(fields: [clientId], references: [id])
-  clientId         String         @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+  clientId         String         @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 model ProductRequestItem {
@@ -236,11 +236,11 @@ model ProductRequestItem {
   productId        String
   quantity         Int
   addedBy          Person         @relation(fields: [addedById], references: [id])
-  addedById        String         @default(dbgenerated("(current_setting('app.current_person_id'::text))::text"))
+  addedById        String         @default(dbgenerated("current_setting('app.current_person_id'::text)"))
   site             Site           @relation(fields: [siteId], references: [id])
-  siteId           String         @default(dbgenerated("(current_setting('app.current_site_id'::text))::text"))
+  siteId           String         @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client           Client         @relation(fields: [clientId], references: [id])
-  clientId         String         @default(dbgenerated("(current_setting('app.current_client_id'::text))::text"))
+  clientId         String         @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 // Clients, Sites & People

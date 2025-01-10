@@ -8,6 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CreateAssetQuestionDto } from '../asset-questions/dto/create-asset-question.dto';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { QueryProductCategoryDto } from './dto/query-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
@@ -45,5 +46,18 @@ export class ProductCategoriesController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.productCategoriesService.remove(id);
+  }
+
+  // Questions
+
+  @Post(':id/questions')
+  addQuestion(
+    @Param('id') id: string,
+    @Body() createAssetQuestionDto: CreateAssetQuestionDto,
+  ) {
+    return this.productCategoriesService.addQuestion(
+      id,
+      createAssetQuestionDto,
+    );
   }
 }

@@ -4,6 +4,7 @@ import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateAssetQuestionDto } from '../asset-questions/dto/create-asset-question.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -35,11 +36,21 @@ export class ProductsService {
   }
 
   async findOne(id: string) {
-    return this.prisma
-      .forAdminOrUser()
-      .then((prisma) =>
-        prisma.product.findUniqueOrThrow({ where: { id } }).catch(as404OrThrow),
-      );
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.product
+        .findUniqueOrThrow({
+          where: { id },
+          include: {
+            assetQuestions: true,
+            productCategory: {
+              include: {
+                assetQuestions: true,
+              },
+            },
+          },
+        })
+        .catch(as404OrThrow),
+    );
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
@@ -57,5 +68,17 @@ export class ProductsService {
     return this.prisma
       .forAdminOrUser()
       .then((prisma) => prisma.product.delete({ where: { id } }));
+  }
+
+  // QUESTIONS
+
+  async addQuestion(id: string, input: CreateAssetQuestionDto) {
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.assetQuestion
+        .create({
+          data: { ...input, productId: id },
+        })
+        .catch(as404OrThrow),
+    );
   }
 }
