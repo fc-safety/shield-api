@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CreateAssetQuestionDto } from '../asset-questions/dto/create-asset-question.dto';
+import { UpdateAssetQuestionDto } from '../asset-questions/dto/update-asset-question.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -44,11 +45,30 @@ export class ProductsController {
   }
 
   // Questions
+
   @Post(':id/questions')
   addQuestion(
     @Param('id') id: string,
     @Body() createAssetQuestionDto: CreateAssetQuestionDto,
   ) {
     return this.productsService.addQuestion(id, createAssetQuestionDto);
+  }
+
+  @Patch(':id/questions/:questionId')
+  updateQuestion(
+    @Param('id') id: string,
+    @Param('questionId') questionId: string,
+    @Body() updateAssetQuestionDto: UpdateAssetQuestionDto,
+  ) {
+    return this.productsService.updateQuestion(
+      id,
+      questionId,
+      updateAssetQuestionDto,
+    );
+  }
+
+  @Delete(':id/questions/:questionId')
+  deleteQuestion(@Param('questionId') questionId: string) {
+    return this.productsService.deleteQuestion(questionId);
   }
 }

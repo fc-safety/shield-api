@@ -5,6 +5,7 @@ import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetQuestionDto } from '../asset-questions/dto/create-asset-question.dto';
+import { UpdateAssetQuestionDto } from '../asset-questions/dto/update-asset-question.dto';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { QueryProductCategoryDto } from './dto/query-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
@@ -73,6 +74,31 @@ export class ProductCategoriesService {
       prisma.assetQuestion
         .create({
           data: { ...input, productCategoryId: id },
+        })
+        .catch(as404OrThrow),
+    );
+  }
+
+  async updateQuestion(
+    id: string,
+    questionId: string,
+    input: UpdateAssetQuestionDto,
+  ) {
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.assetQuestion
+        .update({
+          where: { id: questionId },
+          data: { ...input, productCategoryId: id },
+        })
+        .catch(as404OrThrow),
+    );
+  }
+
+  async deleteQuestion(questionId: string) {
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.assetQuestion
+        .delete({
+          where: { id: questionId },
         })
         .catch(as404OrThrow),
     );
