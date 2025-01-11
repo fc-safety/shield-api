@@ -42,7 +42,11 @@ export class ProductsService {
         .findUniqueOrThrow({
           where: { id },
           include: {
-            assetQuestions: true,
+            assetQuestions: {
+              include: {
+                assetAlertCriteria: true,
+              },
+            },
             productCategory: {
               include: {
                 assetQuestions: true,

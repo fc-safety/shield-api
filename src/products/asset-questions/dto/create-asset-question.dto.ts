@@ -2,7 +2,46 @@ import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-const CreateAssetQuestionSchema = z.object({
+const RuleMatchSchema = z
+  .object({
+    empty: z.literal(true),
+    notEmpty: z.literal(true),
+    equals: z.string(),
+    not: z.string(),
+    contains: z.string(),
+    notContains: z.string(),
+    startsWith: z.string(),
+    endsWith: z.string(),
+    gt: z.union([z.string(), z.number()]),
+    gte: z.union([z.string(), z.number()]),
+    lt: z.union([z.string(), z.number()]),
+    lte: z.union([z.string(), z.number()]),
+  })
+  .partial();
+
+const BaseCreateAssetAlertCriterionRuleSchema = z.object({
+  value: z.union([z.string(), RuleMatchSchema]).optional(),
+});
+
+export type CreateAssetAlertCriterionRule = z.infer<
+  typeof BaseCreateAssetAlertCriterionRuleSchema
+> & {
+  AND?: CreateAssetAlertCriterionRule[];
+  OR?: CreateAssetAlertCriterionRule[];
+};
+
+export const CreateAssetAlertCriterionRuleSchema: z.ZodType<CreateAssetAlertCriterionRule> =
+  BaseCreateAssetAlertCriterionRuleSchema.extend({
+    AND: z.array(BaseCreateAssetAlertCriterionRuleSchema).optional(),
+    OR: z.array(BaseCreateAssetAlertCriterionRuleSchema).optional(),
+  });
+
+export const CreateAssetAlertCriterionSchema = z.object({
+  rule: CreateAssetAlertCriterionRuleSchema,
+  alertLevel: z.enum(['URGENT', 'INFO']),
+});
+
+export const CreateAssetQuestionSchema = z.object({
   active: z.boolean().default(true),
   type: z.enum(['SETUP', 'INSPECTION']),
   required: z.boolean().default(false),
@@ -17,6 +56,14 @@ const CreateAssetQuestionSchema = z.object({
     'NUMBER',
     'IMAGE',
   ]),
+  assetAlertCriteria: z
+    .object({
+      createMany: z.object({
+        data: z.array(CreateAssetAlertCriterionSchema),
+      }),
+    })
+    .partial()
+    .optional(),
 }) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
 
 export class CreateAssetQuestionDto extends createZodDto(

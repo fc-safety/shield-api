@@ -43,7 +43,11 @@ export class ProductCategoriesService {
         .findUniqueOrThrow({
           where: { id },
           include: {
-            assetQuestions: true,
+            assetQuestions: {
+              include: {
+                assetAlertCriteria: true,
+              },
+            },
           },
         })
         .catch(as404OrThrow),
