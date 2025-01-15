@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-const RuleMatchSchema = z
+const RuleClauseObjectSchema = z
   .object({
     empty: z.literal(true),
     notEmpty: z.literal(true),
@@ -19,8 +19,10 @@ const RuleMatchSchema = z
   })
   .partial();
 
-const BaseCreateAssetAlertCriterionRuleSchema = z.object({
-  value: z.union([z.string(), RuleMatchSchema]).optional(),
+export const RuleClauseSchema = z.union([z.string(), RuleClauseObjectSchema]);
+
+export const BaseCreateAssetAlertCriterionRuleSchema = z.object({
+  value: RuleClauseSchema.optional(),
 });
 
 export type CreateAssetAlertCriterionRule = z.infer<

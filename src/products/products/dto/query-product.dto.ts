@@ -16,7 +16,7 @@ const QueryProductFiltersSchema = z
     id: prismaStringFilter(z.string()),
     createdOn: prismaDateTimeFilter(z.coerce.date()),
     modifiedOn: prismaDateTimeFilter(z.coerce.date()),
-    active: prismaBoolFilter(z.boolean()),
+    active: prismaBoolFilter(z.coerce.boolean()),
     manufacturer: z
       .object({
         id: prismaStringFilter(z.string()),
@@ -45,8 +45,8 @@ const QueryProductFiltersSchema = z
         id: prismaStringFilter(z.string()),
       })
       .partial(),
-    perishable: prismaBoolFilter(z.boolean()),
-    ansiMinimumRequired: prismaBoolFilter(z.boolean()),
+    perishable: prismaBoolFilter(z.coerce.boolean()),
+    ansiMinimumRequired: prismaBoolFilter(z.coerce.boolean()),
   })
   .partial() satisfies z.Schema<Prisma.ProductWhereInput>;
 

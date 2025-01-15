@@ -1,4 +1,9 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateInspectionDto } from './create-inspection.dto';
+import { Prisma } from '@prisma/client';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-export class UpdateInspectionDto extends PartialType(CreateInspectionDto) {}
+const UpdateInspectionSchema = z.object({
+  status: z.enum(['COMPLETE']),
+}) satisfies z.Schema<Prisma.InspectionUpdateInput>;
+
+export class UpdateInspectionDto extends createZodDto(UpdateInspectionSchema) {}

@@ -27,6 +27,11 @@ export class TagsController {
     return this.tagsService.findAll(queryTagDto);
   }
 
+  @Get('serial/:serialNumber')
+  findOneBySerial(@Param('serialNumber') serialNumber: string) {
+    return this.tagsService.findOneBySerial(serialNumber);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.tagsService.findOne(id);

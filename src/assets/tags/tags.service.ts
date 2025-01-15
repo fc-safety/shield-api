@@ -17,13 +17,15 @@ export class TagsService {
   }
 
   async findAll(queryTagDto?: QueryTagDto) {
-    return this.prisma
-      .forUser()
-      .then(async (prisma) =>
-        prisma.tag.findManyForPage(
-          buildPrismaFindArgs<typeof prisma.tag>(queryTagDto),
-        ),
-      );
+    return this.prisma.forUser().then(async (prisma) =>
+      prisma.tag.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.tag>(queryTagDto, {
+          include: {
+            asset: true,
+          },
+        }),
+      ),
+    );
   }
 
   async findOne(id: string) {
@@ -32,6 +34,38 @@ export class TagsService {
       .then((prisma) =>
         prisma.tag.findUniqueOrThrow({
           where: { id },
+          include: {
+            asset: true,
+          },
+        }),
+      )
+      .catch(as404OrThrow);
+  }
+
+  async findOneBySerial(serialNumber: string) {
+    return this.prisma
+      .forUser()
+      .then((prisma) =>
+        prisma.tag.findFirstOrThrow({
+          where: { serialNumber },
+          include: {
+            asset: {
+              include: {
+                product: {
+                  include: {
+                    productCategory: {
+                      include: {
+                        assetQuestions: true,
+                      },
+                    },
+                    manufacturer: true,
+                    assetQuestions: true,
+                  },
+                },
+                setupQuestionResponses: true,
+              },
+            },
+          },
         }),
       )
       .catch(as404OrThrow);

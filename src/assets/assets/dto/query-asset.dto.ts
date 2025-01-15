@@ -14,7 +14,7 @@ const QueryAssetFiltersSchema = z
     id: prismaStringFilter(z.string()),
     createdOn: prismaDateTimeFilter(z.coerce.date()),
     modifiedOn: prismaDateTimeFilter(z.coerce.date()),
-    active: prismaBoolFilter(z.boolean()),
+    active: prismaBoolFilter(z.coerce.boolean()),
     site: z
       .object({
         id: prismaStringFilter(z.string()),

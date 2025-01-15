@@ -3,8 +3,11 @@ import { Prisma } from '@prisma/client';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { QueryAlertDto } from '../alerts/dto/query-alert.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
+import { SetupAssetDto } from './dto/setup-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
+import { UpdateSetupAssetDto } from './dto/update-setup-asset.dto';
 
 @Injectable()
 export class AssetsService {
@@ -51,10 +54,33 @@ export class AssetsService {
                 inspector: true,
               },
             },
+            setupQuestionResponses: {
+              include: {
+                assetQuestion: true,
+              },
+            },
+            consumables: {
+              include: {
+                product: true,
+              },
+            },
+            alerts: true,
           },
         }),
       )
       .catch(as404OrThrow);
+  }
+
+  async findAlerts(id: string, queryAlertDto?: QueryAlertDto) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.alert.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.alert>(queryAlertDto, {
+          where: {
+            assetId: id,
+          },
+        }),
+      ),
+    );
   }
 
   async update(id: string, updateAssetDto: UpdateAssetDto) {
@@ -63,6 +89,31 @@ export class AssetsService {
         .update({
           where: { id },
           data: updateAssetDto,
+        })
+        .catch(as404OrThrow),
+    );
+  }
+
+  async setup(id: string, setupAssetDto: SetupAssetDto) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.asset
+        .update({
+          where: { id, setupOn: null },
+          data: {
+            ...setupAssetDto,
+            setupOn: new Date(),
+          },
+        })
+        .catch(as404OrThrow),
+    );
+  }
+
+  async updateSetup(id: string, updateSetupAssetDto: UpdateSetupAssetDto) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.asset
+        .update({
+          where: { id, setupOn: { not: null } },
+          data: updateSetupAssetDto,
         })
         .catch(as404OrThrow),
     );

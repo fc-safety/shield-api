@@ -17,7 +17,7 @@ const QuerySiteFiltersSchema = z
     modifiedOn: prismaDateTimeFilter(z.coerce.date()),
     externalId: prismaStringFilter(z.string()),
     address: filterAddressSchema,
-    primary: prismaBoolFilter(z.boolean()),
+    primary: prismaBoolFilter(z.coerce.boolean()),
   })
   .partial() satisfies z.Schema<Prisma.SiteWhereInput>;
 

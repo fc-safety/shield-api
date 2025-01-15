@@ -21,6 +21,7 @@ model Asset {
   id                     String                  @id @default(cuid(2))
   createdOn              DateTime                @default(now())
   modifiedOn             DateTime                @updatedAt
+  setupOn                DateTime?
   active                 Boolean                 @default(true)
   name                   String
   product                Product                 @relation(fields: [productId], references: [id])
@@ -56,40 +57,39 @@ model Consumable {
 }
 
 model Tag {
-  id           String    @id @default(cuid(2))
-  createdOn    DateTime  @default(now())
-  modifiedOn   DateTime  @updatedAt
-  setupOn      DateTime?
+  id           String   @id @default(cuid(2))
+  createdOn    DateTime @default(now())
+  modifiedOn   DateTime @updatedAt
   serialNumber String
   asset        Asset?
-  assetId      String?
-  alerts       Alert[]
-  site         Site?     @relation(fields: [siteId], references: [id])
-  siteId       String?   @default(dbgenerated("current_setting('app.current_site_id'::text)"))
-  client       Client?   @relation(fields: [clientId], references: [id])
-  clientId     String?   @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  site         Site?    @relation(fields: [siteId], references: [id])
+  siteId       String?  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client       Client?  @relation(fields: [clientId], references: [id])
+  clientId     String?  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 model Inspection {
-  id          String                  @id @default(cuid(2))
-  createdOn   DateTime                @default(now())
-  modifiedOn  DateTime                @updatedAt
-  asset       Asset                   @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  assetId     String
-  inspector   Person                  @relation(fields: [inspectorId], references: [id])
-  inspectorId String                  @default(dbgenerated("current_setting('app.current_person_id'::text)"))
-  status      InspectionStatus        @default(PENDING)
-  useragent   String?
-  ipv4        String?                 @db.Inet
-  ipv6        String?                 @db.Inet
-  latitude    Float?
-  longitude   Float?
-  comments    String?
-  responses   AssetQuestionResponse[]
-  site        Site                    @relation(fields: [siteId], references: [id])
-  siteId      String                  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
-  client      Client                  @relation(fields: [clientId], references: [id])
-  clientId    String                  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  id               String                  @id @default(cuid(2))
+  createdOn        DateTime                @default(now())
+  modifiedOn       DateTime                @updatedAt
+  asset            Asset                   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId          String
+  inspector        Person                  @relation(fields: [inspectorId], references: [id])
+  inspectorId      String                  @default(dbgenerated("current_setting('app.current_person_id'::text)"))
+  status           InspectionStatus        @default(PENDING)
+  useragent        String?
+  ipv4             String?                 @db.Inet
+  ipv6             String?                 @db.Inet
+  latitude         Float?
+  longitude        Float?
+  locationAccuracy Float?
+  comments         String?
+  responses        AssetQuestionResponse[]
+  alerts           Alert[]
+  site             Site                    @relation(fields: [siteId], references: [id])
+  siteId           String                  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client           Client                  @relation(fields: [clientId], references: [id])
+  clientId         String                  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 enum InspectionStatus {
@@ -128,6 +128,7 @@ model AssetQuestionResponse {
   inspectionId    String?
   responder       Person        @relation(fields: [responderId], references: [id])
   responderId     String        @default(dbgenerated("current_setting('app.current_person_id'::text)"))
+  alerts          Alert[]
   site            Site          @relation(fields: [siteId], references: [id])
   siteId          String        @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client          Client        @relation(fields: [clientId], references: [id])
@@ -161,22 +162,25 @@ model AssetAlertCriterion {
 }
 
 model Alert {
-  id                    String              @id @default(cuid(2))
-  createdOn             DateTime            @default(now())
-  modifiedOn            DateTime            @updatedAt
-  alertLevel            AlertLevel          @default(INFO)
-  asset                 Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  assetId               String
-  tag                   Tag?                @relation(fields: [tagId], references: [id])
-  tagId                 String?
-  assetAlertCriterion   AssetAlertCriterion @relation(fields: [assetAlertCriterionId], references: [id], onDelete: Cascade)
-  assetAlertCriterionId String              @unique
-  resolved              Boolean             @default(false)
-  resolutionNote        String?
-  site                  Site                @relation(fields: [siteId], references: [id])
-  siteId                String
-  client                Client              @relation(fields: [clientId], references: [id])
-  clientId              String
+  id                      String                @id @default(cuid(2))
+  createdOn               DateTime              @default(now())
+  modifiedOn              DateTime              @updatedAt
+  alertLevel              AlertLevel            @default(INFO)
+  message                 String
+  asset                   Asset                 @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId                 String
+  inspection              Inspection            @relation(fields: [inspectionId], references: [id])
+  inspectionId            String
+  assetQuestionResponse   AssetQuestionResponse @relation(fields: [assetQuestionResponseId], references: [id])
+  assetQuestionResponseId String
+  assetAlertCriterion     AssetAlertCriterion   @relation(fields: [assetAlertCriterionId], references: [id], onDelete: Cascade)
+  assetAlertCriterionId   String                @unique
+  resolved                Boolean               @default(false)
+  resolutionNote          String?
+  site                    Site                  @relation(fields: [siteId], references: [id])
+  siteId                  String
+  client                  Client                @relation(fields: [clientId], references: [id])
+  clientId                String
 }
 
 enum AlertLevel {
