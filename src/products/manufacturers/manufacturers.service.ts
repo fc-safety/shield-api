@@ -19,13 +19,17 @@ export class ManufacturersService {
   }
 
   async findAll(queryManufacturerDto?: QueryManufacturerDto) {
-    return this.prisma
-      .forAdminOrUser()
-      .then((prisma) =>
-        prisma.manufacturer.findManyForPage(
-          buildPrismaFindArgs<typeof prisma.manufacturer>(queryManufacturerDto),
-        ),
-      );
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.manufacturer.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.manufacturer>(queryManufacturerDto, {
+          include: {
+            _count: {
+              select: { products: true },
+            },
+          },
+        }),
+      ),
+    );
   }
 
   async findOne(id: string) {

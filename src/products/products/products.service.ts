@@ -52,6 +52,7 @@ export class ProductsService {
                 assetQuestions: true,
               },
             },
+            manufacturer: true,
           },
         })
         .catch(as404OrThrow),

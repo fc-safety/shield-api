@@ -26,15 +26,20 @@ export class ProductCategoriesService {
   }
 
   async findAll(queryProductCategoryDto?: QueryProductCategoryDto) {
-    return this.prisma
-      .forAdminOrUser()
-      .then((prisma) =>
-        prisma.productCategory.findManyForPage(
-          buildPrismaFindArgs<typeof prisma.productCategory>(
-            queryProductCategoryDto,
-          ),
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.productCategory.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.productCategory>(
+          queryProductCategoryDto,
+          {
+            include: {
+              _count: {
+                select: { products: true },
+              },
+            },
+          },
         ),
-      );
+      ),
+    );
   }
 
   async findOne(id: string) {
@@ -43,6 +48,11 @@ export class ProductCategoriesService {
         .findUniqueOrThrow({
           where: { id },
           include: {
+            products: {
+              include: {
+                manufacturer: true,
+              },
+            },
             assetQuestions: {
               include: {
                 assetAlertCriteria: true,
