@@ -4,6 +4,7 @@ import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { QueryAlertDto } from '../alerts/dto/query-alert.dto';
+import { ResolveAlertDto } from '../alerts/dto/resolve-alert.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
 import { SetupAssetDto } from './dto/setup-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
@@ -30,6 +31,7 @@ export class AssetsService {
                 productCategory: true,
               },
             },
+            tag: true,
           },
         }),
       ),
@@ -37,34 +39,64 @@ export class AssetsService {
   }
 
   async findOne(id: string) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.asset.findUniqueOrThrow({
+        where: { id },
+        include: {
+          product: {
+            include: {
+              manufacturer: true,
+              productCategory: true,
+            },
+          },
+          inspections: {
+            include: {
+              inspector: true,
+            },
+          },
+          setupQuestionResponses: {
+            include: {
+              assetQuestion: true,
+            },
+          },
+          consumables: {
+            include: {
+              product: true,
+            },
+          },
+          alerts: true,
+          tag: true,
+        },
+      }),
+    );
+  }
+
+  async findOneAlert(id: string, alertId: string) {
     return this.prisma
       .forUser()
       .then((prisma) =>
-        prisma.asset.findUniqueOrThrow({
-          where: { id },
+        prisma.alert.findUniqueOrThrow({
+          where: {
+            id: alertId,
+            assetId: id,
+          },
           include: {
-            product: {
-              include: {
-                manufacturer: true,
-                productCategory: true,
-              },
-            },
-            inspections: {
-              include: {
-                inspector: true,
-              },
-            },
-            setupQuestionResponses: {
-              include: {
-                assetQuestion: true,
-              },
-            },
-            consumables: {
+            asset: {
               include: {
                 product: true,
               },
             },
-            alerts: true,
+            assetAlertCriterion: true,
+            assetQuestionResponse: {
+              include: {
+                assetQuestion: true,
+              },
+            },
+            inspection: {
+              include: {
+                inspector: true,
+              },
+            },
           },
         }),
       )
@@ -78,9 +110,46 @@ export class AssetsService {
           where: {
             assetId: id,
           },
+          include: {
+            asset: {
+              include: {
+                product: true,
+              },
+            },
+            assetAlertCriterion: true,
+            assetQuestionResponse: {
+              include: {
+                assetQuestion: true,
+              },
+            },
+          },
         }),
       ),
     );
+  }
+
+  async resolveAlert(
+    id: string,
+    alertId: string,
+    resolveAlertDto: ResolveAlertDto,
+  ) {
+    return this.prisma
+      .forUser()
+      .then((prisma) =>
+        prisma.alert.update({
+          where: {
+            id: alertId,
+            assetId: id,
+            resolved: false,
+          },
+          data: {
+            ...resolveAlertDto,
+            resolved: true,
+            resolvedOn: new Date(),
+          },
+        }),
+      )
+      .catch(as404OrThrow);
   }
 
   async update(id: string, updateAssetDto: UpdateAssetDto) {

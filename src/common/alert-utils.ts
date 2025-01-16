@@ -1,6 +1,6 @@
 import { $Enums } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
-import { isAfter, isBefore, isSameDay, parseISO } from 'date-fns';
+import { format, isAfter, isBefore, isSameDay, parseISO } from 'date-fns';
 import {
   CreateAssetAlertCriterionRuleSchema,
   RuleClauseSchema,
@@ -54,78 +54,90 @@ const testAlertRuleClause = (
 ) => {
   if (typeof clause === 'string') {
     return compare(value, valueType, clause, {
-      stringOrNumber: (t, v) => explain(t === v, `${t} is ${v}`),
-      date: (t, v) => explain(isSameDay(t, v), `${t} is ${v}`),
+      stringOrNumber: (t, v) => explain(t === v, `value is ${t}`),
+      date: (t, v) => explain(isSameDay(t, v), `value is ${t}`),
     });
   }
   if (clause.contains !== undefined) {
     return compare(value, valueType, clause.contains, {
-      string: (t, v) => explain(v.includes(t), `${t} contains ${v}`),
+      string: (t, v) => explain(v.includes(t), `value contains ${t}`),
     });
   }
   if (clause.empty !== undefined) {
     return explain(
       value === null || value === undefined || value === '',
-      `${value} is empty`,
+      'value is empty',
     );
   }
   if (clause.endsWith !== undefined) {
     return compare(value, valueType, clause.endsWith, {
-      string: (t, v) => explain(v.endsWith(t), `${t} ends with ${v}`),
+      string: (t, v) => explain(v.endsWith(t), `value ends with ${t}`),
     });
   }
   if (clause.equals !== undefined) {
     return compare(value, valueType, clause.equals, {
-      stringOrNumber: (t, v) => explain(t === v, `${t} equals ${v}`),
-      date: (t, v) => explain(isSameDay(t, v), `${t} is ${v}`),
+      stringOrNumber: (t, v) => explain(t === v, `value is ${t}`),
+      date: (t, v) =>
+        explain(isSameDay(t, v), `value is on ${format(t, 'PP')}`),
     });
   }
   if (clause.gt !== undefined) {
     return compare(value, valueType, clause.gt, {
-      stringOrNumber: (t, v) => explain(t > v, `${t} is more than ${v}`),
-      date: (t, v) => explain(isAfter(v, t), `${t} is after ${v}`),
+      stringOrNumber: (t, v) => explain(t > v, `value is more than ${t}`),
+      date: (t, v) =>
+        explain(isAfter(v, t), `value is after ${format(t, 'PP')}`),
     });
   }
   if (clause.gte !== undefined) {
     return compare(value, valueType, clause.gte, {
-      stringOrNumber: (t, v) => explain(t >= v, `${t} is or is more than ${v}`),
+      stringOrNumber: (t, v) =>
+        explain(t >= v, `value is more than or equal to ${t}`),
       date: (t, v) =>
-        explain(isSameDay(t, v) || isAfter(v, t), `${t} is or is after ${v}`),
+        explain(
+          isSameDay(t, v) || isAfter(v, t),
+          `value is on or after ${format(t, 'PP')}`,
+        ),
     });
   }
   if (clause.lt !== undefined) {
     return compare(value, valueType, clause.lt, {
-      stringOrNumber: (t, v) => explain(t < v, `${t} is less than ${v}`),
-      date: (t, v) => explain(isBefore(v, t), `${t} is before ${v}`),
+      stringOrNumber: (t, v) => explain(t < v, `value is less than ${t}`),
+      date: (t, v) =>
+        explain(isBefore(v, t), `value is before ${format(t, 'PP')}`),
     });
   }
   if (clause.lte !== undefined) {
     return compare(value, valueType, clause.lte, {
-      stringOrNumber: (t, v) => explain(t <= v, `${t} is or is less than ${v}`),
+      stringOrNumber: (t, v) =>
+        explain(t <= v, `value is less than or equal to ${t}`),
       date: (t, v) =>
-        explain(isSameDay(t, v) || isBefore(v, t), `${t} is or is before ${v}`),
+        explain(
+          isSameDay(t, v) || isBefore(v, t),
+          `value is on or before ${format(t, 'PP')}`,
+        ),
     });
   }
   if (clause.not !== undefined) {
     return compare(value, valueType, clause.not, {
-      stringOrNumber: (t, v) => explain(t !== v, `${t} is not ${v}`),
-      date: (t, v) => explain(!isSameDay(t, v), `${t} is not ${v}`),
+      stringOrNumber: (t, v) => explain(t !== v, `value is not ${t}`),
+      date: (t, v) =>
+        explain(!isSameDay(t, v), `value is not on ${format(t, 'PP')}`),
     });
   }
   if (clause.notContains !== undefined) {
     return compare(value, valueType, clause.notContains, {
-      string: (t, v) => explain(!v.includes(t), `${t} doees not contain ${v}`),
+      string: (t, v) => explain(!v.includes(t), `value doees not contain ${t}`),
     });
   }
   if (clause.notEmpty !== undefined) {
     return explain(
       value !== null && value !== undefined && value !== '',
-      `${value} is not empty`,
+      `value is not empty`,
     );
   }
   if (clause.startsWith !== undefined) {
     return compare(value, valueType, clause.startsWith, {
-      string: (t, v) => explain(v.startsWith(t), `${t} starts with ${v}`),
+      string: (t, v) => explain(v.startsWith(t), `value starts with ${t}`),
     });
   }
   return false;

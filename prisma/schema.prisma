@@ -158,7 +158,7 @@ model AssetAlertCriterion {
   assetQuestionId String
   rule            Json
   alertLevel      AlertLevel    @default(INFO)
-  alert           Alert?
+  alerts          Alert[]
 }
 
 model Alert {
@@ -174,8 +174,9 @@ model Alert {
   assetQuestionResponse   AssetQuestionResponse @relation(fields: [assetQuestionResponseId], references: [id])
   assetQuestionResponseId String
   assetAlertCriterion     AssetAlertCriterion   @relation(fields: [assetAlertCriterionId], references: [id], onDelete: Cascade)
-  assetAlertCriterionId   String                @unique
+  assetAlertCriterionId   String
   resolved                Boolean               @default(false)
+  resolvedOn              DateTime?
   resolutionNote          String?
   site                    Site                  @relation(fields: [siteId], references: [id])
   siteId                  String

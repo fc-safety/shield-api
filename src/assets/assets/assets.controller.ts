@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { QueryAlertDto } from '../alerts/dto/query-alert.dto';
+import { ResolveAlertDto } from '../alerts/dto/resolve-alert.dto';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
@@ -43,6 +44,20 @@ export class AssetsController {
   @Get(':id/alerts')
   findAlerts(@Param('id') id: string, @Query() queryAlertDto?: QueryAlertDto) {
     return this.assetsService.findAlerts(id, queryAlertDto);
+  }
+
+  @Get(':id/alerts/:alertId')
+  findOneAlert(@Param('id') id: string, @Param('alertId') alertId: string) {
+    return this.assetsService.findOneAlert(id, alertId);
+  }
+
+  @Post(':id/alerts/:alertId/resolve')
+  resolveAlert(
+    @Param('id') id: string,
+    @Param('alertId') alertId: string,
+    @Body() resolveAlertDto: ResolveAlertDto,
+  ) {
+    return this.assetsService.resolveAlert(id, alertId, resolveAlertDto);
   }
 
   @Post(':id/setup')
