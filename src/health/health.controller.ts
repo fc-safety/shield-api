@@ -6,6 +6,7 @@ import {
   PrismaHealthIndicator,
 } from '@nestjs/terminus';
 import { Public } from 'src/auth/auth.guard';
+import { ApiConfigService } from 'src/config/api-config.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Controller('health')
@@ -15,6 +16,7 @@ export class HealthController {
     private readonly http: HttpHealthIndicator,
     private readonly db: PrismaHealthIndicator,
     private readonly prisma: PrismaService,
+    private readonly config: ApiConfigService,
   ) {}
 
   @Public()
@@ -22,7 +24,7 @@ export class HealthController {
   @HealthCheck()
   check() {
     return this.health.check([
-      () => this.http.pingCheck('nestjs-docs', 'https://docs.nestjs.com'),
+      () => this.http.pingCheck('keycloak', this.config.get('AUTH_JWKS_URI')),
       () => this.db.pingCheck('database', this.prisma),
     ]);
   }
