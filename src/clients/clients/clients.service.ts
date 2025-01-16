@@ -19,6 +19,9 @@ export class ClientsService {
       buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
         include: {
           address: true,
+          _count: {
+            select: { sites: true },
+          },
         },
       }),
     );

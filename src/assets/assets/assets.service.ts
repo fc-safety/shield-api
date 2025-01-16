@@ -32,6 +32,14 @@ export class AssetsService {
               },
             },
             tag: true,
+            alerts: {
+              where: { resolved: false },
+              select: { id: true, alertLevel: true },
+            },
+            inspections: {
+              take: 1,
+              orderBy: { createdOn: 'desc' },
+            },
           },
         }),
       ),

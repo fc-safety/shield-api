@@ -16,6 +16,10 @@ const RuleClauseObjectSchema = z
     gte: z.union([z.string(), z.number()]),
     lt: z.union([z.string(), z.number()]),
     lte: z.union([z.string(), z.number()]),
+    beforeDaysPast: z.number(),
+    afterDaysPast: z.number(),
+    beforeDaysFuture: z.number(),
+    afterDaysFuture: z.number(),
   })
   .partial();
 

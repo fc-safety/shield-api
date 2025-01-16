@@ -1,6 +1,13 @@
 import { $Enums } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
-import { format, isAfter, isBefore, isSameDay, parseISO } from 'date-fns';
+import {
+  differenceInDays,
+  format,
+  isAfter,
+  isBefore,
+  isSameDay,
+  parseISO,
+} from 'date-fns';
 import {
   CreateAssetAlertCriterionRuleSchema,
   RuleClauseSchema,
@@ -139,6 +146,34 @@ const testAlertRuleClause = (
     return compare(value, valueType, clause.startsWith, {
       string: (t, v) => explain(v.startsWith(t), `value starts with ${t}`),
     });
+  }
+  if (clause.beforeDaysPast !== undefined) {
+    return explain(
+      differenceInDays(Date.now(), parseISO(String(value))) >
+        clause.beforeDaysPast,
+      `value is more than ${clause.beforeDaysPast} days in the past`,
+    );
+  }
+  if (clause.afterDaysPast !== undefined) {
+    return explain(
+      differenceInDays(Date.now(), parseISO(String(value))) <
+        clause.afterDaysPast,
+      `value is less than ${clause.afterDaysPast} days in the past`,
+    );
+  }
+  if (clause.beforeDaysFuture !== undefined) {
+    return explain(
+      differenceInDays(parseISO(String(value)), Date.now()) <
+        clause.beforeDaysFuture,
+      `value is less than ${clause.beforeDaysFuture} days in the future`,
+    );
+  }
+  if (clause.afterDaysFuture !== undefined) {
+    return explain(
+      differenceInDays(parseISO(String(value)), Date.now()) >
+        clause.afterDaysFuture,
+      `value is more than ${clause.afterDaysFuture} days in the future`,
+    );
   }
   return false;
 };

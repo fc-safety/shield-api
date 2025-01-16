@@ -3,7 +3,7 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
 export const CreateAssetQuestionResponseSchema = z.object({
-  value: z.union([z.string().nonempty(), z.number().safe()]),
+  value: z.union([z.string(), z.number().safe()]),
   assetQuestionId: z.string().nonempty(),
 });
 
