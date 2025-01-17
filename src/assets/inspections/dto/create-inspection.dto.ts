@@ -13,8 +13,8 @@ const CreateInspectionSchema = z.object({
   useragent: z.string(),
   ipv4: z.string().ip({ version: 'v4' }).optional(),
   ipv6: z.string().ip({ version: 'v6' }).optional(),
-  latitude: z.number().safe(),
-  longitude: z.number().safe(),
+  latitude: z.number().safe().gte(-90).lte(90),
+  longitude: z.number().safe().gte(-180).lte(180),
   locationAccuracy: z.number().safe(),
   comments: z.string().optional(),
   responses: z.object({
