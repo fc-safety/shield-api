@@ -50,38 +50,48 @@ const QueryProductFiltersSchema = z
   })
   .partial() satisfies z.Schema<Prisma.ProductWhereInput>;
 
-const QueryProductOrderSchema = z.object({
-  id: PrismaOrderEmum,
-  createdOn: PrismaOrderEmum,
-  updatedOn: PrismaOrderEmum,
-  active: PrismaOrderEmum,
-  manufacturer: z.object({
+const QueryProductOrderSchema = z
+  .object({
     id: PrismaOrderEmum,
+    createdOn: PrismaOrderEmum,
+    updatedOn: PrismaOrderEmum,
+    active: PrismaOrderEmum,
+    manufacturer: z
+      .object({
+        id: PrismaOrderEmum,
+        name: PrismaOrderEmum,
+      })
+      .partial(),
+    type: PrismaOrderEmum,
     name: PrismaOrderEmum,
-  }),
-  type: PrismaOrderEmum,
-  name: PrismaOrderEmum,
-  description: PrismaOrderEmum,
-  sku: PrismaOrderEmum,
-  productUrl: PrismaOrderEmum,
-  imageUrl: PrismaOrderEmum,
-  productCategory: z.object({
-    id: PrismaOrderEmum,
-    name: PrismaOrderEmum,
-  }),
-  parentProduct: z.object({
-    id: PrismaOrderEmum,
-    name: PrismaOrderEmum,
-  }),
-  quantity: PrismaOrderEmum,
-  price: PrismaOrderEmum,
-  ansiCategory: z.object({
-    id: PrismaOrderEmum,
-    name: PrismaOrderEmum,
-  }),
-  perishable: PrismaOrderEmum,
-  ansiMinimumRequired: PrismaOrderEmum,
-}) satisfies z.Schema<Prisma.ProductOrderByWithRelationInput>;
+    description: PrismaOrderEmum,
+    sku: PrismaOrderEmum,
+    productUrl: PrismaOrderEmum,
+    imageUrl: PrismaOrderEmum,
+    productCategory: z
+      .object({
+        id: PrismaOrderEmum,
+        name: PrismaOrderEmum,
+      })
+      .partial(),
+    parentProduct: z
+      .object({
+        id: PrismaOrderEmum,
+        name: PrismaOrderEmum,
+      })
+      .partial(),
+    quantity: PrismaOrderEmum,
+    price: PrismaOrderEmum,
+    ansiCategory: z
+      .object({
+        id: PrismaOrderEmum,
+        name: PrismaOrderEmum,
+      })
+      .partial(),
+    perishable: PrismaOrderEmum,
+    ansiMinimumRequired: PrismaOrderEmum,
+  })
+  .partial() satisfies z.Schema<Prisma.ProductOrderByWithRelationInput>;
 
 export class QueryProductDto extends createZodDto(
   QueryProductFiltersSchema.extend(
