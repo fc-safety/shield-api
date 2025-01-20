@@ -10,51 +10,60 @@ import { UpdateClientDto } from './dto/update-client.dto';
 export class ClientsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(createClientDto: CreateClientDto) {
-    return this.prisma.bypassRLS().client.create({ data: createClientDto });
+  async create(createClientDto: CreateClientDto) {
+    return this.prisma
+      .forAdminOrUser()
+      .then((prisma) => prisma.client.create({ data: createClientDto }));
   }
 
-  findAll(queryClientDto?: QueryClientDto) {
-    return this.prisma.bypassRLS().client.findManyForPage(
-      buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
-        include: {
-          address: true,
-          _count: {
-            select: { sites: true },
+  async findAll(queryClientDto?: QueryClientDto) {
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.client.findManyForPage(
+        buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
+          include: {
+            address: true,
+            _count: {
+              select: { sites: true },
+            },
           },
-        },
-      }),
+        }),
+      ),
     );
   }
 
   async findOne(id: string) {
-    return this.prisma
-      .bypassRLS()
-      .client.findUniqueOrThrow({
-        where: { id },
-        include: {
-          address: true,
-          sites: {
-            include: {
-              address: true,
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.client
+        .findUniqueOrThrow({
+          where: { id },
+          include: {
+            address: true,
+            sites: {
+              include: {
+                address: true,
+                _count: { select: { subsites: true } },
+              },
             },
           },
-        },
-      })
-      .catch(as404OrThrow);
+        })
+        .catch(as404OrThrow),
+    );
   }
 
   async update(id: string, updateClientDto: UpdateClientDto) {
-    return this.prisma
-      .bypassRLS()
-      .client.update({
-        where: { id },
-        data: updateClientDto,
-      })
-      .catch(as404OrThrow);
+    return this.prisma.forAdminOrUser().then((prisma) =>
+      prisma.client
+        .update({
+          where: { id },
+          data: updateClientDto,
+        })
+        .catch(as404OrThrow),
+    );
   }
 
-  remove(id: string) {
-    return this.prisma.bypassRLS().client.delete({ where: { id } });
+  async remove(id: string) {
+    return this.prisma
+      .forAdminOrUser()
+      .then((prisma) => prisma.client.delete({ where: { id } }));
   }
 }

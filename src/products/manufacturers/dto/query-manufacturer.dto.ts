@@ -16,6 +16,9 @@ const QueryManufacturerFiltersSchema = z
     modifiedOn: prismaDateTimeFilter(z.coerce.date()),
     active: prismaBoolFilter(z.coerce.boolean()),
     name: prismaStringFilter(z.string()),
+    client: z.object({
+      externalId: prismaStringFilter(z.string()),
+    }),
   })
   .partial() satisfies z.Schema<Prisma.ManufacturerWhereInput>;
 

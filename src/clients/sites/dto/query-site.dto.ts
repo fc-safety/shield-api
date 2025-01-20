@@ -10,7 +10,7 @@ import {
 } from 'src/common/validation';
 import { z } from 'zod';
 
-const QuerySiteFiltersSchema = z
+const BaseQuerySiteFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
     createdOn: prismaDateTimeFilter(z.coerce.date()),
@@ -18,8 +18,16 @@ const QuerySiteFiltersSchema = z
     externalId: prismaStringFilter(z.string()),
     address: filterAddressSchema,
     primary: prismaBoolFilter(z.coerce.boolean()),
+    parentSiteId: prismaStringFilter(
+      z.string(),
+      z.string().transform((id) => (id === 'null' ? null : id)),
+    ),
   })
   .partial() satisfies z.Schema<Prisma.SiteWhereInput>;
+
+const QuerySiteFiltersSchema = BaseQuerySiteFiltersSchema.extend({
+  OR: z.array(BaseQuerySiteFiltersSchema).optional(),
+});
 
 const QuerySiteOrderSchema = z
   .object({

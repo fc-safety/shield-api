@@ -23,6 +23,11 @@ const CreateSiteSchema = z.object({
   }),
   primary: z.boolean().optional(),
   phoneNumber: z.string(),
+  subsites: z
+    .object({
+      connect: z.array(z.object({ id: z.string() })),
+    })
+    .optional(),
 }) satisfies z.Schema<Prisma.SiteCreateInput>;
 
 export class CreateSiteDto extends createZodDto(CreateSiteSchema) {}

@@ -28,8 +28,17 @@ export class ProductsService {
       prisma.product.findManyForPage(
         buildPrismaFindArgs<typeof prisma.product>(queryProductDto, {
           include: {
-            manufacturer: true,
-            productCategory: true,
+            manufacturer: {
+              include: {
+                client: true,
+              },
+            },
+            productCategory: {
+              include: {
+                client: true,
+              },
+            },
+            client: true,
           },
         }),
       ),
@@ -50,9 +59,15 @@ export class ProductsService {
             productCategory: {
               include: {
                 assetQuestions: true,
+                client: true,
               },
             },
-            manufacturer: true,
+            manufacturer: {
+              include: {
+                client: true,
+              },
+            },
+            client: true,
           },
         })
         .catch(as404OrThrow),

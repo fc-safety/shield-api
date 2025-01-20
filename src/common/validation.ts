@@ -65,9 +65,10 @@ const buildPrismaStringFilters = <T extends z.ZodTypeAny>(zodType: T) =>
 
 export const prismaStringFilter = <TValue extends z.ZodString>(
   zodType: TValue,
+  singularType?: z.ZodTypeAny,
 ) => {
   return z.union([
-    zodType,
+    singularType ?? zodType,
     buildPrismaStringFilters<TValue>(zodType).partial(),
   ]);
 };

@@ -35,6 +35,7 @@ export class ProductCategoriesService {
               _count: {
                 select: { products: true },
               },
+              client: true,
             },
           },
         ),
@@ -48,9 +49,11 @@ export class ProductCategoriesService {
         .findUniqueOrThrow({
           where: { id },
           include: {
+            client: true,
             products: {
               include: {
                 manufacturer: true,
+                client: true,
               },
             },
             assetQuestions: {

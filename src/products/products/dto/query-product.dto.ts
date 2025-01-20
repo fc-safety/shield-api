@@ -47,6 +47,9 @@ const QueryProductFiltersSchema = z
       .partial(),
     perishable: prismaBoolFilter(z.coerce.boolean()),
     ansiMinimumRequired: prismaBoolFilter(z.coerce.boolean()),
+    client: z.object({
+      externalId: prismaStringFilter(z.string()),
+    }),
   })
   .partial() satisfies z.Schema<Prisma.ProductWhereInput>;
 

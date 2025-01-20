@@ -18,6 +18,9 @@ const QueryProductCateogryFiltersSchema = z
     description: prismaStringFilter(z.string()),
     icon: prismaStringFilter(z.string()),
     color: prismaStringFilter(z.string()),
+    client: z.object({
+      externalId: prismaStringFilter(z.string()),
+    }),
   })
   .partial() satisfies z.Schema<Prisma.ProductCategoryWhereInput>;
 

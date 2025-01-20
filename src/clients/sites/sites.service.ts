@@ -22,6 +22,7 @@ export class SitesService {
         buildPrismaFindArgs<typeof prisma.site>(querySiteDto, {
           include: {
             address: true,
+            _count: { select: { subsites: true } },
           },
         }),
       ),
@@ -34,7 +35,19 @@ export class SitesService {
       .then((prisma) =>
         prisma.site.findUniqueOrThrow({
           where: { id },
-          include: { address: true },
+          include: {
+            address: true,
+            subsites: {
+              include: {
+                address: true,
+              },
+            },
+            parentSite: {
+              include: {
+                address: true,
+              },
+            },
+          },
         }),
       )
       .catch(as404OrThrow);

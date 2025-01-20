@@ -26,6 +26,7 @@ export class ManufacturersService {
             _count: {
               select: { products: true },
             },
+            client: true,
           },
         }),
       ),
@@ -39,8 +40,9 @@ export class ManufacturersService {
           where: { id },
           include: {
             products: {
-              include: { productCategory: true },
+              include: { productCategory: true, client: true },
             },
+            client: true,
           },
         })
         .catch(as404OrThrow),
