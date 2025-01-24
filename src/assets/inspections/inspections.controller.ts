@@ -8,12 +8,14 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { CreateInspectionDto } from './dto/create-inspection.dto';
 import { QueryInspectionDto } from './dto/query-inspection.dto';
 import { UpdateInspectionDto } from './dto/update-inspection.dto';
 import { InspectionsService } from './inspections.service';
 
 @Controller('inspections')
+@CheckResourcePermissions('inspections')
 export class InspectionsController {
   constructor(private readonly inspectionsService: InspectionsService) {}
 

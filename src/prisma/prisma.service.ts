@@ -11,6 +11,7 @@ interface Person {
   id: string;
   idpId: string | null;
   siteId: string;
+  allowedSiteIds: string; // Comma delimited
   clientId: string;
   visibility: TVisibility;
 }
@@ -35,9 +36,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   public async forUser() {
     const user = this.cls.get('user');
     invariant(user, 'No user in CLS');
-    const [clientId, siteId] = await Promise.all([
+    const [clientId, siteId, allowedSiteIds] = await Promise.all([
       this.getUserClientId(user),
       this.getUserSiteId(user),
+      this.getAllowedSiteIds(user),
     ]);
 
     const cacheKey = `person:idpId:${user.idpId}`;
@@ -84,6 +86,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         clientId,
         idpId,
         visibility: user.visibility,
+        allowedSiteIds,
       })),
       60 * 60 * 1000, // 1 hour
     );
@@ -152,6 +155,34 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       60 * 60 * 1000,
     ); // 1 hour
   }
+
+  private async getAllowedSiteIds(user: StatelessUser) {
+    return await this.getFromCacheOrDefault<string>(
+      `allowedSiteIds:externalId:${user.siteId}`,
+      this.bypassRLS()
+        .site.findUniqueOrThrow({
+          where: { externalId: user.siteId },
+          // For simplicity, onlly including 2 levels deep (3 total).
+          include: {
+            subsites: {
+              include: {
+                subsites: true,
+              },
+            },
+          },
+        })
+        .then((site) =>
+          [
+            site.id,
+            site.subsites.map((s) => s.id),
+            site.subsites.flatMap((s) => s.subsites.map((s) => s.id)),
+          ]
+            .flat()
+            .join(','),
+        ),
+      60 * 60 * 1000,
+    ); // 1 hour
+  }
 }
 
 export const extensions = {
@@ -193,8 +224,7 @@ export const extensions = {
               const [, , , , , result] = await prisma.$transaction([
                 prisma.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
                 prisma.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
-                // TODO: Add support for multiple sites
-                prisma.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.siteId}, TRUE)`,
+                prisma.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIds}, TRUE)`,
                 prisma.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
                 prisma.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
                 query(args),

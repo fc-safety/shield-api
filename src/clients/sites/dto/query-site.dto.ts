@@ -22,6 +22,7 @@ const BaseQuerySiteFiltersSchema = z
       z.string(),
       z.string().transform((id) => (id === 'null' ? null : id)),
     ),
+    clientId: prismaStringFilter(z.string()),
   })
   .partial() satisfies z.Schema<Prisma.SiteWhereInput>;
 

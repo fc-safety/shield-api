@@ -8,6 +8,7 @@ import { ApiConfigModule } from './config/api-config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { HealthModule } from './health/health.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { HealthModule } from './health/health.module';
     ProductsModule,
     ClientsModule,
     HealthModule,
+    AdminModule,
   ],
   controllers: [],
   providers: [],

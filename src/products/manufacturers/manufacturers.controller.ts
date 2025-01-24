@@ -8,12 +8,14 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { CreateManufacturerDto } from './dto/create-manufacturer.dto';
 import { QueryManufacturerDto } from './dto/query-manufacturer.dto';
 import { UpdateManufacturerDto } from './dto/update-manufacturer.dto';
 import { ManufacturersService } from './manufacturers.service';
 
 @Controller('manufacturers')
+@CheckResourcePermissions('manufacturers')
 export class ManufacturersController {
   constructor(private readonly manufacturersService: ManufacturersService) {}
 

@@ -8,12 +8,14 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { QueryClientDto } from './dto/query-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 @Controller('clients')
+@CheckResourcePermissions('clients')
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 

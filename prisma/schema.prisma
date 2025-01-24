@@ -63,9 +63,9 @@ model Tag {
   serialNumber String
   asset        Asset?
   site         Site?    @relation(fields: [siteId], references: [id])
-  siteId       String?  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  siteId       String?  @default(dbgenerated("current_setting('app.current_site_id'::text, TRUE)"))
   client       Client?  @relation(fields: [clientId], references: [id])
-  clientId     String?  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  clientId     String?  @default(dbgenerated("current_setting('app.current_client_id'::text, TRUE)"))
 }
 
 model Inspection {
@@ -113,6 +113,8 @@ model AssetQuestion {
   productId          String?
   assetAlertCriteria AssetAlertCriterion[]
   responses          AssetQuestionResponse[]
+  client             Client?                   @relation(fields: [clientId], references: [id])
+  clientId           String?
 }
 
 model AssetQuestionResponse {
@@ -279,6 +281,7 @@ model Client {
   consumables             Consumable[]
   inspections             Inspection[]
   tags                    Tag[]
+  assetQuestions          AssetQuestion[]
   assetQuestionResponses  AssetQuestionResponse[]
   alerts                  Alert[]
   productRequests         ProductRequest[]

@@ -7,11 +7,13 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { ConsumablesService } from './consumables.service';
 import { CreateConsumableDto } from './dto/create-consumable.dto';
 import { UpdateConsumableDto } from './dto/update-consumable.dto';
 
 @Controller('consumables')
+@CheckResourcePermissions('consumables')
 export class ConsumablesController {
   constructor(private readonly consumablesService: ConsumablesService) {}
 

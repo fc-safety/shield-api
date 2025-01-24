@@ -8,6 +8,14 @@ export const configSchema = z.object({
   AUTH_JWKS_URI: z.string(),
   AUTH_ISSUER: z.string(),
   AUTH_AUDIENCE: z.string(),
+
+  // KEYCLOAK ADMIN CLIENT
+  KEYCLOAK_ADMIN_CLIENT_ADMIN_REALM: z.string().default('master'),
+  KEYCLOAK_ADMIN_CLIENT_DEFAULT_REALM: z.string().default('shield'),
+  KEYCLOAK_ADMIN_CLIENT_BASE_URL: z.string(),
+  KEYCLOAK_ADMIN_CLIENT_CLIENT_ID: z.string(),
+  KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET: z.string(),
+  KEYCLOAK_ADMIN_CLIENT_REFRESH_INTERVAL_SECONDS: z.coerce.number().default(58),
 });
 
 export type Config = z.infer<typeof configSchema>;

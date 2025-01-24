@@ -8,12 +8,14 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { QuerySiteDto } from './dto/query-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { SitesService } from './sites.service';
 
 @Controller('sites')
+@CheckResourcePermissions('sites')
 export class SitesController {
   constructor(private readonly sitesService: SitesService) {}
 

@@ -8,12 +8,14 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { QueryTagDto } from './dto/query-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { TagsService } from './tags.service';
 
 @Controller('tags')
+@CheckResourcePermissions('tags')
 export class TagsController {
   constructor(private readonly tagsService: TagsService) {}
 

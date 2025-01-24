@@ -12,16 +12,18 @@ export class TagsService {
 
   async create(createTagDto: CreateTagDto) {
     return this.prisma
-      .forUser()
+      .forAdminOrUser()
       .then((prisma) => prisma.tag.create({ data: createTagDto }));
   }
 
   async findAll(queryTagDto?: QueryTagDto) {
-    return this.prisma.forUser().then(async (prisma) =>
+    return this.prisma.forAdminOrUser().then(async (prisma) =>
       prisma.tag.findManyForPage(
         buildPrismaFindArgs<typeof prisma.tag>(queryTagDto, {
           include: {
             asset: true,
+            client: true,
+            site: true,
           },
         }),
       ),
@@ -30,12 +32,14 @@ export class TagsService {
 
   async findOne(id: string) {
     return this.prisma
-      .forUser()
+      .forAdminOrUser()
       .then((prisma) =>
         prisma.tag.findUniqueOrThrow({
           where: { id },
           include: {
             asset: true,
+            client: true,
+            site: true,
           },
         }),
       )
@@ -44,7 +48,7 @@ export class TagsService {
 
   async findOneBySerial(serialNumber: string) {
     return this.prisma
-      .forUser()
+      .forAdminOrUser()
       .then((prisma) =>
         prisma.tag.findFirstOrThrow({
           where: { serialNumber },
@@ -72,7 +76,7 @@ export class TagsService {
   }
 
   async update(id: string, updateTagDto: UpdateTagDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.forAdminOrUser().then((prisma) =>
       prisma.tag
         .update({
           where: { id },
@@ -84,7 +88,7 @@ export class TagsService {
 
   async remove(id: string) {
     return this.prisma
-      .forUser()
+      .forAdminOrUser()
       .then((prisma) => prisma.tag.delete({ where: { id } }));
   }
 }

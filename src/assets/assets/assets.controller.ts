@@ -8,6 +8,10 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import {
+  CheckPolicies,
+  CheckResourcePermissions,
+} from 'src/auth/policies.guard';
 import { QueryAlertDto } from '../alerts/dto/query-alert.dto';
 import { ResolveAlertDto } from '../alerts/dto/resolve-alert.dto';
 import { AssetsService } from './assets.service';
@@ -18,6 +22,7 @@ import { UpdateAssetDto } from './dto/update-asset.dto';
 import { UpdateSetupAssetDto } from './dto/update-setup-asset.dto';
 
 @Controller('assets')
+@CheckResourcePermissions('assets')
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
 
@@ -41,16 +46,19 @@ export class AssetsController {
     return this.assetsService.update(id, updateAssetDto);
   }
 
+  @CheckPolicies((context) => context.user.canRead('alerts'))
   @Get(':id/alerts')
   findAlerts(@Param('id') id: string, @Query() queryAlertDto?: QueryAlertDto) {
     return this.assetsService.findAlerts(id, queryAlertDto);
   }
 
+  @CheckPolicies((context) => context.user.canRead('alerts'))
   @Get(':id/alerts/:alertId')
   findOneAlert(@Param('id') id: string, @Param('alertId') alertId: string) {
     return this.assetsService.findOneAlert(id, alertId);
   }
 
+  @CheckPolicies((context) => context.user.canUpdate('alerts'))
   @Post(':id/alerts/:alertId/resolve')
   resolveAlert(
     @Param('id') id: string,
@@ -60,11 +68,13 @@ export class AssetsController {
     return this.assetsService.resolveAlert(id, alertId, resolveAlertDto);
   }
 
+  @CheckPolicies((context) => context.user.can('setup', 'assets'))
   @Post(':id/setup')
   setup(@Param('id') id: string, @Body() setupAssetDto: SetupAssetDto) {
     return this.assetsService.setup(id, setupAssetDto);
   }
 
+  @CheckPolicies((context) => context.user.can('setup', 'assets'))
   @Patch(':id/setup')
   updateSetup(
     @Param('id') id: string,

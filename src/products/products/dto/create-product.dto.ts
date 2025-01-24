@@ -38,6 +38,13 @@ const CreateProductSchema = z.object({
     .optional(),
   perishable: z.boolean().optional(),
   ansiMinimumRequired: z.boolean().optional(),
+  client: z
+    .object({
+      connect: z.object({
+        id: z.string(),
+      }),
+    })
+    .optional(),
 }) satisfies z.Schema<Prisma.ProductCreateInput>;
 
 export class CreateProductDto extends createZodDto(CreateProductSchema) {}

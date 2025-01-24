@@ -9,6 +9,13 @@ const CreateProductCategorySchema = z.object({
   description: z.string().optional(),
   icon: z.string().optional(),
   color: z.string().optional(),
+  client: z
+    .object({
+      connect: z.object({
+        id: z.string(),
+      }),
+    })
+    .optional(),
 }) satisfies z.Schema<Prisma.ProductCategoryCreateInput>;
 
 export class CreateProductCategoryDto extends createZodDto(
