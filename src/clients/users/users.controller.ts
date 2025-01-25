@@ -11,6 +11,7 @@ import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 
 @Controller('clients/:clientId/users')
@@ -43,7 +44,7 @@ export class UsersController {
   update(
     @Param('clientId') clientId: string,
     @Param('id') id: string,
-    @Body() updateUserDto: CreateUserDto,
+    @Body() updateUserDto: UpdateUserDto,
   ) {
     return this.usersService.update(clientId, id, updateUserDto);
   }

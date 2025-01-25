@@ -68,6 +68,7 @@ export class ProductsService {
               },
             },
             client: true,
+            consumableProducts: true,
           },
         })
         .catch(as404OrThrow),

@@ -7,6 +7,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { asFilterConditions, QueryUserDto } from './dto/query-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import {
   keycloakUserAsClientUser,
   validateKeycloakUser,
@@ -24,12 +25,12 @@ export class UsersService {
     const client = await this.getClient(clientId);
     const newId = createId();
     await this.keycloak.client.users.create({
+      enabled: createUserDto.active ?? true,
       firstName: createUserDto.firstName,
       lastName: createUserDto.lastName,
       username: createUserDto.email,
       email: createUserDto.email,
       emailVerified: true,
-      enabled: true,
       attributes: {
         client_id: [client.externalId],
         site_id: [createUserDto.siteExternalId],
@@ -77,13 +78,14 @@ export class UsersService {
     return keycloakUserAsClientUser(keycloakUser);
   }
 
-  async update(clientId: string, id: string, updateUserDto: CreateUserDto) {
+  async update(clientId: string, id: string, updateUserDto: UpdateUserDto) {
     const keycloakUser = await this.getKeycloakUser(clientId, id);
     return this.keycloak.client.users.update(
       {
         id: keycloakUser.id,
       },
       {
+        enabled: updateUserDto.active ?? keycloakUser.enabled,
         firstName: updateUserDto.firstName ?? keycloakUser.firstName,
         lastName: updateUserDto.lastName ?? keycloakUser.lastName,
         username: updateUserDto.email ?? keycloakUser.username,

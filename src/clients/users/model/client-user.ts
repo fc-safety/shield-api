@@ -4,6 +4,7 @@ import { MANAGED_ROLES_GROUP_NAME } from 'src/auth/keycloak/keycloak.service';
 export interface ClientUser {
   id: string;
   idpId: string;
+  active: boolean;
   firstName: string;
   lastName: string;
   name: string;
@@ -45,6 +46,7 @@ export const keycloakUserAsClientUser = (
 ): ClientUser => ({
   id: user.attributes.user_id[0],
   idpId: user.id,
+  active: !!user.enabled,
   firstName: user.firstName ?? '',
   lastName: user.lastName ?? '',
   name: `${user.firstName} ${user.lastName}`.trim(),
