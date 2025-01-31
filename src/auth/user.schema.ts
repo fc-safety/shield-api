@@ -28,6 +28,10 @@ export const keycloakTokenPayloadSchema = z.object({
       }),
     )
     .optional(),
+  permissions: z
+    .array(z.string())
+    .transform((roles) => roles.filter(isValidPermission))
+    .optional(),
   client_id: z.string().default('unknown'),
   site_id: z.string().default('unknown'),
 });
@@ -52,7 +56,8 @@ export class StatelessUser {
     this.givenName = payload.given_name;
     this.familyName = payload.family_name;
     this.picture = payload.picture;
-    this.permissions = payload.resource_access?.['shield-api']?.roles;
+    this.permissions =
+      payload.permissions ?? payload.resource_access?.['shield-api']?.roles;
     this.clientId = payload.client_id;
     this.siteId = payload.site_id;
   }
