@@ -88,7 +88,14 @@ export class AssetsService {
       .then((prisma) =>
         prisma.asset.update({
           where: { id },
-          data: { tag: { create: { serialNumber: tagSerialNumber } } },
+          data: {
+            tag: {
+              connectOrCreate: {
+                where: { serialNumber: tagSerialNumber },
+                create: { serialNumber: tagSerialNumber },
+              },
+            },
+          },
         }),
       )
       .catch(as404OrThrow);
