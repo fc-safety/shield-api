@@ -46,6 +46,15 @@ export class AssetsController {
     return this.assetsService.update(id, updateAssetDto);
   }
 
+  @CheckPolicies((context) => context.user.canUpdate('assets'))
+  @Post(':id/add-tag')
+  addTag(
+    @Param('id') id: string,
+    @Query('tagSerialNumber') tagSerialNumber: string,
+  ) {
+    return this.assetsService.addTag(id, tagSerialNumber);
+  }
+
   @CheckPolicies((context) => context.user.canRead('alerts'))
   @Get(':id/alerts')
   findAlerts(@Param('id') id: string, @Query() queryAlertDto?: QueryAlertDto) {

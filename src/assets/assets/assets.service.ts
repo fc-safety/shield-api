@@ -47,36 +47,51 @@ export class AssetsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forUser().then((prisma) =>
-      prisma.asset.findUniqueOrThrow({
-        where: { id },
-        include: {
-          product: {
-            include: {
-              manufacturer: true,
-              productCategory: true,
+    return this.prisma
+      .forUser()
+      .then((prisma) =>
+        prisma.asset.findUniqueOrThrow({
+          where: { id },
+          include: {
+            product: {
+              include: {
+                manufacturer: true,
+                productCategory: true,
+              },
             },
-          },
-          inspections: {
-            include: {
-              inspector: true,
+            inspections: {
+              include: {
+                inspector: true,
+              },
             },
-          },
-          setupQuestionResponses: {
-            include: {
-              assetQuestion: true,
+            setupQuestionResponses: {
+              include: {
+                assetQuestion: true,
+              },
             },
-          },
-          consumables: {
-            include: {
-              product: true,
+            consumables: {
+              include: {
+                product: true,
+              },
             },
+            alerts: true,
+            tag: true,
           },
-          alerts: true,
-          tag: true,
-        },
-      }),
-    );
+        }),
+      )
+      .catch(as404OrThrow);
+  }
+
+  async addTag(id: string, tagSerialNumber: string) {
+    return this.prisma
+      .forUser()
+      .then((prisma) =>
+        prisma.asset.update({
+          where: { id },
+          data: { tag: { create: { serialNumber: tagSerialNumber } } },
+        }),
+      )
+      .catch(as404OrThrow);
   }
 
   async findOneAlert(id: string, alertId: string) {
