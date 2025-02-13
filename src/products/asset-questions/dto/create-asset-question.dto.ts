@@ -1,4 +1,10 @@
-import { Prisma } from '@prisma/client';
+import {
+  AlertLevel,
+  AssetQuestionResponseType,
+  AssetQuestionType,
+  ConsumableMappingType,
+  Prisma,
+} from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
@@ -44,24 +50,42 @@ export const CreateAssetAlertCriterionRuleSchema: z.ZodType<CreateAssetAlertCrit
 
 export const CreateAssetAlertCriterionSchema = z.object({
   rule: CreateAssetAlertCriterionRuleSchema,
-  alertLevel: z.enum(['URGENT', 'INFO']),
+  alertLevel: z.enum(
+    Object.values(AlertLevel) as [AlertLevel, ...AlertLevel[]],
+  ),
 });
+
+export const CreateConsumableConfigSchema = z.object({
+  consumableProduct: z.object({
+    connect: z.object({
+      id: z.string(),
+    }),
+  }),
+  mappingType: z.enum(
+    Object.values(ConsumableMappingType) as [
+      ConsumableMappingType,
+      ...ConsumableMappingType[],
+    ],
+  ),
+}) satisfies z.Schema<Prisma.ConsumableQuestionConfigCreateInput>;
 
 export const CreateAssetQuestionSchema = z.object({
   active: z.boolean().default(true),
-  type: z.enum(['SETUP', 'INSPECTION']),
+  type: z.enum(
+    Object.values(AssetQuestionType) as [
+      AssetQuestionType,
+      ...AssetQuestionType[],
+    ],
+  ),
   required: z.boolean().default(false),
   order: z.number().optional(),
   prompt: z.string().nonempty(),
-  valueType: z.enum([
-    'BINARY',
-    'INDETERMINATE_BINARY',
-    'TEXT',
-    'TEXTAREA',
-    'DATE',
-    'NUMBER',
-    'IMAGE',
-  ]),
+  valueType: z.enum(
+    Object.values(AssetQuestionResponseType) as [
+      AssetQuestionResponseType,
+      ...AssetQuestionResponseType[],
+    ],
+  ),
   assetAlertCriteria: z
     .object({
       createMany: z.object({
@@ -69,6 +93,11 @@ export const CreateAssetQuestionSchema = z.object({
       }),
     })
     .partial()
+    .optional(),
+  consumableConfig: z
+    .object({
+      create: CreateConsumableConfigSchema,
+    })
     .optional(),
 }) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
 

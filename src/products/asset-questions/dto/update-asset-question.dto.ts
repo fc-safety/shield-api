@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   CreateAssetAlertCriterionSchema,
   CreateAssetQuestionSchema,
+  CreateConsumableConfigSchema,
 } from './create-asset-question.dto';
 
 const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
@@ -19,6 +20,13 @@ const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
         }),
       ),
       deleteMany: z.array(z.object({ id: z.string() })),
+    })
+    .partial(),
+  consumableConfig: z
+    .object({
+      create: CreateConsumableConfigSchema,
+      update: CreateConsumableConfigSchema.partial(),
+      delete: z.boolean().default(false),
     })
     .partial(),
 }).partial() satisfies z.Schema<Prisma.AssetQuestionUpdateInput>;

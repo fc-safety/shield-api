@@ -6,10 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { ConsumablesService } from './consumables.service';
 import { CreateConsumableDto } from './dto/create-consumable.dto';
+import { QueryConsumableDto } from './dto/query-consumable.dto';
 import { UpdateConsumableDto } from './dto/update-consumable.dto';
 
 @Controller('consumables')
@@ -23,13 +25,13 @@ export class ConsumablesController {
   }
 
   @Get()
-  findAll() {
-    return this.consumablesService.findAll();
+  findAll(@Query() query: QueryConsumableDto) {
+    return this.consumablesService.findAll(query);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.consumablesService.findOne(+id);
+    return this.consumablesService.findOne(id);
   }
 
   @Patch(':id')
@@ -37,11 +39,11 @@ export class ConsumablesController {
     @Param('id') id: string,
     @Body() updateConsumableDto: UpdateConsumableDto,
   ) {
-    return this.consumablesService.update(+id, updateConsumableDto);
+    return this.consumablesService.update(id, updateConsumableDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.consumablesService.remove(+id);
+    return this.consumablesService.remove(id);
   }
 }

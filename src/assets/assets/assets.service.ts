@@ -1,10 +1,22 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import {
+  Asset,
+  AssetAlertCriterion,
+  AssetQuestion,
+  AssetQuestionResponse,
+  ConsumableQuestionConfig,
+  Inspection,
+  Prisma,
+  Product,
+} from '@prisma/client';
+import { testAlertRule } from 'src/common/alert-utils';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateAssetAlertCriterionRuleSchema } from 'src/products/asset-questions/dto/create-asset-question.dto';
 import { QueryAlertDto } from '../alerts/dto/query-alert.dto';
 import { ResolveAlertDto } from '../alerts/dto/resolve-alert.dto';
+import { ConsumablesService } from '../consumables/consumables.service';
 import { QueryAssetDto } from './dto/query-asset.dto';
 import { SetupAssetDto } from './dto/setup-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
@@ -12,7 +24,12 @@ import { UpdateSetupAssetDto } from './dto/update-setup-asset.dto';
 
 @Injectable()
 export class AssetsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AssetsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly consumablesService: ConsumablesService,
+  ) {}
 
   async create(createAssetDto: Prisma.AssetCreateInput) {
     return this.prisma
@@ -76,6 +93,12 @@ export class AssetsService {
             },
             alerts: true,
             tag: true,
+            productRequests: {
+              include: {
+                productRequestItems: true,
+                productRequestApprovals: true,
+              },
+            },
           },
         }),
       )
@@ -194,17 +217,38 @@ export class AssetsService {
   }
 
   async setup(id: string, setupAssetDto: SetupAssetDto) {
-    return this.prisma.forUser().then((prisma) =>
-      prisma.asset
-        .update({
-          where: { id, setupOn: null },
-          data: {
-            ...setupAssetDto,
-            setupOn: new Date(),
+    const prismaClient = await this.prisma.forUser();
+
+    const updatedAsset = await prismaClient.asset
+      .update({
+        where: { id, setupOn: null },
+        data: {
+          ...setupAssetDto,
+          setupOn: new Date(),
+        },
+        include: {
+          setupQuestionResponses: {
+            include: {
+              assetQuestion: {
+                include: {
+                  consumableConfig: {
+                    include: {
+                      consumableProduct: true,
+                    },
+                  },
+                },
+              },
+            },
           },
-        })
-        .catch(as404OrThrow),
-    );
+        },
+      })
+      .then(async (asset) => {
+        await this.handleConsumableConfigs(prismaClient, asset);
+        return asset;
+      })
+      .catch(as404OrThrow);
+
+    return updatedAsset;
   }
 
   async updateSetup(id: string, updateSetupAssetDto: UpdateSetupAssetDto) {
@@ -215,6 +259,103 @@ export class AssetsService {
           data: updateSetupAssetDto,
         })
         .catch(as404OrThrow),
+    );
+  }
+
+  async handleAlertTriggers(
+    inspection: Inspection & {
+      responses: (AssetQuestionResponse & {
+        assetQuestion: AssetQuestion & {
+          assetAlertCriteria: AssetAlertCriterion[];
+        };
+      })[];
+    },
+  ) {
+    if (!inspection || inspection.status !== 'COMPLETE') {
+      return;
+    }
+
+    const createInputs = inspection.responses.flatMap((response) =>
+      response.assetQuestion.assetAlertCriteria
+        .map((alertCriteria) => {
+          const {
+            success,
+            data: rule,
+            error,
+          } = CreateAssetAlertCriterionRuleSchema.safeParse(alertCriteria.rule);
+
+          if (!success || !rule || error) {
+            this.logger.warn('Invalid alert rule', error);
+            return {
+              alertCriteria,
+              result: false,
+            };
+          }
+
+          return {
+            alertCriteria,
+            result: testAlertRule(
+              response.value,
+              response.assetQuestion.valueType,
+              rule,
+            ),
+          };
+        })
+        .filter(
+          (r): r is typeof r & { result: string } =>
+            typeof r.result === 'string',
+        )
+        .map(
+          ({ alertCriteria: alertCriterion, result: message }) =>
+            ({
+              alertLevel: alertCriterion.alertLevel,
+              message,
+              assetId: inspection.assetId,
+              inspectionId: inspection.id,
+              assetQuestionResponseId: response.id,
+              assetAlertCriterionId: alertCriterion.id,
+              siteId: inspection.siteId,
+              clientId: inspection.clientId,
+            }) satisfies Prisma.AlertCreateManyInput,
+        ),
+    );
+
+    await this.prisma.bypassRLS().alert.createMany({
+      data: createInputs,
+    });
+  }
+
+  async handleConsumableConfigs(
+    prismaClient: Awaited<ReturnType<PrismaService['forUser']>>,
+    asset: Asset & {
+      setupQuestionResponses: (AssetQuestionResponse & {
+        assetQuestion: AssetQuestion & {
+          consumableConfig: ConsumableQuestionConfig | null;
+        };
+      })[];
+    },
+  ) {
+    // Handle consumable configs from setup responses
+    await Promise.all(
+      asset.setupQuestionResponses
+        .filter(
+          (
+            response,
+          ): response is AssetQuestionResponse & {
+            assetQuestion: AssetQuestion & {
+              consumableConfig: ConsumableQuestionConfig & {
+                consumableProduct: Product;
+              };
+            };
+          } => !!response.assetQuestion.consumableConfig,
+        )
+        .map((response) =>
+          this.consumablesService.handleConsumableConfig(
+            prismaClient,
+            response,
+            asset.id,
+          ),
+        ),
     );
   }
 

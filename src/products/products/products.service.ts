@@ -54,6 +54,7 @@ export class ProductsService {
             assetQuestions: {
               include: {
                 assetAlertCriteria: true,
+                consumableConfig: true,
               },
             },
             productCategory: {
@@ -98,7 +99,7 @@ export class ProductsService {
     return this.prisma.forAdminOrUser().then((prisma) =>
       prisma.assetQuestion
         .create({
-          data: { ...input, productId: id },
+          data: { ...input, product: { connect: { id } } },
         })
         .catch(as404OrThrow),
     );
@@ -113,7 +114,7 @@ export class ProductsService {
       prisma.assetQuestion
         .update({
           where: { id: questionId },
-          data: { ...input, productId: id },
+          data: { ...input, product: { connect: { id } } },
         })
         .catch(as404OrThrow),
     );

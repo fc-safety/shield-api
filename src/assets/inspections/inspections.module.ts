@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { InspectionsService } from './inspections.service';
+import { AssetsModule } from '../assets/assets.module';
 import { InspectionsController } from './inspections.controller';
-
+import { InspectionsService } from './inspections.service';
 @Module({
+  imports: [AssetsModule],
   controllers: [InspectionsController],
   providers: [InspectionsService],
 })

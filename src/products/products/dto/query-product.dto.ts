@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
+import { QueryConsumableFiltersSchema } from 'src/assets/consumables/dto/query-consumable.dto';
 import {
   buildFixedQuerySchema,
   prismaBoolFilter,
@@ -47,6 +48,13 @@ const QueryProductFiltersSchema = z
       .partial(),
     perishable: prismaBoolFilter(z.coerce.boolean()),
     ansiMinimumRequired: prismaBoolFilter(z.coerce.boolean()),
+    consumables: z
+      .object({
+        every: QueryConsumableFiltersSchema,
+        some: QueryConsumableFiltersSchema,
+        none: QueryConsumableFiltersSchema,
+      })
+      .partial(),
     client: z.object({
       externalId: prismaStringFilter(z.string()),
     }),

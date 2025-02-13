@@ -90,7 +90,7 @@ export class ProductCategoriesService {
     return this.prisma.forAdminOrUser().then((prisma) =>
       prisma.assetQuestion
         .create({
-          data: { ...input, productCategoryId: id },
+          data: { ...input, productCategory: { connect: { id } } },
         })
         .catch(as404OrThrow),
     );
@@ -105,7 +105,7 @@ export class ProductCategoriesService {
       prisma.assetQuestion
         .update({
           where: { id: questionId },
-          data: { ...input, productCategoryId: id },
+          data: { ...input, productCategory: { connect: { id } } },
         })
         .catch(as404OrThrow),
     );
