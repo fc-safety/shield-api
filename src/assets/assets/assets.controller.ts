@@ -34,6 +34,11 @@ export class AssetsController {
     return this.assetsService.findAll(queryAssetDto);
   }
 
+  @Get('latest-inspection')
+  findManyWithLatestInspection() {
+    return this.assetsService.findManyWithLatestInspection();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.assetsService.findOne(id);

@@ -116,6 +116,14 @@ export class AssetsService {
       .catch(as404OrThrow);
   }
 
+  async findManyWithLatestInspection() {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.asset.findMany({
+        include: { inspections: { orderBy: { createdOn: 'desc' }, take: 1 } },
+      }),
+    );
+  }
+
   async addTag(id: string, tagSerialNumber: string) {
     return this.prisma
       .forUser()
