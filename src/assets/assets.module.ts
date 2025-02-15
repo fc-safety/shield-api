@@ -4,6 +4,7 @@ import { ConsumablesModule } from './consumables/consumables.module';
 import { InspectionsModule } from './inspections/inspections.module';
 import { TagsModule } from './tags/tags.module';
 import { OrderRequestsModule } from './order-requests/order-requests.module';
+import { AlertsModule } from './alerts/alerts.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { OrderRequestsModule } from './order-requests/order-requests.module';
     ConsumablesModule,
     TagsModule,
     OrderRequestsModule,
+    AlertsModule,
   ],
 })
 export class AssetsModule {}

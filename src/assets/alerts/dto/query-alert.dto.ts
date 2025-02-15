@@ -13,6 +13,7 @@ const QueryAlertFiltersSchema = z
     id: prismaStringFilter(z.string()),
     createdOn: prismaDateTimeFilter(z.coerce.date()),
     modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    assetId: prismaStringFilter(z.string()),
   })
   .partial() satisfies z.Schema<Prisma.AlertWhereInput>;
 
@@ -21,6 +22,7 @@ const QueryAlertOrderSchema = z
     id: PrismaOrderEmum,
     createdOn: PrismaOrderEmum,
     updatedOn: PrismaOrderEmum,
+    assetId: PrismaOrderEmum,
   })
   .partial() satisfies z.Schema<Prisma.AlertOrderByWithRelationInput>;
 

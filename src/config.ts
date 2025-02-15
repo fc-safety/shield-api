@@ -16,6 +16,12 @@ export const configSchema = z.object({
   KEYCLOAK_ADMIN_CLIENT_CLIENT_ID: z.string(),
   KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET: z.string(),
   KEYCLOAK_ADMIN_CLIENT_REFRESH_INTERVAL_SECONDS: z.coerce.number().default(58),
+
+  // CORS
+  CORS_ALLOWED_ORIGINS: z
+    .string()
+    .default('')
+    .transform((val) => val.split(',')),
 });
 
 export type Config = z.infer<typeof configSchema>;

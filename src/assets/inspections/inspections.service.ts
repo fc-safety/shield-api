@@ -56,13 +56,24 @@ export class InspectionsService {
   }
 
   async findAll(queryInspectionDto?: QueryInspectionDto) {
-    return this.prisma
-      .forUser()
-      .then((prisma) =>
-        prisma.inspection.findManyForPage(
-          buildPrismaFindArgs<typeof prisma.inspection>(queryInspectionDto),
-        ),
-      );
+    return this.prisma.forUser().then((prisma) =>
+      prisma.inspection.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.inspection>(queryInspectionDto, {
+          include: {
+            asset: {
+              include: {
+                product: {
+                  include: {
+                    productCategory: true,
+                  },
+                },
+              },
+            },
+            inspector: true,
+          },
+        }),
+      ),
+    );
   }
 
   async findOne(id: string) {
@@ -72,6 +83,15 @@ export class InspectionsService {
         prisma.inspection.findUniqueOrThrow({
           where: { id },
           include: {
+            asset: {
+              include: {
+                product: {
+                  include: {
+                    productCategory: true,
+                  },
+                },
+              },
+            },
             inspector: true,
             responses: {
               include: {

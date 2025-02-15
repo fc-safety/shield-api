@@ -12,8 +12,6 @@ import {
   CheckPolicies,
   CheckResourcePermissions,
 } from 'src/auth/policies.guard';
-import { QueryAlertDto } from '../alerts/dto/query-alert.dto';
-import { ResolveAlertDto } from '../alerts/dto/resolve-alert.dto';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
@@ -53,28 +51,6 @@ export class AssetsController {
     @Query('tagSerialNumber') tagSerialNumber: string,
   ) {
     return this.assetsService.addTag(id, tagSerialNumber);
-  }
-
-  @CheckPolicies((context) => context.user.canRead('alerts'))
-  @Get(':id/alerts')
-  findAlerts(@Param('id') id: string, @Query() queryAlertDto?: QueryAlertDto) {
-    return this.assetsService.findAlerts(id, queryAlertDto);
-  }
-
-  @CheckPolicies((context) => context.user.canRead('alerts'))
-  @Get(':id/alerts/:alertId')
-  findOneAlert(@Param('id') id: string, @Param('alertId') alertId: string) {
-    return this.assetsService.findOneAlert(id, alertId);
-  }
-
-  @CheckPolicies((context) => context.user.canUpdate('alerts'))
-  @Post(':id/alerts/:alertId/resolve')
-  resolveAlert(
-    @Param('id') id: string,
-    @Param('alertId') alertId: string,
-    @Body() resolveAlertDto: ResolveAlertDto,
-  ) {
-    return this.assetsService.resolveAlert(id, alertId, resolveAlertDto);
   }
 
   @CheckPolicies((context) => context.user.can('setup', 'assets'))

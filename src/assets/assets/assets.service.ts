@@ -14,8 +14,6 @@ import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetAlertCriterionRuleSchema } from 'src/products/asset-questions/dto/create-asset-question.dto';
-import { QueryAlertDto } from '../alerts/dto/query-alert.dto';
-import { ResolveAlertDto } from '../alerts/dto/resolve-alert.dto';
 import { ConsumablesService } from '../consumables/consumables.service';
 import { QueryAssetDto } from './dto/query-asset.dto';
 import { SetupAssetDto } from './dto/setup-asset.dto';
@@ -94,9 +92,22 @@ export class AssetsService {
             alerts: true,
             tag: true,
             productRequests: {
+              where: {
+                status: {
+                  notIn: ['CANCELLED', 'COMPLETE'],
+                },
+              },
               include: {
-                productRequestItems: true,
-                productRequestApprovals: true,
+                productRequestItems: {
+                  include: {
+                    product: true,
+                  },
+                },
+                productRequestApprovals: {
+                  include: {
+                    approver: true,
+                  },
+                },
               },
             },
           },
@@ -150,55 +161,6 @@ export class AssetsService {
                 inspector: true,
               },
             },
-          },
-        }),
-      )
-      .catch(as404OrThrow);
-  }
-
-  async findAlerts(id: string, queryAlertDto?: QueryAlertDto) {
-    return this.prisma.forUser().then((prisma) =>
-      prisma.alert.findManyForPage(
-        buildPrismaFindArgs<typeof prisma.alert>(queryAlertDto, {
-          where: {
-            assetId: id,
-          },
-          include: {
-            asset: {
-              include: {
-                product: true,
-              },
-            },
-            assetAlertCriterion: true,
-            assetQuestionResponse: {
-              include: {
-                assetQuestion: true,
-              },
-            },
-          },
-        }),
-      ),
-    );
-  }
-
-  async resolveAlert(
-    id: string,
-    alertId: string,
-    resolveAlertDto: ResolveAlertDto,
-  ) {
-    return this.prisma
-      .forUser()
-      .then((prisma) =>
-        prisma.alert.update({
-          where: {
-            id: alertId,
-            assetId: id,
-            resolved: false,
-          },
-          data: {
-            ...resolveAlertDto,
-            resolved: true,
-            resolvedOn: new Date(),
           },
         }),
       )

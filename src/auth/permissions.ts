@@ -94,7 +94,10 @@ const prismaResources = [
 
 const resources = [...prismaResources, 'users'] as const;
 
+const readonlyResources: (typeof resources)[number][] = ['alerts'];
+
 export type TResource = (typeof resources)[number];
+export type TReadonlyResource = (typeof readonlyResources)[number];
 
 export const RESOURCE = Object.fromEntries(
   resources.map((r) => [replaceHyphensAndUppercase(r), r]),
@@ -104,10 +107,14 @@ export const RESOURCE = Object.fromEntries(
 
 // Common CRUD permissions for above resources.
 
-export const CREATE = buildPermissions('create', resources);
+const writeableResources = resources.filter(
+  (r) => !readonlyResources.includes(r),
+);
+
+export const CREATE = buildPermissions('create', writeableResources);
 export const READ = buildPermissions('read', resources);
-export const UPDATE = buildPermissions('update', resources);
-export const DELETE = buildPermissions('delete', resources);
+export const UPDATE = buildPermissions('update', writeableResources);
+export const DELETE = buildPermissions('delete', writeableResources);
 
 export const MANAGE = buildPermissions('manage', resources);
 
@@ -120,8 +127,19 @@ export type TManagePermissions = (typeof MANAGE)[keyof typeof MANAGE];
 
 // Specific/custom actions on resources.
 export const SETUP = buildPermissions('setup', [RESOURCE.ASSETS] as const);
+export const UPDATE_STATUS = buildPermissions('update-status', [
+  RESOURCE.PRODUCT_REQUESTS,
+] as const);
+export const CANCEL = buildPermissions('cancel', [
+  RESOURCE.PRODUCT_REQUESTS,
+] as const);
+export const RESOLVE = buildPermissions('resolve', [RESOURCE.ALERTS] as const);
 
 export type TSetupPermission = (typeof SETUP)[keyof typeof SETUP];
+export type TUpdateStatusPermission =
+  (typeof UPDATE_STATUS)[keyof typeof UPDATE_STATUS];
+export type TCancelPermission = (typeof CANCEL)[keyof typeof CANCEL];
+export type TResolvePermission = (typeof RESOLVE)[keyof typeof RESOLVE];
 
 export type TActionPermission =
   | TCreatePermission
@@ -129,7 +147,10 @@ export type TActionPermission =
   | TUpdatePermission
   | TDeletePermission
   | TManagePermissions
-  | TSetupPermission;
+  | TSetupPermission
+  | TUpdateStatusPermission
+  | TCancelPermission
+  | TResolvePermission;
 
 // Parse permissions into { namespace: string; value: string }
 type ParsePermissions<T extends string> = T extends `${infer N}:${infer V}`
@@ -154,6 +175,9 @@ export const ACTION_PERMISSIONS = [
   ...Object.values(DELETE),
   ...Object.values(MANAGE),
   ...Object.values(SETUP),
+  ...Object.values(UPDATE_STATUS),
+  ...Object.values(CANCEL),
+  ...Object.values(RESOLVE),
 ];
 
 export const VALID_PERMISSIONS = [
