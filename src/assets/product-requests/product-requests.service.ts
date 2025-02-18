@@ -3,16 +3,17 @@ import { ProductRequestStatus } from '@prisma/client';
 import { ViewContext } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateOrderRequestDto } from './dto/create-order-request.dto';
-import { QueryOrderRequestDto } from './dto/query-order-request.dto';
-import { UpdateOrderRequestStatusDto } from './dto/update-order-request-status.dto';
-import { UpdateOrderRequestDto } from './dto/update-order-request.dto';
+import { CreateProductRequestDto } from './dto/create-product-request.dto';
+import { QueryProductRequestDto } from './dto/query-product-request.dto';
+import { ReviewProductRequestDto } from './dto/review-product-request.dto';
+import { UpdateProductRequestStatusDto } from './dto/update-product-request-status.dto';
+import { UpdateProductRequestDto } from './dto/update-product-request.dto';
 
 @Injectable()
-export class OrderRequestsService {
+export class ProductRequestsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: CreateOrderRequestDto) {
+  async create(data: CreateProductRequestDto) {
     return this.prisma.forUser().then((client) =>
       client.productRequest.create({
         data,
@@ -24,7 +25,7 @@ export class OrderRequestsService {
     );
   }
 
-  async findAll(query?: QueryOrderRequestDto, context?: ViewContext) {
+  async findAll(query?: QueryProductRequestDto, context?: ViewContext) {
     const getClient =
       context === 'admin'
         ? this.prisma.forAdminOrUser()
@@ -39,7 +40,11 @@ export class OrderRequestsService {
                 product: true,
               },
             },
-            productRequestApprovals: true,
+            productRequestApprovals: {
+              include: {
+                approver: true,
+              },
+            },
             asset: {
               include: {
                 product: {
@@ -51,7 +56,7 @@ export class OrderRequestsService {
             },
             requestor: true,
             client: context === 'admin',
-            site: context === 'admin',
+            site: true,
           },
         }),
       ),
@@ -63,7 +68,16 @@ export class OrderRequestsService {
       client.productRequest.findUnique({
         where: { id },
         include: {
-          productRequestItems: true,
+          productRequestItems: {
+            include: {
+              product: true,
+            },
+          },
+          productRequestApprovals: {
+            include: {
+              approver: true,
+            },
+          },
           asset: {
             include: {
               product: {
@@ -73,12 +87,15 @@ export class OrderRequestsService {
               },
             },
           },
+          requestor: true,
+          client: true,
+          site: true,
         },
       }),
     );
   }
 
-  async update(id: string, data: UpdateOrderRequestDto) {
+  async update(id: string, data: UpdateProductRequestDto) {
     return this.prisma.forUser().then((client) =>
       client.productRequest.update({
         where: { id },
@@ -99,7 +116,7 @@ export class OrderRequestsService {
     );
   }
 
-  async updateStatuses(data: UpdateOrderRequestStatusDto) {
+  async updateStatuses(data: UpdateProductRequestStatusDto) {
     return this.prisma.forAdminOrUser().then((client) =>
       client.productRequest.updateMany({
         where: {
@@ -132,6 +149,15 @@ export class OrderRequestsService {
           },
         },
         data: { status: ProductRequestStatus.CANCELLED },
+      }),
+    );
+  }
+
+  async review(id: string, data: ReviewProductRequestDto) {
+    return this.prisma.forUser().then((client) =>
+      client.productRequest.update({
+        where: { id },
+        data,
       }),
     );
   }

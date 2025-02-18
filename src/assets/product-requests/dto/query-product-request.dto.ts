@@ -9,7 +9,7 @@ import {
 } from 'src/common/validation';
 import { z } from 'zod';
 
-const QueryOrderRequestFiltersSchema = z
+const QueryProductRequestFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
     createdOn: prismaDateTimeFilter(z.coerce.date()),
@@ -29,7 +29,7 @@ const QueryOrderRequestFiltersSchema = z
   })
   .partial() satisfies z.Schema<Prisma.ProductRequestWhereInput>;
 
-const QueryOrderRequestOrderSchema = z
+const QueryProductRequestOrderSchema = z
   .object({
     id: PrismaOrderEmum,
     createdOn: PrismaOrderEmum,
@@ -41,8 +41,8 @@ const QueryOrderRequestOrderSchema = z
   })
   .partial() satisfies z.Schema<Prisma.ProductRequestOrderByWithRelationInput>;
 
-export class QueryOrderRequestDto extends createZodDto(
-  QueryOrderRequestFiltersSchema.extend(
-    buildFixedQuerySchema(QueryOrderRequestOrderSchema),
+export class QueryProductRequestDto extends createZodDto(
+  QueryProductRequestFiltersSchema.extend(
+    buildFixedQuerySchema(QueryProductRequestOrderSchema),
   ),
 ) {}

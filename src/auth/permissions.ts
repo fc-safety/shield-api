@@ -134,13 +134,16 @@ export const CANCEL = buildPermissions('cancel', [
   RESOURCE.PRODUCT_REQUESTS,
 ] as const);
 export const RESOLVE = buildPermissions('resolve', [RESOURCE.ALERTS] as const);
+export const REVIEW = buildPermissions('review', [
+  RESOURCE.PRODUCT_REQUESTS,
+] as const);
 
 export type TSetupPermission = (typeof SETUP)[keyof typeof SETUP];
 export type TUpdateStatusPermission =
   (typeof UPDATE_STATUS)[keyof typeof UPDATE_STATUS];
 export type TCancelPermission = (typeof CANCEL)[keyof typeof CANCEL];
 export type TResolvePermission = (typeof RESOLVE)[keyof typeof RESOLVE];
-
+export type TReviewPermission = (typeof REVIEW)[keyof typeof REVIEW];
 export type TActionPermission =
   | TCreatePermission
   | TReadPermission
@@ -150,7 +153,8 @@ export type TActionPermission =
   | TSetupPermission
   | TUpdateStatusPermission
   | TCancelPermission
-  | TResolvePermission;
+  | TResolvePermission
+  | TReviewPermission;
 
 // Parse permissions into { namespace: string; value: string }
 type ParsePermissions<T extends string> = T extends `${infer N}:${infer V}`
@@ -178,6 +182,7 @@ export const ACTION_PERMISSIONS = [
   ...Object.values(UPDATE_STATUS),
   ...Object.values(CANCEL),
   ...Object.values(RESOLVE),
+  ...Object.values(REVIEW),
 ];
 
 export const VALID_PERMISSIONS = [

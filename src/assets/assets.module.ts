@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
+import { AlertsModule } from './alerts/alerts.module';
 import { AssetsModule as AssetsResourceModule } from './assets/assets.module';
 import { ConsumablesModule } from './consumables/consumables.module';
 import { InspectionsModule } from './inspections/inspections.module';
+import { ProductRequestsModule } from './product-requests/product-requests.module';
 import { TagsModule } from './tags/tags.module';
-import { OrderRequestsModule } from './order-requests/order-requests.module';
-import { AlertsModule } from './alerts/alerts.module';
 
 @Module({
   imports: [
@@ -12,7 +12,7 @@ import { AlertsModule } from './alerts/alerts.module';
     InspectionsModule,
     ConsumablesModule,
     TagsModule,
-    OrderRequestsModule,
+    ProductRequestsModule,
     AlertsModule,
   ],
 })

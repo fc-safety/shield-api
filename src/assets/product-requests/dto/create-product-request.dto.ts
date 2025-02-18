@@ -7,7 +7,7 @@ export const CreateProductRequestItemSchema = z.object({
   quantity: z.coerce.number().gte(1),
 });
 
-export const CreateOrderRequestSchema = z.object({
+export const CreateProductRequestSchema = z.object({
   productRequestItems: z.object({
     createMany: z.object({
       data: z.array(CreateProductRequestItemSchema),
@@ -22,6 +22,6 @@ export const CreateOrderRequestSchema = z.object({
     .optional(),
 }) satisfies z.Schema<Prisma.ProductRequestCreateInput>;
 
-export class CreateOrderRequestDto extends createZodDto(
-  CreateOrderRequestSchema,
+export class CreateProductRequestDto extends createZodDto(
+  CreateProductRequestSchema,
 ) {}
