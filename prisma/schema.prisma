@@ -31,6 +31,8 @@ model Asset {
   location               String
   placement              String
   serialNumber           String
+  inspectionRoutePoints  InspectionRoutePoint[]
+  inspectionRouteId      String?
   consumables            Consumable[]
   inspections            Inspection[]
   alerts                 Alert[]
@@ -60,6 +62,7 @@ model Consumable {
 
 model Tag {
   id           String   @id @default(cuid(2))
+  externalId   String   @unique @default(cuid(2))
   createdOn    DateTime @default(now())
   modifiedOn   DateTime @updatedAt
   serialNumber String   @unique
@@ -71,32 +74,96 @@ model Tag {
 }
 
 model Inspection {
-  id               String                  @id @default(cuid(2))
-  createdOn        DateTime                @default(now())
-  modifiedOn       DateTime                @updatedAt
-  asset            Asset                   @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  assetId          String
-  inspector        Person                  @relation(fields: [inspectorId], references: [id])
-  inspectorId      String                  @default(dbgenerated("current_setting('app.current_person_id'::text)"))
-  status           InspectionStatus        @default(PENDING)
-  useragent        String?
-  ipv4             String?                 @db.Inet
-  ipv6             String?                 @db.Inet
-  latitude         Float?
-  longitude        Float?
-  locationAccuracy Float?
-  comments         String?
-  responses        AssetQuestionResponse[]
-  alerts           Alert[]
-  site             Site                    @relation(fields: [siteId], references: [id])
-  siteId           String                  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
-  client           Client                  @relation(fields: [clientId], references: [id])
-  clientId         String                  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  id                             String                          @id @default(cuid(2))
+  createdOn                      DateTime                        @default(now())
+  modifiedOn                     DateTime                        @updatedAt
+  asset                          Asset                           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assetId                        String
+  inspector                      Person                          @relation(fields: [inspectorId], references: [id])
+  inspectorId                    String                          @default(dbgenerated("current_setting('app.current_person_id'::text)"))
+  status                         InspectionStatus                @default(PENDING)
+  useragent                      String?
+  ipv4                           String?                         @db.Inet
+  ipv6                           String?                         @db.Inet
+  latitude                       Float?
+  longitude                      Float?
+  locationAccuracy               Float?
+  comments                       String?
+  responses                      AssetQuestionResponse[]
+  alerts                         Alert[]
+  completedInspectionRoutePoints CompletedInspectionRoutePoint[]
+  site                           Site                            @relation(fields: [siteId], references: [id])
+  siteId                         String                          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client                         Client                          @relation(fields: [clientId], references: [id])
+  clientId                       String                          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 
 enum InspectionStatus {
   PENDING
   COMPLETE
+}
+
+model InspectionRoute {
+  id                    String                 @id @default(cuid(2))
+  createdOn             DateTime               @default(now())
+  modifiedOn            DateTime               @updatedAt
+  name                  String
+  description           String?
+  inspectionRoutePoints InspectionRoutePoint[]
+  site                  Site                   @relation(fields: [siteId], references: [id])
+  siteId                String                 @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client                Client                 @relation(fields: [clientId], references: [id])
+  clientId              String                 @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  inspectionSessions    InspectionSession[]
+}
+
+model InspectionRoutePoint {
+  id                             String                          @id @default(cuid(2))
+  createdOn                      DateTime                        @default(now())
+  modifiedOn                     DateTime                        @updatedAt
+  order                          Int
+  inspectionRoute                InspectionRoute                 @relation(fields: [inspectionRouteId], references: [id])
+  inspectionRouteId              String
+  asset                          Asset                           @relation(fields: [assetId], references: [id])
+  assetId                        String
+  site                           Site                            @relation(fields: [siteId], references: [id])
+  siteId                         String                          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client                         Client                          @relation(fields: [clientId], references: [id])
+  clientId                       String                          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  completedInspectionRoutePoints CompletedInspectionRoutePoint[]
+}
+
+model InspectionSession {
+  id                             String                          @id @default(cuid(2))
+  createdOn                      DateTime                        @default(now())
+  modifiedOn                     DateTime                        @updatedAt
+  status                         InspectionSessionStatus         @default(PENDING)
+  inspectionRoute                InspectionRoute                 @relation(fields: [inspectionRouteId], references: [id])
+  inspectionRouteId              String
+  completedInspectionRoutePoints CompletedInspectionRoutePoint[]
+  lastInspector                  Person                          @relation(fields: [lastInspectorId], references: [id])
+  lastInspectorId                String                          @default(dbgenerated("current_setting('app.current_person_id'::text)"))
+  site                           Site                            @relation(fields: [siteId], references: [id])
+  siteId                         String                          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client                         Client                          @relation(fields: [clientId], references: [id])
+  clientId                       String                          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+}
+
+enum InspectionSessionStatus {
+  PENDING
+  COMPLETE
+}
+
+model CompletedInspectionRoutePoint {
+  id                     String               @id @default(cuid(2))
+  createdOn              DateTime             @default(now())
+  modifiedOn             DateTime             @updatedAt
+  inspectionSession      InspectionSession    @relation(fields: [inspectionSessionId], references: [id])
+  inspectionSessionId    String
+  inspectionRoutePoint   InspectionRoutePoint @relation(fields: [inspectionRoutePointId], references: [id])
+  inspectionRoutePointId String
+  inspection             Inspection           @relation(fields: [inspectionId], references: [id])
+  inspectionId           String
 }
 
 model AssetQuestion {
@@ -286,6 +353,9 @@ model Client {
   assets                  Asset[]
   consumables             Consumable[]
   inspections             Inspection[]
+  inspectionRoutes        InspectionRoute[]
+  inspectionRoutePoints   InspectionRoutePoint[]
+  inspectionSessions      InspectionSession[]
   tags                    Tag[]
   assetQuestions          AssetQuestion[]
   assetQuestionResponses  AssetQuestionResponse[]
@@ -323,6 +393,9 @@ model Site {
   tags                    Tag[]
   people                  Person[]
   inspections             Inspection[]
+  inspectionRoutes        InspectionRoute[]
+  inspectionRoutePoints   InspectionRoutePoint[]
+  inspectionSessions      InspectionSession[]
   assetQuestionResponses  AssetQuestionResponse[]
   alerts                  Alert[]
   client                  Client                   @relation(fields: [clientId], references: [id])
@@ -344,6 +417,7 @@ model Person {
   productRequestApprovals ProductRequestApproval[]
   productRequestItems     ProductRequestItem[]
   inspections             Inspection[]
+  inspectionSessions      InspectionSession[]
   assetQuestionResponses  AssetQuestionResponse[]
   site                    Site                     @relation(fields: [siteId], references: [id])
   siteId                  String

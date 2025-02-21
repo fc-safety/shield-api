@@ -5,6 +5,7 @@ import { ConsumablesModule } from './consumables/consumables.module';
 import { InspectionsModule } from './inspections/inspections.module';
 import { ProductRequestsModule } from './product-requests/product-requests.module';
 import { TagsModule } from './tags/tags.module';
+import { InspectionRoutesModule } from './inspection-routes/inspection-routes.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TagsModule } from './tags/tags.module';
     TagsModule,
     ProductRequestsModule,
     AlertsModule,
+    InspectionRoutesModule,
   ],
 })
 export class AssetsModule {}

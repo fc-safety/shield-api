@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { InspectionSessionStatus } from '@prisma/client';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -14,45 +15,118 @@ export class InspectionsService {
     private readonly assetsService: AssetsService,
   ) {}
 
-  async create(createInspectionDto: CreateInspectionDto) {
-    return this.prisma.forUser().then((prisma) =>
-      prisma.inspection
-        .create({
-          data: createInspectionDto,
-          include: {
-            responses: {
-              include: {
-                assetQuestion: {
-                  include: {
-                    assetAlertCriteria: true,
-                  },
-                },
-              },
-            },
-            asset: {
-              include: {
-                setupQuestionResponses: {
-                  include: {
-                    assetQuestion: {
-                      include: {
-                        consumableConfig: true,
-                      },
+  async create(
+    createInspectionDto: CreateInspectionDto,
+    sessionId?: string,
+    routeId?: string,
+  ) {
+    const prisma = await this.prisma.forUser();
+    const assetId = createInspectionDto.asset.connect.id;
+
+    const inspectionSession = sessionId
+      ? await prisma.inspectionSession
+          .findUniqueOrThrow({
+            where: { id: sessionId },
+            include: {
+              inspectionRoute: {
+                include: {
+                  inspectionRoutePoints: {
+                    where: {
+                      assetId: assetId,
                     },
                   },
                 },
               },
             },
+          })
+          .catch(as404OrThrow)
+      : null;
+
+    const currentRoutePoint =
+      inspectionSession?.inspectionRoute.inspectionRoutePoints.find(
+        (point) => point.assetId === assetId,
+      ) ??
+      (routeId
+        ? await prisma.inspectionRoutePoint.findFirst({
+            where: {
+              assetId,
+              inspectionRouteId: routeId,
+            },
+          })
+        : null) ??
+      null;
+
+    const inspection = await prisma.inspection.create({
+      data: {
+        ...createInspectionDto,
+        completedInspectionRoutePoints: currentRoutePoint
+          ? {
+              create: {
+                inspectionRoutePoint: {
+                  connect: {
+                    id: currentRoutePoint.id,
+                  },
+                },
+                inspectionSession: sessionId
+                  ? {
+                      connect: {
+                        id: sessionId,
+                      },
+                    }
+                  : {
+                      create: {
+                        inspectionRoute: {
+                          connect: {
+                            id: currentRoutePoint.inspectionRouteId,
+                          },
+                        },
+                      },
+                    },
+              },
+            }
+          : undefined,
+      },
+      include: {
+        responses: {
+          include: {
+            assetQuestion: {
+              include: {
+                assetAlertCriteria: true,
+              },
+            },
           },
-        })
-        .then(async (inspection) => {
-          await this.assetsService.handleAlertTriggers(inspection);
-          await this.assetsService.handleConsumableConfigs(
-            prisma,
-            inspection.asset,
-          );
-          return inspection;
-        }),
-    );
+        },
+        asset: {
+          include: {
+            setupQuestionResponses: {
+              include: {
+                assetQuestion: {
+                  include: {
+                    consumableConfig: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        completedInspectionRoutePoints: {
+          include: {
+            inspectionSession: true,
+          },
+          take: 1,
+        },
+      },
+    });
+
+    await this.assetsService.handleAlertTriggers(inspection);
+    await this.assetsService.handleConsumableConfigs(prisma, inspection.asset);
+
+    return {
+      inspection,
+      session:
+        inspection.completedInspectionRoutePoints.at(0)?.inspectionSession ??
+        null,
+    };
   }
 
   async findAll(queryInspectionDto?: QueryInspectionDto) {
@@ -119,5 +193,53 @@ export class InspectionsService {
     return this.prisma
       .forUser()
       .then((prisma) => prisma.inspection.delete({ where: { id } }));
+  }
+
+  async findActiveInspectionSessionsForAsset(assetId: string) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.inspectionSession.findMany({
+        where: {
+          inspectionRoute: {
+            inspectionRoutePoints: {
+              some: {
+                assetId,
+              },
+            },
+          },
+          status: InspectionSessionStatus.PENDING,
+        },
+        include: {
+          lastInspector: true,
+          completedInspectionRoutePoints: true,
+          inspectionRoute: {
+            include: {
+              inspectionRoutePoints: true,
+            },
+          },
+        },
+      }),
+    );
+  }
+
+  async findInspectionSession(id: string) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.inspectionSession
+        .findUniqueOrThrow({
+          where: { id },
+          include: {
+            inspectionRoute: {
+              include: {
+                inspectionRoutePoints: true,
+              },
+            },
+            completedInspectionRoutePoints: {
+              include: {
+                inspectionRoutePoint: true,
+              },
+            },
+          },
+        })
+        .then(as404OrThrow),
+    );
   }
 }

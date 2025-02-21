@@ -20,13 +20,33 @@ export class InspectionsController {
   constructor(private readonly inspectionsService: InspectionsService) {}
 
   @Post()
-  create(@Body() createInspectionDto: CreateInspectionDto) {
-    return this.inspectionsService.create(createInspectionDto);
+  create(
+    @Body() createInspectionDto: CreateInspectionDto,
+    @Query('sessionId') sessionId?: string,
+    @Query('routeId') routeId?: string,
+  ) {
+    return this.inspectionsService.create(
+      createInspectionDto,
+      sessionId,
+      routeId,
+    );
   }
 
   @Get()
   findAll(@Query() queryInspectionDto?: QueryInspectionDto) {
     return this.inspectionsService.findAll(queryInspectionDto);
+  }
+
+  @Get('active-sessions/asset/:assetId')
+  findActiveSessions(@Param('assetId') assetId: string) {
+    return this.inspectionsService.findActiveInspectionSessionsForAsset(
+      assetId,
+    );
+  }
+
+  @Get('sessions/:id')
+  findActiveSession(@Param('id') id: string) {
+    return this.inspectionsService.findInspectionSession(id);
   }
 
   @Get(':id')

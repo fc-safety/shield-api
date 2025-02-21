@@ -46,12 +46,12 @@ export class TagsService {
       .catch(as404OrThrow);
   }
 
-  async findOneBySerial(serialNumber: string) {
+  async findOneByExternalId(externalId: string) {
     return this.prisma
       .forUser()
       .then((prisma) =>
         prisma.tag.findFirstOrThrow({
-          where: { serialNumber },
+          where: { externalId },
           include: {
             asset: {
               include: {

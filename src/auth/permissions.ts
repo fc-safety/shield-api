@@ -80,6 +80,7 @@ const prismaResources = [
   'consumables',
   'tags',
   'inspections',
+  'inspection-routes',
   'asset-questions',
   'alerts',
   'product-requests',

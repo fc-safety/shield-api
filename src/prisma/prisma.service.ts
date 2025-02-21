@@ -207,6 +207,9 @@ export const extensions = {
   forUser: (person: Person) => {
     return Prisma.defineExtension((prisma) =>
       prisma.$extends({
+        client: {
+          $currentUser: () => person,
+        },
         query: {
           $allModels: {
             async $allOperations({ args, query, operation, model }) {
