@@ -8,6 +8,7 @@ import {
   Inspection,
   Prisma,
 } from '@prisma/client';
+import { subDays } from 'date-fns';
 import { testAlertRule } from 'src/common/alert-utils';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
@@ -92,8 +93,8 @@ export class AssetsService {
             tag: true,
             productRequests: {
               where: {
-                status: {
-                  notIn: ['CANCELLED', 'COMPLETE'],
+                createdOn: {
+                  gte: subDays(new Date(), 30),
                 },
               },
               include: {
