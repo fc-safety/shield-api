@@ -210,7 +210,11 @@ export class InspectionsService {
         },
         include: {
           lastInspector: true,
-          completedInspectionRoutePoints: true,
+          completedInspectionRoutePoints: {
+            include: {
+              inspectionRoutePoint: true,
+            },
+          },
           inspectionRoute: {
             include: {
               inspectionRoutePoints: true,
@@ -239,7 +243,16 @@ export class InspectionsService {
             },
           },
         })
-        .then(as404OrThrow),
+        .catch(as404OrThrow),
+    );
+  }
+
+  async completeInspectionSession(id: string) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.inspectionSession.update({
+        where: { id },
+        data: { status: InspectionSessionStatus.COMPLETE },
+      }),
     );
   }
 }

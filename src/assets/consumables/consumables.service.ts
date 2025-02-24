@@ -4,7 +4,6 @@ import type {
   AssetQuestionResponse,
   ConsumableQuestionConfig,
   Prisma,
-  Product,
 } from '@prisma/client';
 import { ConsumableMappingType } from '@prisma/client';
 import { as404OrThrow } from 'src/common/utils';
@@ -79,7 +78,7 @@ export class ConsumablesService {
     response: AssetQuestionResponse & {
       assetQuestion: AssetQuestion & {
         consumableConfig?: ConsumableQuestionConfig & {
-          consumableProduct: Product;
+          consumableProductId: string;
         };
       };
     },
@@ -91,7 +90,7 @@ export class ConsumablesService {
     const existingConsumable = await tx.consumable.findFirst({
       where: {
         assetId,
-        productId: consumableConfig.consumableProduct.id,
+        productId: consumableConfig.consumableProductId,
       },
     });
 
@@ -110,7 +109,7 @@ export class ConsumablesService {
         data: {
           ...consumableData,
           asset: { connect: { id: assetId } },
-          product: { connect: { id: consumableConfig.consumableProduct.id } },
+          product: { connect: { id: consumableConfig.consumableProductId } },
         },
       });
     }

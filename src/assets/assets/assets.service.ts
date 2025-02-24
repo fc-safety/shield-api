@@ -7,7 +7,6 @@ import {
   ConsumableQuestionConfig,
   Inspection,
   Prisma,
-  Product,
 } from '@prisma/client';
 import { testAlertRule } from 'src/common/alert-utils';
 import { as404OrThrow } from 'src/common/utils';
@@ -201,11 +200,7 @@ export class AssetsService {
             include: {
               assetQuestion: {
                 include: {
-                  consumableConfig: {
-                    include: {
-                      consumableProduct: true,
-                    },
-                  },
+                  consumableConfig: true,
                 },
               },
             },
@@ -313,9 +308,7 @@ export class AssetsService {
             response,
           ): response is AssetQuestionResponse & {
             assetQuestion: AssetQuestion & {
-              consumableConfig: ConsumableQuestionConfig & {
-                consumableProduct: Product;
-              };
+              consumableConfig: ConsumableQuestionConfig;
             };
           } => !!response.assetQuestion.consumableConfig,
         )

@@ -49,6 +49,11 @@ export class InspectionsController {
     return this.inspectionsService.findInspectionSession(id);
   }
 
+  @Post('sessions/:id/complete')
+  completeSession(@Param('id') id: string) {
+    return this.inspectionsService.completeInspectionSession(id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.inspectionsService.findOne(id);
