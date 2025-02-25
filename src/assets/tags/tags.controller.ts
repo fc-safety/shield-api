@@ -34,18 +34,13 @@ export class TagsController {
   }
 
   @Get('externalId/:externalId')
-  findOneByExternalId(
-    @Param('externalId') externalId: string,
-    @Req() req: Request,
-  ) {
-    const context = getViewContext(req);
-    return this.tagsService.findOneByExternalId(externalId, context);
+  findOneByExternalId(@Param('externalId') externalId: string) {
+    return this.tagsService.findOneByExternalId(externalId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @Req() req: Request) {
-    const context = getViewContext(req);
-    return this.tagsService.findOne(id, context);
+  findOne(@Param('id') id: string) {
+    return this.tagsService.findOne(id);
   }
 
   @Patch(':id')

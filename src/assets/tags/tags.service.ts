@@ -30,9 +30,9 @@ export class TagsService {
     );
   }
 
-  async findOne(id: string, context: ViewContext) {
+  async findOne(id: string) {
     return this.prisma
-      .forContext(context)
+      .forAdminOrUser()
       .then((prisma) =>
         prisma.tag.findUniqueOrThrow({
           where: { id },
@@ -46,9 +46,9 @@ export class TagsService {
       .catch(as404OrThrow);
   }
 
-  async findOneByExternalId(externalId: string, context: ViewContext) {
+  async findOneByExternalId(externalId: string) {
     return this.prisma
-      .forContext(context)
+      .forAdminOrUser()
       .then((prisma) =>
         prisma.tag.findFirstOrThrow({
           where: { externalId },

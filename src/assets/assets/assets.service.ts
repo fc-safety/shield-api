@@ -55,6 +55,7 @@ export class AssetsService {
               take: 1,
               orderBy: { createdOn: 'desc' },
             },
+            site: true,
           },
         }),
       ),
