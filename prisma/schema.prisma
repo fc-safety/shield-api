@@ -122,9 +122,9 @@ model InspectionRoutePoint {
   createdOn                      DateTime                        @default(now())
   modifiedOn                     DateTime                        @updatedAt
   order                          Int
-  inspectionRoute                InspectionRoute                 @relation(fields: [inspectionRouteId], references: [id])
+  inspectionRoute                InspectionRoute                 @relation(fields: [inspectionRouteId], references: [id], onDelete: Cascade)
   inspectionRouteId              String
-  asset                          Asset                           @relation(fields: [assetId], references: [id])
+  asset                          Asset                           @relation(fields: [assetId], references: [id], onDelete: Cascade)
   assetId                        String
   site                           Site                            @relation(fields: [siteId], references: [id])
   siteId                         String                          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
@@ -158,11 +158,11 @@ model CompletedInspectionRoutePoint {
   id                     String               @id @default(cuid(2))
   createdOn              DateTime             @default(now())
   modifiedOn             DateTime             @updatedAt
-  inspectionSession      InspectionSession    @relation(fields: [inspectionSessionId], references: [id])
+  inspectionSession      InspectionSession    @relation(fields: [inspectionSessionId], references: [id], onDelete: Cascade)
   inspectionSessionId    String
-  inspectionRoutePoint   InspectionRoutePoint @relation(fields: [inspectionRoutePointId], references: [id])
+  inspectionRoutePoint   InspectionRoutePoint @relation(fields: [inspectionRoutePointId], references: [id], onDelete: Cascade)
   inspectionRoutePointId String
-  inspection             Inspection           @relation(fields: [inspectionId], references: [id])
+  inspection             Inspection           @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
   inspectionId           String
 }
 
