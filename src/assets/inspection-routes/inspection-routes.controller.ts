@@ -8,7 +8,10 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import {
+  CheckPolicies,
+  CheckResourcePermissions,
+} from 'src/auth/policies.guard';
 import { CreateInspectionRoutePointDto } from './dto/create-inspection-route-point.dto';
 import { CreateInspectionRouteDto } from './dto/create-inspection-route.dto';
 import { QueryInspectionRouteDto } from './dto/query-inspection-route.dto';
@@ -58,6 +61,7 @@ export class InspectionRoutesController {
   }
 
   @Post(':id/points')
+  @CheckPolicies(({ user }) => user.canUpdate('inspection-routes'))
   createPoint(
     @Param('id') id: string,
     @Body() createInspectionRoutePointDto: CreateInspectionRoutePointDto,
