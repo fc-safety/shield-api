@@ -10,7 +10,7 @@ import {
 } from '@prisma/client';
 import { subDays } from 'date-fns';
 import { testAlertRule } from 'src/common/alert-utils';
-import { as404OrThrow } from 'src/common/utils';
+import { as404OrThrow, ViewContext } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetAlertCriterionRuleSchema } from 'src/products/asset-questions/dto/create-asset-question.dto';
@@ -35,8 +35,8 @@ export class AssetsService {
       .then((prisma) => prisma.asset.create({ data: createAssetDto }));
   }
 
-  async findAll(queryAssetDto?: QueryAssetDto) {
-    return this.prisma.forUser().then(async (prisma) =>
+  async findAll(queryAssetDto: QueryAssetDto, context: ViewContext) {
+    return this.prisma.forContext(context).then(async (prisma) =>
       prisma.asset.findManyForPage(
         buildPrismaFindArgs<typeof prisma.asset>(queryAssetDto, {
           include: {

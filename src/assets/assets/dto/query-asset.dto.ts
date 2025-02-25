@@ -9,12 +9,13 @@ import {
 } from 'src/common/validation';
 import { z } from 'zod';
 
-const QueryAssetFiltersSchema = z
+const BaseQueryAssetFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
     createdOn: prismaDateTimeFilter(z.coerce.date()),
     modifiedOn: prismaDateTimeFilter(z.coerce.date()),
     active: prismaBoolFilter(z.coerce.boolean()),
+    tagId: prismaStringFilter(z.string()),
     site: z
       .object({
         id: prismaStringFilter(z.string()),
@@ -22,6 +23,11 @@ const QueryAssetFiltersSchema = z
       .partial(),
   })
   .partial() satisfies z.Schema<Prisma.AssetWhereInput>;
+
+const QueryAssetFiltersSchema = BaseQueryAssetFiltersSchema.extend({
+  OR: z.array(BaseQueryAssetFiltersSchema),
+  AND: z.array(BaseQueryAssetFiltersSchema),
+}).partial() satisfies z.Schema<Prisma.AssetWhereInput>;
 
 const QueryAssetOrderSchema = z
   .object({
