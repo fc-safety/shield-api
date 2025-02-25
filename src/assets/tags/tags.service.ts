@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { as404OrThrow } from 'src/common/utils';
+import { as404OrThrow, ViewContext } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTagDto } from './dto/create-tag.dto';
@@ -12,12 +12,12 @@ export class TagsService {
 
   async create(createTagDto: CreateTagDto) {
     return this.prisma
-      .forUser()
+      .forAdminOrUser()
       .then((prisma) => prisma.tag.create({ data: createTagDto }));
   }
 
-  async findAll(queryTagDto?: QueryTagDto) {
-    return this.prisma.forUser().then(async (prisma) =>
+  async findAll(queryTagDto: QueryTagDto | undefined, context: ViewContext) {
+    return this.prisma.forContext(context).then(async (prisma) =>
       prisma.tag.findManyForPage(
         buildPrismaFindArgs<typeof prisma.tag>(queryTagDto, {
           include: {
@@ -30,9 +30,9 @@ export class TagsService {
     );
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, context: ViewContext) {
     return this.prisma
-      .forUser()
+      .forContext(context)
       .then((prisma) =>
         prisma.tag.findUniqueOrThrow({
           where: { id },
@@ -46,9 +46,9 @@ export class TagsService {
       .catch(as404OrThrow);
   }
 
-  async findOneByExternalId(externalId: string) {
+  async findOneByExternalId(externalId: string, context: ViewContext) {
     return this.prisma
-      .forUser()
+      .forContext(context)
       .then((prisma) =>
         prisma.tag.findFirstOrThrow({
           where: { externalId },
@@ -76,7 +76,7 @@ export class TagsService {
   }
 
   async update(id: string, updateTagDto: UpdateTagDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.forAdminOrUser().then((prisma) =>
       prisma.tag
         .update({
           where: { id },
@@ -88,7 +88,7 @@ export class TagsService {
 
   async remove(id: string) {
     return this.prisma
-      .forUser()
+      .forAdminOrUser()
       .then((prisma) => prisma.tag.delete({ where: { id } }));
   }
 }

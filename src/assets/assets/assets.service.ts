@@ -129,7 +129,7 @@ export class AssetsService {
     );
   }
 
-  async addTag(id: string, tagSerialNumber: string) {
+  async addTag(id: string, tagExternalId: string, tagSerialNumber: string) {
     return this.prisma
       .forUser()
       .then((prisma) =>
@@ -138,7 +138,7 @@ export class AssetsService {
           data: {
             tag: {
               connectOrCreate: {
-                where: { serialNumber: tagSerialNumber },
+                where: { externalId: tagExternalId },
                 create: { serialNumber: tagSerialNumber },
               },
             },

@@ -53,9 +53,10 @@ export class AssetsController {
   @Post(':id/add-tag')
   addTag(
     @Param('id') id: string,
+    @Query('tagExternalId') tagExternalId: string,
     @Query('tagSerialNumber') tagSerialNumber: string,
   ) {
-    return this.assetsService.addTag(id, tagSerialNumber);
+    return this.assetsService.addTag(id, tagExternalId, tagSerialNumber);
   }
 
   @CheckPolicies((context) => context.user.can('setup', 'assets'))

@@ -65,7 +65,7 @@ model Tag {
   externalId   String   @unique @default(cuid(2))
   createdOn    DateTime @default(now())
   modifiedOn   DateTime @updatedAt
-  serialNumber String   @unique
+  serialNumber String
   asset        Asset?
   site         Site?    @relation(fields: [siteId], references: [id])
   siteId       String?  @default(dbgenerated("current_setting('app.current_site_id'::text, TRUE)"))

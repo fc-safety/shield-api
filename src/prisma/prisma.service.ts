@@ -5,6 +5,7 @@ import { Cache } from 'cache-manager';
 import { ClsService } from 'nestjs-cls';
 import { TVisibility } from 'src/auth/permissions';
 import { StatelessUser } from 'src/auth/user.schema';
+import { ViewContext } from 'src/common/utils';
 import { CommonClsStore } from '../common/types';
 
 interface Person {
@@ -107,6 +108,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     const user = this.cls.get('user');
     if (user?.isGlobalAdmin()) {
       return this.bypassRLS();
+    } else {
+      return await this.forUser();
+    }
+  }
+
+  public async forContext(context: ViewContext) {
+    if (context === 'admin') {
+      return this.forAdminOrUser();
     } else {
       return await this.forUser();
     }
