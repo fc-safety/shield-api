@@ -69,6 +69,7 @@ export class AssetsService {
         prisma.asset.findUniqueOrThrow({
           where: { id },
           include: {
+            site: true,
             inspectionRoutePoints: {
               include: {
                 inspectionRoute: true,

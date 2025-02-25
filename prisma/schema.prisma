@@ -126,10 +126,6 @@ model InspectionRoutePoint {
   inspectionRouteId              String
   asset                          Asset                           @relation(fields: [assetId], references: [id], onDelete: Cascade)
   assetId                        String
-  site                           Site                            @relation(fields: [siteId], references: [id])
-  siteId                         String                          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
-  client                         Client                          @relation(fields: [clientId], references: [id])
-  clientId                       String                          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
   completedInspectionRoutePoints CompletedInspectionRoutePoint[]
 }
 
@@ -354,7 +350,6 @@ model Client {
   consumables             Consumable[]
   inspections             Inspection[]
   inspectionRoutes        InspectionRoute[]
-  inspectionRoutePoints   InspectionRoutePoint[]
   inspectionSessions      InspectionSession[]
   tags                    Tag[]
   assetQuestions          AssetQuestion[]
@@ -394,7 +389,6 @@ model Site {
   people                  Person[]
   inspections             Inspection[]
   inspectionRoutes        InspectionRoute[]
-  inspectionRoutePoints   InspectionRoutePoint[]
   inspectionSessions      InspectionSession[]
   assetQuestionResponses  AssetQuestionResponse[]
   alerts                  Alert[]

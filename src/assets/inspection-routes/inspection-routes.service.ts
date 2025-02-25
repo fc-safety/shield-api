@@ -26,6 +26,7 @@ export class InspectionRoutesService {
     return prisma.inspectionRoute.findManyForPage(
       buildPrismaFindArgs(query, {
         include: {
+          site: true,
           inspectionRoutePoints: {
             include: {
               asset: true,
@@ -44,6 +45,7 @@ export class InspectionRoutesService {
     return prisma.inspectionRoute.findUnique({
       where: { id },
       include: {
+        site: true,
         inspectionRoutePoints: {
           include: {
             asset: true,
@@ -97,7 +99,9 @@ export class InspectionRoutesService {
       where: { id: inspectionRouteId },
       data: {
         inspectionRoutePoints: {
-          create: createInspectionRoutePointDto,
+          create: {
+            ...createInspectionRoutePointDto,
+          },
         },
       },
     });
