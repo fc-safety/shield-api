@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ProductRequestStatus } from '@prisma/client';
 import { ViewContext } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
+import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProductRequestDto } from './dto/create-product-request.dto';
 import { QueryProductRequestDto } from './dto/query-product-request.dto';
@@ -11,17 +12,31 @@ import { UpdateProductRequestDto } from './dto/update-product-request.dto';
 
 @Injectable()
 export class ProductRequestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(data: CreateProductRequestDto) {
     return this.prisma.forUser().then((client) =>
-      client.productRequest.create({
-        data,
-        include: {
-          productRequestItems: true,
-          asset: true,
-        },
-      }),
+      client.productRequest
+        .create({
+          data,
+          include: {
+            productRequestItems: {
+              include: {
+                product: true,
+              },
+            },
+            client: true,
+            requestor: true,
+            site: true,
+          },
+        })
+        .then(async (productRequest) => {
+          await this.notifications.sendNewProductRequestEmail(productRequest);
+          return productRequest;
+        }),
     );
   }
 

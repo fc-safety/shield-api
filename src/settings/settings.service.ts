@@ -1,6 +1,6 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, SettingsBlock as PrismaSettingsBlock } from '@prisma/client';
 import { Cache } from 'cache-manager';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { z } from 'zod';
@@ -11,9 +11,8 @@ import {
   GlobalSettingsSchema,
 } from './dto/global-settings.dto';
 
-export interface SettingsBlock<
-  T extends Prisma.SettingsBlockGetPayload<null>['data'],
-> extends Prisma.SettingsBlockGetPayload<null> {
+export interface SettingsBlock<T extends PrismaSettingsBlock['data']>
+  extends PrismaSettingsBlock {
   data: T;
 }
 

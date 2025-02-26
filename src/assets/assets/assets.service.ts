@@ -1,11 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  Asset,
-  AssetAlertCriterion,
   AssetQuestion,
   AssetQuestionResponse,
   ConsumableQuestionConfig,
-  Inspection,
   Prisma,
 } from '@prisma/client';
 import { subDays } from 'date-fns';
@@ -240,13 +237,19 @@ export class AssetsService {
   }
 
   async handleAlertTriggers(
-    inspection: Inspection & {
-      responses: (AssetQuestionResponse & {
-        assetQuestion: AssetQuestion & {
-          assetAlertCriteria: AssetAlertCriterion[];
+    inspection: Prisma.InspectionGetPayload<{
+      include: {
+        responses: {
+          include: {
+            assetQuestion: {
+              include: {
+                assetAlertCriteria: true;
+              };
+            };
+          };
         };
-      })[];
-    },
+      };
+    }>,
   ) {
     if (!inspection || inspection.status !== 'COMPLETE') {
       return;
@@ -304,13 +307,19 @@ export class AssetsService {
 
   async handleConsumableConfigs(
     prismaClient: Awaited<ReturnType<PrismaService['forUser']>>,
-    asset: Asset & {
-      setupQuestionResponses: (AssetQuestionResponse & {
-        assetQuestion: AssetQuestion & {
-          consumableConfig: ConsumableQuestionConfig | null;
+    asset: Prisma.AssetGetPayload<{
+      include: {
+        setupQuestionResponses: {
+          include: {
+            assetQuestion: {
+              include: {
+                consumableConfig: true;
+              };
+            };
+          };
         };
-      })[];
-    },
+      };
+    }>,
   ) {
     // Handle consumable configs from setup responses
     await Promise.all(
