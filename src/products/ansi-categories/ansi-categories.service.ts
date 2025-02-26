@@ -1,26 +1,54 @@
 import { Injectable } from '@nestjs/common';
+import { buildPrismaFindArgs } from 'src/common/validation';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAnsiCategoryDto } from './dto/create-ansi-category.dto';
+import { QueryAnsiCategoryDto } from './dto/query-ansi-category.dto';
 import { UpdateAnsiCategoryDto } from './dto/update-ansi-category.dto';
 
 @Injectable()
 export class AnsiCategoriesService {
-  create(createAnsiCategoryDto: CreateAnsiCategoryDto) {
-    return 'This action adds a new ansiCategory';
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(createAnsiCategoryDto: CreateAnsiCategoryDto) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.ansiCategory.create({
+        data: createAnsiCategoryDto,
+      }),
+    );
   }
 
-  findAll() {
-    return `This action returns all ansiCategories`;
+  async findAll(queryAnsiCategoryDto?: QueryAnsiCategoryDto) {
+    return this.prisma
+      .forUser()
+      .then((prisma) =>
+        prisma.ansiCategory.findManyForPage(
+          buildPrismaFindArgs<typeof prisma.ansiCategory>(queryAnsiCategoryDto),
+        ),
+      );
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} ansiCategory`;
+  async findOne(id: string) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.ansiCategory.findUniqueOrThrow({
+        where: { id },
+      }),
+    );
   }
 
-  update(id: number, updateAnsiCategoryDto: UpdateAnsiCategoryDto) {
-    return `This action updates a #${id} ansiCategory`;
+  async update(id: string, updateAnsiCategoryDto: UpdateAnsiCategoryDto) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.ansiCategory.update({
+        where: { id },
+        data: updateAnsiCategoryDto,
+      }),
+    );
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} ansiCategory`;
+  async remove(id: string) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.ansiCategory.delete({
+        where: { id },
+      }),
+    );
   }
 }

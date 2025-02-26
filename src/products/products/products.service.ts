@@ -69,7 +69,11 @@ export class ProductsService {
               },
             },
             client: true,
-            consumableProducts: true,
+            consumableProducts: {
+              include: {
+                ansiCategory: true,
+              },
+            },
           },
         })
         .catch(as404OrThrow),

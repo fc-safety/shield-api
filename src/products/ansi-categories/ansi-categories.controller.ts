@@ -6,10 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { AnsiCategoriesService } from './ansi-categories.service';
 import { CreateAnsiCategoryDto } from './dto/create-ansi-category.dto';
+import { QueryAnsiCategoryDto } from './dto/query-ansi-category.dto';
 import { UpdateAnsiCategoryDto } from './dto/update-ansi-category.dto';
 
 @Controller('ansi-categories')
@@ -23,13 +25,13 @@ export class AnsiCategoriesController {
   }
 
   @Get()
-  findAll() {
-    return this.ansiCategoriesService.findAll();
+  findAll(@Query() queryAnsiCategoryDto?: QueryAnsiCategoryDto) {
+    return this.ansiCategoriesService.findAll(queryAnsiCategoryDto);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.ansiCategoriesService.findOne(+id);
+    return this.ansiCategoriesService.findOne(id);
   }
 
   @Patch(':id')
@@ -37,11 +39,11 @@ export class AnsiCategoriesController {
     @Param('id') id: string,
     @Body() updateAnsiCategoryDto: UpdateAnsiCategoryDto,
   ) {
-    return this.ansiCategoriesService.update(+id, updateAnsiCategoryDto);
+    return this.ansiCategoriesService.update(id, updateAnsiCategoryDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.ansiCategoriesService.remove(+id);
+    return this.ansiCategoriesService.remove(id);
   }
 }

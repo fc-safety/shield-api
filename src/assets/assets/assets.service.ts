@@ -93,7 +93,11 @@ export class AssetsService {
             },
             consumables: {
               include: {
-                product: true,
+                product: {
+                  include: {
+                    ansiCategory: true,
+                  },
+                },
               },
             },
             alerts: true,
