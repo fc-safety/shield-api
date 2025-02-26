@@ -4,7 +4,27 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "builder": "swc",
+    "builder": {
+      "type": "swc",
+      "options": {
+        "jsc": {
+          "parser": {
+            "syntax": "typescript",
+            "tsx": true
+          },
+          "transform": {
+            "react": {
+              "runtime": "automatic"
+            }
+          },
+          "target": "es2022"
+        },
+        "module": {
+          "type": "commonjs"
+        },
+        "extensions": [".ts", ".tsx", ".js", ".jsx"]
+      }
+    },
     "typeCheck": true
   }
 }

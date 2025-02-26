@@ -22,6 +22,9 @@ export const configSchema = z.object({
     .string()
     .default('')
     .transform((val) => val.split(',')),
+
+  // Email - Resend
+  RESEND_API_KEY: z.string(),
 });
 
 export type Config = z.infer<typeof configSchema>;

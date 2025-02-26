@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import { as404OrThrow } from 'src/common/utils';
+import { as404OrThrow, isNil } from 'src/common/utils';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -24,6 +24,18 @@ export class UsersService {
   async create(clientId: string, createUserDto: CreateUserDto) {
     const client = await this.getClient(clientId);
     const newId = createId();
+
+    const attributes = addAttributes(
+      {},
+      ['phone_number', createUserDto.phoneNumber],
+      ['site_id', createUserDto.siteExternalId],
+      ['client_id', client.externalId],
+      ['user_id', newId],
+      ['user_created_at', new Date().toISOString()],
+      ['user_updated_at', new Date().toISOString()],
+      ['user_position', createUserDto.position],
+    );
+
     await this.keycloak.client.users.create({
       enabled: createUserDto.active ?? true,
       firstName: createUserDto.firstName,
@@ -31,13 +43,7 @@ export class UsersService {
       username: createUserDto.email,
       email: createUserDto.email,
       emailVerified: true,
-      attributes: {
-        client_id: [client.externalId],
-        site_id: [createUserDto.siteExternalId],
-        user_id: newId,
-        user_created_at: new Date().toISOString(),
-        user_updated_at: new Date().toISOString(),
-      },
+      attributes,
     });
     return this.findOne(clientId, newId);
   }
@@ -80,6 +86,15 @@ export class UsersService {
 
   async update(clientId: string, id: string, updateUserDto: UpdateUserDto) {
     const keycloakUser = await this.getKeycloakUser(clientId, id);
+
+    const attributes = addAttributes(
+      keycloakUser.attributes,
+      ['phone_number', updateUserDto.phoneNumber],
+      ['site_id', updateUserDto.siteExternalId],
+      ['user_updated_at', new Date().toISOString()],
+      ['user_position', updateUserDto.position],
+    );
+
     return this.keycloak.client.users.update(
       {
         id: keycloakUser.id,
@@ -90,13 +105,7 @@ export class UsersService {
         lastName: updateUserDto.lastName ?? keycloakUser.lastName,
         username: updateUserDto.email ?? keycloakUser.username,
         email: updateUserDto.email ?? keycloakUser.email,
-        attributes: {
-          ...keycloakUser.attributes,
-          site_id: updateUserDto.siteExternalId
-            ? [updateUserDto.siteExternalId]
-            : keycloakUser.attributes.site_id,
-          user_updated_at: new Date().toISOString(),
-        },
+        attributes,
       },
     );
   }
@@ -141,3 +150,13 @@ export class UsersService {
     return user;
   }
 }
+
+const addAttributes = (
+  attributes: Record<string, string[]>,
+  ...attributesToAdd: [string, string | undefined | null][]
+) => {
+  return attributesToAdd.reduce((acc, [key, attr]) => {
+    if (!isNil(attr)) acc[key] = [attr];
+    return acc;
+  }, attributes);
+};

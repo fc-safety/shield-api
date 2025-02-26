@@ -19,3 +19,6 @@ export const getViewContext = (req: Request): ViewContext => {
   }
   return view;
 };
+
+export const isNil = (value: unknown): value is null | undefined =>
+  value === null || value === undefined;
