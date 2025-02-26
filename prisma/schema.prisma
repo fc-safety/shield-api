@@ -450,13 +450,15 @@ model Manufacturer {
 }
 
 model AnsiCategory {
-  id          String    @id @default(cuid(2))
-  createdOn   DateTime  @default(now())
-  modifiedOn  DateTime  @updatedAt
+  id          String   @id @default(cuid(2))
+  createdOn   DateTime @default(now())
+  modifiedOn  DateTime @updatedAt
   name        String
   description String?
   color       String?
-  products    Product[]
+  icon        String?
+
+  products Product[]
 }
 
 model Product {
