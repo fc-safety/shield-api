@@ -2,8 +2,12 @@ import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
+export const ImagesValueSchema = z.object({
+  urls: z.array(z.string()),
+});
+
 export const CreateAssetQuestionResponseSchema = z.object({
-  value: z.union([z.string(), z.number().safe()]),
+  value: z.union([z.string(), z.number().safe(), ImagesValueSchema]),
   assetQuestionId: z.string().nonempty(),
 });
 

@@ -7,11 +7,10 @@ import {
   Patch,
   Post,
   Query,
-  Req,
 } from '@nestjs/common';
-import { Request } from 'express';
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
-import { getViewContext } from 'src/common/utils';
+import { ViewCtx } from 'src/common/decorators';
+import { ViewContext } from 'src/common/utils';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { QueryTagDto } from './dto/query-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
@@ -28,8 +27,7 @@ export class TagsController {
   }
 
   @Get()
-  findAll(@Query() queryTagDto: QueryTagDto, @Req() req: Request) {
-    const context = getViewContext(req);
+  findAll(@Query() queryTagDto: QueryTagDto, @ViewCtx() context: ViewContext) {
     return this.tagsService.findAll(queryTagDto, context);
   }
 

@@ -7,14 +7,13 @@ import {
   Patch,
   Post,
   Query,
-  Req,
 } from '@nestjs/common';
-import { Request } from 'express';
 import {
   CheckPolicies,
   CheckResourcePermissions,
 } from 'src/auth/policies.guard';
-import { getViewContext } from 'src/common/utils';
+import { ViewCtx } from 'src/common/decorators';
+import { ViewContext } from 'src/common/utils';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
@@ -33,8 +32,11 @@ export class AssetsController {
   }
 
   @Get()
-  findAll(@Query() queryAssetDto: QueryAssetDto, @Req() req: Request) {
-    return this.assetsService.findAll(queryAssetDto, getViewContext(req));
+  findAll(
+    @Query() queryAssetDto: QueryAssetDto,
+    @ViewCtx() context: ViewContext,
+  ) {
+    return this.assetsService.findAll(queryAssetDto, context);
   }
 
   @Get('latest-inspection')

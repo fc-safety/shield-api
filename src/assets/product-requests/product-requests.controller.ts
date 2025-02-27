@@ -7,14 +7,13 @@ import {
   Patch,
   Post,
   Query,
-  Req,
 } from '@nestjs/common';
-import { Request } from 'express';
 import {
   CheckPolicies,
   CheckResourcePermissions,
 } from 'src/auth/policies.guard';
-import { getViewContext } from 'src/common/utils';
+import { ViewCtx } from 'src/common/decorators';
+import { ViewContext } from 'src/common/utils';
 import { CreateProductRequestDto } from './dto/create-product-request.dto';
 import { QueryProductRequestDto } from './dto/query-product-request.dto';
 import { ReviewProductRequestDto } from './dto/review-product-request.dto';
@@ -35,8 +34,10 @@ export class ProductRequestsController {
   }
 
   @Get()
-  findAll(@Query() query: QueryProductRequestDto, @Req() req: Request) {
-    const context = getViewContext(req);
+  findAll(
+    @Query() query: QueryProductRequestDto,
+    @ViewCtx() context: ViewContext,
+  ) {
     return this.productRequestsService.findAll(query, context);
   }
 

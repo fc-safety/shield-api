@@ -34,6 +34,8 @@ export class ProductRequestsService {
           },
         })
         .then(async (productRequest) => {
+          // TODO: This is only a temporary solution. If the email fails to send, the product
+          // request is still created but the user receives an error.
           await this.notifications.sendNewProductRequestEmail(productRequest);
           return productRequest;
         }),

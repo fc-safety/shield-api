@@ -361,6 +361,7 @@ model Client {
   productCategories       ProductCategory[]
   manufacturers           Manufacturer[]
   products                Product[]
+  vaultOwnerships         VaultOwnership[]
 }
 
 enum ClientStatus {
@@ -396,6 +397,7 @@ model Site {
   clientId                String
   productRequestApprovals ProductRequestApproval[]
   productRequestItems     ProductRequestItem[]
+  vaultOwnerships         VaultOwnership[]
 }
 
 model Person {
@@ -413,6 +415,7 @@ model Person {
   inspections             Inspection[]
   inspectionSessions      InspectionSession[]
   assetQuestionResponses  AssetQuestionResponse[]
+  vaultOwnerships         VaultOwnership[]
   site                    Site                     @relation(fields: [siteId], references: [id])
   siteId                  String
   client                  Client                   @relation(fields: [clientId], references: [id])
@@ -519,4 +522,27 @@ model SettingsBlock {
   modifiedOn DateTime @updatedAt
   friendlyId String   @unique
   data       Json
+}
+
+model VaultOwnership {
+  id         String          @id @default(cuid(2))
+  createdOn  DateTime        @default(now())
+  modifiedOn DateTime        @updatedAt
+  key        String          @unique
+  bucketName String?
+  accessType VaultAccessType @default(CLIENT_OWNER)
+  owner     Person          @relation(fields: [ownerId], references: [id])
+  ownerId   String          @default(dbgenerated("current_setting('app.current_person_id'::text)"))
+  site       Site            @relation(fields: [siteId], references: [id])
+  siteId     String          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client     Client          @relation(fields: [clientId], references: [id])
+  clientId   String          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+}
+
+enum VaultAccessType {
+  PUBLIC
+  CLIENT
+  CLIENT_SITE
+  CLIENT_OWNER
+  STRICT_OWNER
 }
