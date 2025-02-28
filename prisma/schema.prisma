@@ -69,9 +69,9 @@ model Tag {
   serialNumber String
   asset        Asset?
   site         Site?    @relation(fields: [siteId], references: [id])
-  siteId       String?  @default(dbgenerated("current_setting('app.current_site_id'::text, TRUE)"))
+  siteId       String?
   client       Client?  @relation(fields: [clientId], references: [id])
-  clientId     String?  @default(dbgenerated("current_setting('app.current_client_id'::text, TRUE)"))
+  clientId     String?
 }
 
 model Inspection {
@@ -533,8 +533,8 @@ model VaultOwnership {
   key        String          @unique
   bucketName String?
   accessType VaultAccessType @default(CLIENT_OWNER)
-  owner     Person          @relation(fields: [ownerId], references: [id])
-  ownerId   String          @default(dbgenerated("current_setting('app.current_person_id'::text)"))
+  owner      Person          @relation(fields: [ownerId], references: [id])
+  ownerId    String          @default(dbgenerated("current_setting('app.current_person_id'::text)"))
   site       Site            @relation(fields: [siteId], references: [id])
   siteId     String          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client     Client          @relation(fields: [clientId], references: [id])
