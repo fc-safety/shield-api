@@ -9,6 +9,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import { ViewCtx } from 'src/common/decorators';
+import { ViewContext } from 'src/common/utils';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { QueryClientDto } from './dto/query-client.dto';
@@ -25,8 +27,11 @@ export class ClientsController {
   }
 
   @Get()
-  findAll(@Query() queryClientDto?: QueryClientDto) {
-    return this.clientsService.findAll(queryClientDto);
+  findAll(
+    @Query() queryClientDto: QueryClientDto,
+    @ViewCtx() context: ViewContext,
+  ) {
+    return this.clientsService.findAll(queryClientDto, context);
   }
 
   @Get(':id')
