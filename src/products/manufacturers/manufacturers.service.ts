@@ -19,13 +19,14 @@ export class ManufacturersService {
   }
 
   async getOrCreateGeneric() {
-    return this.prisma.manufacturer
+    const prisma = this.prisma.bypassRLS();
+    return prisma.manufacturer
       .findFirst({
         where: { name: GENERIC_MANUFACTURER_NAME },
       })
       .then((manufacturer) => {
         if (manufacturer) return manufacturer;
-        return this.prisma.manufacturer.create({
+        return prisma.manufacturer.create({
           data: {
             name: GENERIC_MANUFACTURER_NAME,
           },
