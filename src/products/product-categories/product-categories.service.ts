@@ -54,6 +54,7 @@ export class ProductCategoriesService {
               include: {
                 manufacturer: true,
                 client: true,
+                ansiCategory: true,
               },
             },
             assetQuestions: {

@@ -12,7 +12,7 @@ import {
 } from 'src/common/validation';
 import { z } from 'zod';
 
-const QueryProductFiltersSchema = z
+const BaseQueryProductFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
     createdOn: prismaDateTimeFilter(z.coerce.date()),
@@ -21,6 +21,7 @@ const QueryProductFiltersSchema = z
     manufacturer: z
       .object({
         id: prismaStringFilter(z.string()),
+        name: prismaStringFilter(z.string()),
       })
       .partial(),
     type: prismaEnumFilter(z.enum(['PRIMARY', 'CONSUMABLE'])),
@@ -60,6 +61,10 @@ const QueryProductFiltersSchema = z
     }),
   })
   .partial() satisfies z.Schema<Prisma.ProductWhereInput>;
+
+const QueryProductFiltersSchema = BaseQueryProductFiltersSchema.extend({
+  OR: z.array(BaseQueryProductFiltersSchema),
+}).partial() satisfies z.Schema<Prisma.ProductWhereInput>;
 
 const QueryProductOrderSchema = z
   .object({

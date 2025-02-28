@@ -29,6 +29,11 @@ export class ManufacturersController {
     return this.manufacturersService.findAll(queryManufacturerDto);
   }
 
+  @Get('generic')
+  getOrCreateGeneric() {
+    return this.manufacturersService.getOrCreateGeneric();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.manufacturersService.findOne(id);

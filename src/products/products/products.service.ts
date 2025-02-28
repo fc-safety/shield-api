@@ -62,6 +62,15 @@ export class ProductsService {
               include: {
                 assetQuestions: true,
                 client: true,
+                products: {
+                  where: {
+                    type: 'CONSUMABLE',
+                    parentProductId: null,
+                  },
+                  include: {
+                    ansiCategory: true,
+                  },
+                },
               },
             },
             manufacturer: {

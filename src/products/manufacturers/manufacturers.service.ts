@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { GENERIC_MANUFACTURER_NAME } from 'src/common/constants';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateManufacturerDto } from './dto/create-manufacturer.dto';
 import { QueryManufacturerDto } from './dto/query-manufacturer.dto';
 import { UpdateManufacturerDto } from './dto/update-manufacturer.dto';
-
 @Injectable()
 export class ManufacturersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -16,6 +16,21 @@ export class ManufacturersService {
         data: createManufacturerDto,
       }),
     );
+  }
+
+  async getOrCreateGeneric() {
+    return this.prisma.manufacturer
+      .findFirst({
+        where: { name: GENERIC_MANUFACTURER_NAME },
+      })
+      .then((manufacturer) => {
+        if (manufacturer) return manufacturer;
+        return this.prisma.manufacturer.create({
+          data: {
+            name: GENERIC_MANUFACTURER_NAME,
+          },
+        });
+      });
   }
 
   async findAll(queryManufacturerDto?: QueryManufacturerDto) {
