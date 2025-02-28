@@ -53,6 +53,7 @@ export class AssetsService {
               orderBy: { createdOn: 'desc' },
             },
             site: true,
+            client: true,
           },
         }),
       ),
@@ -118,6 +119,7 @@ export class AssetsService {
                 },
               },
             },
+            client: true,
           },
         }),
       )
@@ -127,7 +129,10 @@ export class AssetsService {
   async findManyWithLatestInspection() {
     return this.prisma.forUser().then((prisma) =>
       prisma.asset.findMany({
-        include: { inspections: { orderBy: { createdOn: 'desc' }, take: 1 } },
+        include: {
+          inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
+          client: true,
+        },
       }),
     );
   }

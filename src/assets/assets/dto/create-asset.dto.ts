@@ -8,6 +8,7 @@ export const CreateAssetSchema = z.object({
   location: z.string(),
   placement: z.string(),
   serialNumber: z.string(),
+  inspectionCycle: z.number().optional(),
   product: z.object({
     connect: z.object({
       id: z.string(),

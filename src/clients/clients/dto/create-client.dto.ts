@@ -13,6 +13,7 @@ export const CreateClientSchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING']).optional(),
   phoneNumber: z.string(),
   homeUrl: z.string().optional(),
+  defaultInspectionCycle: z.number().optional(),
 }) satisfies z.Schema<Prisma.ClientCreateInput>;
 
 export class CreateClientDto extends createZodDto(CreateClientSchema) {}

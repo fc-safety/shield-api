@@ -31,6 +31,7 @@ model Asset {
   location               String
   placement              String
   serialNumber           String
+  inspectionCycle        Int?
   inspectionRoutePoints  InspectionRoutePoint[]
   inspectionRouteId      String?
   consumables            Consumable[]
@@ -344,6 +345,7 @@ model Client {
   addressId               String                   @unique
   phoneNumber             String
   homeUrl                 String?
+  defaultInspectionCycle  Int                      @default(30)
   sites                   Site[]
   people                  Person[]
   assets                  Asset[]

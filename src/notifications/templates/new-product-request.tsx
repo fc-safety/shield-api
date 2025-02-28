@@ -61,6 +61,7 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
         phoneNumber: '1234567890',
         homeUrl: 'https://www.example.com',
         name: 'Test Client',
+        defaultInspectionCycle: 30,
       },
       site: {
         id: '1',

@@ -38,6 +38,7 @@ export class ProductsService {
                 client: true,
               },
             },
+            ansiCategory: true,
             client: true,
           },
         }),

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ProductRequestStatus } from '@prisma/client';
 import { ViewContext } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
@@ -12,6 +12,8 @@ import { UpdateProductRequestDto } from './dto/update-product-request.dto';
 
 @Injectable()
 export class ProductRequestsService {
+  private readonly logger = new Logger(ProductRequestsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -36,7 +38,13 @@ export class ProductRequestsService {
         .then(async (productRequest) => {
           // TODO: This is only a temporary solution. If the email fails to send, the product
           // request is still created but the user receives an error.
-          await this.notifications.sendNewProductRequestEmail(productRequest);
+          await this.notifications
+            .sendNewProductRequestEmail(productRequest)
+            .catch((e) => {
+              this.logger.error('Failed to send new product request email', e, {
+                productRequestId: productRequest.id,
+              });
+            });
           return productRequest;
         }),
     );
