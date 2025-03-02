@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateInspectionRouteDto } from './create-inspection-route.dto';
+import { createZodDto } from 'nestjs-zod';
+import { CreateInspectionRouteSchema } from './create-inspection-route.dto';
 
-export class UpdateInspectionRouteDto extends PartialType(CreateInspectionRouteDto) {}
+export class UpdateInspectionRouteDto extends createZodDto(
+  CreateInspectionRouteSchema.partial(),
+) {}

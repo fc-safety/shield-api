@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-const CreateProductSchema = z.object({
+export const CreateProductSchema = z.object({
   active: z.boolean().optional(),
   manufacturer: z.object({
     connect: z.object({

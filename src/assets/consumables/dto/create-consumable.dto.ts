@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-const CreateConsumableSchema = z.object({
+export const CreateConsumableSchema = z.object({
   asset: z.object({
     connect: z.object({
       id: z.string(),

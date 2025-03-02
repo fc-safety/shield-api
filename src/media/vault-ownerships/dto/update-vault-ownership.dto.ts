@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateVaultOwnershipDto } from './create-vault-ownership.dto';
+import { createZodDto } from 'nestjs-zod';
+import { CreateVaultOwnershipSchema } from './create-vault-ownership.dto';
 
-export class UpdateVaultOwnershipDto extends PartialType(CreateVaultOwnershipDto) {}
+export class UpdateVaultOwnershipDto extends createZodDto(
+  CreateVaultOwnershipSchema.partial(),
+) {}

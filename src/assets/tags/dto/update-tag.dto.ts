@@ -1,7 +1,7 @@
-import { PartialType } from '@nestjs/mapped-types';
 import { Prisma } from '@prisma/client';
+import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
-import { CreateTagDto, CreateTagSchema } from './create-tag.dto';
+import { CreateTagSchema } from './create-tag.dto';
 
 const DisconnectableSchema = z
   .object({
@@ -18,4 +18,4 @@ export const UpdateTagSchema = CreateTagSchema.extend({
   asset: DisconnectableSchema,
 }).partial() satisfies z.Schema<Prisma.TagUpdateInput>;
 
-export class UpdateTagDto extends PartialType(CreateTagDto) {}
+export class UpdateTagDto extends createZodDto(UpdateTagSchema) {}

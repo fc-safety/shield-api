@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-const CreateInspectionRoutePointSchema = z.object({
+export const CreateInspectionRoutePointSchema = z.object({
   order: z.number(),
   assetId: z.string(),
 }) satisfies z.ZodType<

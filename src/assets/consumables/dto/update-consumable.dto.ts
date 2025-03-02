@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateConsumableDto } from './create-consumable.dto';
+import { createZodDto } from 'nestjs-zod';
+import { CreateConsumableSchema } from './create-consumable.dto';
 
-export class UpdateConsumableDto extends PartialType(CreateConsumableDto) {}
+export class UpdateConsumableDto extends createZodDto(
+  CreateConsumableSchema.partial(),
+) {}

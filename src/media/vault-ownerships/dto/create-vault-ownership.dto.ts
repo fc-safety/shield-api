@@ -2,7 +2,7 @@ import { Prisma, VaultAccessType } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-const CreateVaultOwnershipSchema = z.object({
+export const CreateVaultOwnershipSchema = z.object({
   key: z.string().nonempty(),
   bucketName: z.string().optional(),
   accessType: z

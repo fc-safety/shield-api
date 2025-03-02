@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateManufacturerDto } from './create-manufacturer.dto';
+import { createZodDto } from 'nestjs-zod';
+import { CreateManufacturerSchema } from './create-manufacturer.dto';
 
-export class UpdateManufacturerDto extends PartialType(CreateManufacturerDto) {}
+export class UpdateManufacturerDto extends createZodDto(
+  CreateManufacturerSchema.partial(),
+) {}

@@ -1,6 +1,6 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateInspectionRoutePointDto } from './create-inspection-route-point.dto';
+import { createZodDto } from 'nestjs-zod';
+import { CreateInspectionRoutePointSchema } from './create-inspection-route-point.dto';
 
-export class UpdateInspectionRoutePointDto extends PartialType(
-  CreateInspectionRoutePointDto,
+export class UpdateInspectionRoutePointDto extends createZodDto(
+  CreateInspectionRoutePointSchema.partial(),
 ) {}

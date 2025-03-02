@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-const CreateAnsiCategorySchema = z.object({
+export const CreateAnsiCategorySchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   color: z.string().optional(),
