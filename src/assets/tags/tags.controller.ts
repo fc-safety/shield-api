@@ -32,8 +32,11 @@ export class TagsController {
   }
 
   @Get('externalId/:externalId')
-  findOneByExternalId(@Param('externalId') externalId: string) {
-    return this.tagsService.findOneByExternalId(externalId);
+  findOneByExternalId(
+    @Param('externalId') externalId: string,
+    @ViewCtx() context: ViewContext,
+  ) {
+    return this.tagsService.findOneByExternalId(externalId, context);
   }
 
   @Get(':id')

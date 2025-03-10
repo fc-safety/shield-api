@@ -46,9 +46,9 @@ export class TagsService {
       .catch(as404OrThrow);
   }
 
-  async findOneByExternalId(externalId: string) {
+  async findOneByExternalId(externalId: string, context: ViewContext) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext(context)
       .then((prisma) =>
         prisma.tag.findFirstOrThrow({
           where: { externalId },
