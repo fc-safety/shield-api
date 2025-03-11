@@ -6,7 +6,7 @@ import { z } from 'zod';
 export const CreateClientSchema = z.object({
   externalId: z.string().optional(),
   name: z.string(),
-  startedOn: z.coerce.date(),
+  startedOn: z.string().datetime(),
   address: z.object({
     create: createAddressSchema,
   }),

@@ -19,9 +19,9 @@ datasource db {
 
 model Asset {
   id                     String                  @id @default(cuid(2))
-  createdOn              DateTime                @default(now())
-  modifiedOn             DateTime                @updatedAt
-  setupOn                DateTime?
+  createdOn              DateTime                @default(now()) @db.Timestamptz()
+  modifiedOn             DateTime                @updatedAt @db.Timestamptz()
+  setupOn                DateTime?               @db.Timestamptz()
   active                 Boolean                 @default(true)
   name                   String
   product                Product                 @relation(fields: [productId], references: [id])
@@ -47,13 +47,13 @@ model Asset {
 
 model Consumable {
   id         String    @id @default(cuid(2))
-  createdOn  DateTime  @default(now())
-  modifiedOn DateTime  @updatedAt
+  createdOn  DateTime  @default(now()) @db.Timestamptz()
+  modifiedOn DateTime  @updatedAt @db.Timestamptz()
   asset      Asset?    @relation(fields: [assetId], references: [id])
   assetId    String?
   product    Product   @relation(fields: [productId], references: [id])
   productId  String
-  expiresOn  DateTime?
+  expiresOn  DateTime? @db.Timestamptz()
   quantity   Int       @default(1)
   site       Site      @relation(fields: [siteId], references: [id])
   siteId     String    @default(dbgenerated("current_setting('app.current_site_id'::text)"))
@@ -64,8 +64,8 @@ model Consumable {
 model Tag {
   id           String   @id @default(cuid(2))
   externalId   String   @unique @default(cuid(2))
-  createdOn    DateTime @default(now())
-  modifiedOn   DateTime @updatedAt
+  createdOn    DateTime @default(now()) @db.Timestamptz()
+  modifiedOn   DateTime @updatedAt @db.Timestamptz()
   serialNumber String
   asset        Asset?
   site         Site?    @relation(fields: [siteId], references: [id])
@@ -76,16 +76,16 @@ model Tag {
 
 model Inspection {
   id                             String                          @id @default(cuid(2))
-  createdOn                      DateTime                        @default(now())
-  modifiedOn                     DateTime                        @updatedAt
+  createdOn                      DateTime                        @default(now()) @db.Timestamptz()
+  modifiedOn                     DateTime                        @updatedAt @db.Timestamptz()
   asset                          Asset                           @relation(fields: [assetId], references: [id], onDelete: Cascade)
   assetId                        String
   inspector                      Person                          @relation(fields: [inspectorId], references: [id])
   inspectorId                    String                          @default(dbgenerated("current_setting('app.current_person_id'::text)"))
   status                         InspectionStatus                @default(PENDING)
   useragent                      String?
-  ipv4                           String?                         @db.Inet
-  ipv6                           String?                         @db.Inet
+  ipv4                           String?                         @db.Inet()
+  ipv6                           String?                         @db.Inet()
   latitude                       Float?
   longitude                      Float?
   locationAccuracy               Float?
@@ -106,8 +106,8 @@ enum InspectionStatus {
 
 model InspectionRoute {
   id                    String                 @id @default(cuid(2))
-  createdOn             DateTime               @default(now())
-  modifiedOn            DateTime               @updatedAt
+  createdOn             DateTime               @default(now()) @db.Timestamptz()
+  modifiedOn            DateTime               @updatedAt @db.Timestamptz()
   name                  String
   description           String?
   inspectionRoutePoints InspectionRoutePoint[]
@@ -120,8 +120,8 @@ model InspectionRoute {
 
 model InspectionRoutePoint {
   id                             String                          @id @default(cuid(2))
-  createdOn                      DateTime                        @default(now())
-  modifiedOn                     DateTime                        @updatedAt
+  createdOn                      DateTime                        @default(now()) @db.Timestamptz()
+  modifiedOn                     DateTime                        @updatedAt @db.Timestamptz()
   order                          Int
   inspectionRoute                InspectionRoute                 @relation(fields: [inspectionRouteId], references: [id], onDelete: Cascade)
   inspectionRouteId              String
@@ -132,8 +132,8 @@ model InspectionRoutePoint {
 
 model InspectionSession {
   id                             String                          @id @default(cuid(2))
-  createdOn                      DateTime                        @default(now())
-  modifiedOn                     DateTime                        @updatedAt
+  createdOn                      DateTime                        @default(now()) @db.Timestamptz()
+  modifiedOn                     DateTime                        @updatedAt @db.Timestamptz()
   status                         InspectionSessionStatus         @default(PENDING)
   inspectionRoute                InspectionRoute                 @relation(fields: [inspectionRouteId], references: [id])
   inspectionRouteId              String
@@ -153,8 +153,8 @@ enum InspectionSessionStatus {
 
 model CompletedInspectionRoutePoint {
   id                     String               @id @default(cuid(2))
-  createdOn              DateTime             @default(now())
-  modifiedOn             DateTime             @updatedAt
+  createdOn              DateTime             @default(now()) @db.Timestamptz()
+  modifiedOn             DateTime             @updatedAt @db.Timestamptz()
   inspectionSession      InspectionSession    @relation(fields: [inspectionSessionId], references: [id], onDelete: Cascade)
   inspectionSessionId    String
   inspectionRoutePoint   InspectionRoutePoint @relation(fields: [inspectionRoutePointId], references: [id], onDelete: Cascade)
@@ -165,8 +165,8 @@ model CompletedInspectionRoutePoint {
 
 model AssetQuestion {
   id                 String                    @id @default(cuid(2))
-  createdOn          DateTime                  @default(now())
-  modifiedOn         DateTime                  @updatedAt
+  createdOn          DateTime                  @default(now()) @db.Timestamptz()
+  modifiedOn         DateTime                  @updatedAt @db.Timestamptz()
   active             Boolean                   @default(true)
   type               AssetQuestionType
   required           Boolean                   @default(false)
@@ -187,8 +187,8 @@ model AssetQuestion {
 
 model AssetQuestionResponse {
   id              String        @id @default(cuid(2))
-  createdOn       DateTime      @default(now())
-  modifiedOn      DateTime      @updatedAt
+  createdOn       DateTime      @default(now()) @db.Timestamptz()
+  modifiedOn      DateTime      @updatedAt @db.Timestamptz()
   value           Json
   assetQuestion   AssetQuestion @relation(fields: [assetQuestionId], references: [id])
   assetQuestionId String
@@ -222,8 +222,8 @@ enum AssetQuestionResponseType {
 
 model AssetAlertCriterion {
   id              String        @id @default(cuid(2))
-  createdOn       DateTime      @default(now())
-  modifiedOn      DateTime      @updatedAt
+  createdOn       DateTime      @default(now()) @db.Timestamptz()
+  modifiedOn      DateTime      @updatedAt @db.Timestamptz()
   assetQuestion   AssetQuestion @relation(fields: [assetQuestionId], references: [id], onDelete: Cascade)
   assetQuestionId String
   rule            Json
@@ -233,8 +233,8 @@ model AssetAlertCriterion {
 
 model Alert {
   id                      String                @id @default(cuid(2))
-  createdOn               DateTime              @default(now())
-  modifiedOn              DateTime              @updatedAt
+  createdOn               DateTime              @default(now()) @db.Timestamptz()
+  modifiedOn              DateTime              @updatedAt @db.Timestamptz()
   alertLevel              AlertLevel            @default(INFO)
   message                 String
   asset                   Asset                 @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -246,7 +246,7 @@ model Alert {
   assetAlertCriterion     AssetAlertCriterion   @relation(fields: [assetAlertCriterionId], references: [id], onDelete: Cascade)
   assetAlertCriterionId   String
   resolved                Boolean               @default(false)
-  resolvedOn              DateTime?
+  resolvedOn              DateTime?             @db.Timestamptz()
   resolutionNote          String?
   site                    Site                  @relation(fields: [siteId], references: [id])
   siteId                  String
@@ -263,8 +263,8 @@ enum AlertLevel {
 
 model ProductRequest {
   id                      String                   @id @default(cuid(2))
-  createdOn               DateTime                 @default(now())
-  modifiedOn              DateTime                 @updatedAt
+  createdOn               DateTime                 @default(now()) @db.Timestamptz()
+  modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
   status                  ProductRequestStatus     @default(NEW)
   requestor               Person                   @relation(fields: [requestorId], references: [id])
   requestorId             String                   @default(dbgenerated("current_setting('app.current_person_id'::text)"))
@@ -290,8 +290,8 @@ enum ProductRequestStatus {
 
 model ProductRequestApproval {
   id               String         @id @default(cuid(2))
-  createdOn        DateTime       @default(now())
-  modifiedOn       DateTime       @updatedAt
+  createdOn        DateTime       @default(now()) @db.Timestamptz()
+  modifiedOn       DateTime       @updatedAt @db.Timestamptz()
   approved         Boolean
   approver         Person         @relation(fields: [approverId], references: [id])
   approverId       String         @default(dbgenerated("current_setting('app.current_person_id'::text)"))
@@ -305,8 +305,8 @@ model ProductRequestApproval {
 
 model ProductRequestItem {
   id               String         @id @default(cuid(2))
-  createdOn        DateTime       @default(now())
-  modifiedOn       DateTime       @updatedAt
+  createdOn        DateTime       @default(now()) @db.Timestamptz()
+  modifiedOn       DateTime       @updatedAt @db.Timestamptz()
   productRequest   ProductRequest @relation(fields: [productRequestId], references: [id], onDelete: Cascade)
   productRequestId String
   product          Product        @relation(fields: [productId], references: [id])
@@ -336,10 +336,10 @@ model Address {
 model Client {
   id                      String                   @id @default(cuid(2))
   externalId              String                   @unique @default(cuid(2))
-  createdOn               DateTime                 @default(now())
-  modifiedOn              DateTime                 @updatedAt
+  createdOn               DateTime                 @default(now()) @db.Timestamptz()
+  modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
   status                  ClientStatus             @default(PENDING)
-  startedOn               DateTime
+  startedOn               DateTime                 @db.Timestamptz()
   name                    String
   address                 Address                  @relation(fields: [addressId], references: [id])
   addressId               String                   @unique
@@ -375,8 +375,8 @@ enum ClientStatus {
 model Site {
   id                      String                   @id @default(cuid(2))
   externalId              String                   @unique @default(cuid(2))
-  createdOn               DateTime                 @default(now())
-  modifiedOn              DateTime                 @updatedAt
+  createdOn               DateTime                 @default(now()) @db.Timestamptz()
+  modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
   name                    String
   address                 Address                  @relation(fields: [addressId], references: [id])
   addressId               String                   @unique
@@ -404,8 +404,8 @@ model Site {
 
 model Person {
   id                      String                   @id @default(cuid(2))
-  createdOn               DateTime                 @default(now())
-  modifiedOn              DateTime                 @updatedAt
+  createdOn               DateTime                 @default(now()) @db.Timestamptz()
+  modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
   firstName               String
   lastName                String
   email                   String
@@ -428,8 +428,8 @@ model Person {
 
 model ProductCategory {
   id             String          @id @default(cuid(2))
-  createdOn      DateTime        @default(now())
-  modifiedOn     DateTime        @updatedAt
+  createdOn      DateTime        @default(now()) @db.Timestamptz()
+  modifiedOn     DateTime        @updatedAt @db.Timestamptz()
   active         Boolean         @default(true)
   name           String
   shortName      String?
@@ -444,8 +444,8 @@ model ProductCategory {
 
 model Manufacturer {
   id         String    @id @default(cuid(2))
-  createdOn  DateTime  @default(now())
-  modifiedOn DateTime  @updatedAt
+  createdOn  DateTime  @default(now()) @db.Timestamptz()
+  modifiedOn DateTime  @updatedAt @db.Timestamptz()
   active     Boolean   @default(true)
   name       String
   homeUrl    String?
@@ -456,8 +456,8 @@ model Manufacturer {
 
 model AnsiCategory {
   id          String   @id @default(cuid(2))
-  createdOn   DateTime @default(now())
-  modifiedOn  DateTime @updatedAt
+  createdOn   DateTime @default(now()) @db.Timestamptz()
+  modifiedOn  DateTime @updatedAt @db.Timestamptz()
   name        String
   description String?
   color       String?
@@ -468,8 +468,8 @@ model AnsiCategory {
 
 model Product {
   id                  String                     @id @default(cuid(2))
-  createdOn           DateTime                   @default(now())
-  modifiedOn          DateTime                   @updatedAt
+  createdOn           DateTime                   @default(now()) @db.Timestamptz()
+  modifiedOn          DateTime                   @updatedAt @db.Timestamptz()
   active              Boolean                    @default(true)
   manufacturer        Manufacturer               @relation(fields: [manufacturerId], references: [id])
   manufacturerId      String
@@ -506,8 +506,8 @@ enum ProductType {
 
 model ConsumableQuestionConfig {
   id                  String                @id @default(cuid(2))
-  createdOn           DateTime              @default(now())
-  modifiedOn          DateTime              @updatedAt
+  createdOn           DateTime              @default(now()) @db.Timestamptz()
+  modifiedOn          DateTime              @updatedAt @db.Timestamptz()
   consumableProduct   Product               @relation(fields: [consumableProductId], references: [id])
   consumableProductId String
   mappingType         ConsumableMappingType
@@ -520,16 +520,16 @@ enum ConsumableMappingType {
 
 model SettingsBlock {
   id         String   @id @default(cuid(2))
-  createdOn  DateTime @default(now())
-  modifiedOn DateTime @updatedAt
+  createdOn  DateTime @default(now()) @db.Timestamptz()
+  modifiedOn DateTime @updatedAt @db.Timestamptz()
   friendlyId String   @unique
   data       Json
 }
 
 model VaultOwnership {
   id         String          @id @default(cuid(2))
-  createdOn  DateTime        @default(now())
-  modifiedOn DateTime        @updatedAt
+  createdOn  DateTime        @default(now()) @db.Timestamptz()
+  modifiedOn DateTime        @updatedAt @db.Timestamptz()
   key        String          @unique
   bucketName String?
   accessType VaultAccessType @default(CLIENT_OWNER)
