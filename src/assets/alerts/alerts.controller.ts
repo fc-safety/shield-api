@@ -4,6 +4,7 @@ import {
   CheckResourcePermissions,
 } from 'src/auth/policies.guard';
 import { AlertsService } from './alerts.service';
+import { AttachInspectionImageDto } from './dto/attach-inspection-image.dto';
 import { QueryAlertDto } from './dto/query-alert.dto';
 import { ResolveAlertDto } from './dto/resolve-alert.dto';
 
@@ -29,5 +30,17 @@ export class AlertsController {
     @Body() resolveAlertDto: ResolveAlertDto,
   ) {
     return this.alertsService.resolveAlert(id, resolveAlertDto);
+  }
+
+  @CheckPolicies((context) => context.user.canCreate('inspections'))
+  @Post(':id/attach-inspection-image')
+  attachInspectionImage(
+    @Param('id') id: string,
+    @Body() body: AttachInspectionImageDto,
+  ) {
+    return this.alertsService.attachInspectionImage(
+      id,
+      body.inspectionImageUrl,
+    );
   }
 }

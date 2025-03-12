@@ -172,6 +172,15 @@ export class InspectionsService {
                 assetQuestion: true,
               },
             },
+            alerts: {
+              include: {
+                assetQuestionResponse: {
+                  include: {
+                    assetQuestion: true,
+                  },
+                },
+              },
+            },
           },
         }),
       )

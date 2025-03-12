@@ -28,7 +28,7 @@ export class AssetsService {
 
   async create(createAssetDto: Prisma.AssetCreateInput) {
     return this.prisma
-      .forUser()
+      .forAdminOrUser()
       .then((prisma) => prisma.asset.create({ data: createAssetDto }));
   }
 
@@ -189,7 +189,7 @@ export class AssetsService {
   }
 
   async update(id: string, updateAssetDto: UpdateAssetDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.forAdminOrUser().then((prisma) =>
       prisma.asset
         .update({
           where: { id },

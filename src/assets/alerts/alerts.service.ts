@@ -88,4 +88,13 @@ export class AlertsService {
       )
       .catch(as404OrThrow);
   }
+
+  async attachInspectionImage(alertId: string, inspectionImageUrl: string) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.alert.update({
+        where: { id: alertId },
+        data: { inspectionImageUrl },
+      }),
+    );
+  }
 }
