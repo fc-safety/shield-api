@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { CheckPolicies } from 'src/auth/policies.guard';
 import { CreateRoleDto } from './dto/create-role.dto';
+import { UpdateNotificationGroupMappingDto } from './dto/update-notification-group-mapping.dto';
 import { UpdatePermissionMappingDto } from './dto/update-permission-mapping.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { RolesService } from './roles.service';
@@ -32,6 +33,11 @@ export class RolesController {
   @Get('permissions')
   async getPermissions() {
     return this.rolesService.getPermissions();
+  }
+
+  @Get('notification-groups')
+  getNotificationGroups() {
+    return this.rolesService.getNotificationGroups();
   }
 
   @Get(':id')
@@ -62,6 +68,19 @@ export class RolesController {
     return this.rolesService.updatePermissionToRoleMappings(
       id,
       updatePermissionMappingDto,
+    );
+  }
+
+  @Post(':id/update-notification-groups')
+  @HttpCode(204)
+  async assignNotificationGroups(
+    @Param('id') id: string,
+    @Body()
+    updateNotificationGroupMappingDto: UpdateNotificationGroupMappingDto,
+  ) {
+    return this.rolesService.updateNotificationGroups(
+      id,
+      updateNotificationGroupMappingDto,
     );
   }
 }

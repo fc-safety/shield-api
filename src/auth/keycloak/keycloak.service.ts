@@ -5,6 +5,7 @@ import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRep
 import { RequestArgs } from '@keycloak/keycloak-admin-client/lib/resources/agent';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import JSON5 from 'json5';
+import { isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { describePermission, VALID_PERMISSIONS } from '../permissions';
 import {
@@ -189,5 +190,15 @@ export class KeycloakService {
       },
       options,
     );
+  }
+
+  public static mergeAttributes(
+    attributes: Record<string, string[]>,
+    ...attributesToAdd: [string, string | string[] | undefined | null][]
+  ) {
+    return attributesToAdd.reduce((acc, [key, attr]) => {
+      if (!isNil(attr)) acc[key] = Array.isArray(attr) ? attr : [attr];
+      return acc;
+    }, attributes);
   }
 }

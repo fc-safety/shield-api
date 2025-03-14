@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import { as404OrThrow, isNil } from 'src/common/utils';
+import { as404OrThrow } from 'src/common/utils';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -25,7 +25,7 @@ export class UsersService {
     const client = await this.getClient(clientId);
     const newId = createId();
 
-    const attributes = addAttributes(
+    const attributes = KeycloakService.mergeAttributes(
       {},
       ['phone_number', createUserDto.phoneNumber],
       ['site_id', createUserDto.siteExternalId],
@@ -87,7 +87,7 @@ export class UsersService {
   async update(clientId: string, id: string, updateUserDto: UpdateUserDto) {
     const keycloakUser = await this.getKeycloakUser(clientId, id);
 
-    const attributes = addAttributes(
+    const attributes = KeycloakService.mergeAttributes(
       keycloakUser.attributes,
       ['phone_number', updateUserDto.phoneNumber],
       ['site_id', updateUserDto.siteExternalId],
@@ -150,13 +150,3 @@ export class UsersService {
     return user;
   }
 }
-
-const addAttributes = (
-  attributes: Record<string, string[]>,
-  ...attributesToAdd: [string, string | undefined | null][]
-) => {
-  return attributesToAdd.reduce((acc, [key, attr]) => {
-    if (!isNil(attr)) acc[key] = [attr];
-    return acc;
-  }, attributes);
-};

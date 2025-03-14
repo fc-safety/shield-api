@@ -21,6 +21,13 @@ const BaseQueryAssetFiltersSchema = z
         id: prismaStringFilter(z.string()),
       })
       .partial(),
+    client: z
+      .object({
+        id: prismaStringFilter(z.string()),
+      })
+      .partial(),
+    siteId: prismaStringFilter(z.string()),
+    clientId: prismaStringFilter(z.string()),
   })
   .partial() satisfies z.Schema<Prisma.AssetWhereInput>;
 

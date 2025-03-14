@@ -60,9 +60,9 @@ export class AssetsService {
     );
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, context: ViewContext) {
     return this.prisma
-      .forUser()
+      .forContext(context)
       .then((prisma) =>
         prisma.asset.findUniqueOrThrow({
           where: { id },
@@ -126,14 +126,19 @@ export class AssetsService {
       .catch(as404OrThrow);
   }
 
-  async findManyWithLatestInspection() {
-    return this.prisma.forUser().then((prisma) =>
-      prisma.asset.findMany({
-        include: {
-          inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
-          client: true,
-        },
-      }),
+  async findManyWithLatestInspection(
+    queryAssetDto: QueryAssetDto,
+    context: ViewContext,
+  ) {
+    return this.prisma.forContext(context).then((prisma) =>
+      prisma.asset.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.asset>(queryAssetDto, {
+          include: {
+            inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
+            client: true,
+          },
+        }),
+      ),
     );
   }
 

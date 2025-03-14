@@ -7,19 +7,22 @@ import {
   VALID_PERMISSIONS,
   VISIBILITY_PERMISSIONS,
 } from 'src/auth/permissions';
+import { z } from 'zod';
 
-export type ValidatedRoleRepresentation = RoleRepresentation & {
-  id: string;
-  name: TPermission;
-};
+export const keycloakRoleSchema = z.object({
+  id: z.string(),
+  name: z.enum(VALID_PERMISSIONS as [TPermission, ...TPermission[]]),
+});
+
+export type ValidatedRoleRepresentation = RoleRepresentation &
+  z.infer<typeof keycloakRoleSchema>;
 
 export const validateKeycloakRole = (
   role: RoleRepresentation,
   allowedPermissions: TPermission[] = VALID_PERMISSIONS,
 ): role is ValidatedRoleRepresentation => {
   return (
-    typeof role.id === 'string' &&
-    typeof role.name === 'string' &&
+    keycloakRoleSchema.safeParse(role).success &&
     allowedPermissions.includes(role.name as TPermission)
   );
 };

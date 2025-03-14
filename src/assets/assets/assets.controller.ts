@@ -40,13 +40,19 @@ export class AssetsController {
   }
 
   @Get('latest-inspection')
-  findManyWithLatestInspection() {
-    return this.assetsService.findManyWithLatestInspection();
+  findManyWithLatestInspection(
+    @Query() queryAssetDto: QueryAssetDto,
+    @ViewCtx() context: ViewContext,
+  ) {
+    return this.assetsService.findManyWithLatestInspection(
+      queryAssetDto,
+      context,
+    );
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.assetsService.findOne(id);
+  findOne(@Param('id') id: string, @ViewCtx() context: ViewContext) {
+    return this.assetsService.findOne(id, context);
   }
 
   @Patch(':id')

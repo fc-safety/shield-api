@@ -1,4 +1,9 @@
 import GroupRepresentation from '@keycloak/keycloak-admin-client/lib/defs/groupRepresentation';
+import {
+  NotificationGroupId,
+  NotificationGroupIds,
+} from 'src/notifications/notification-types';
+import { z } from 'zod';
 
 export interface Role {
   id: string;
@@ -6,23 +11,30 @@ export interface Role {
   name: string;
   description?: string;
   permissions: string[];
+  notificationGroups: NotificationGroupId[];
   createdOn: string;
   updatedOn: string;
 }
 
-export type ValidatedGroupRepresentation = GroupRepresentation & {
-  id: string;
-  attributes: { role_id: [string, ...string[]] } & Record<string, string[]>;
-};
+export const keycloakGroupSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  attributes: z.object({
+    role_id: z.array(z.string()).min(1),
+    role_description: z.array(z.string()).optional(),
+    role_created_at: z.array(z.string()).min(1),
+    role_updated_at: z.array(z.string()).min(1),
+    role_notification_group: z.array(z.enum(NotificationGroupIds)).optional(),
+  }),
+});
+
+export type ValidatedGroupRepresentation = GroupRepresentation &
+  z.infer<typeof keycloakGroupSchema>;
 
 export const validateKeycloakGroup = (
   g: GroupRepresentation,
 ): g is ValidatedGroupRepresentation =>
-  g.id &&
-  g.attributes &&
-  g.attributes.role_id &&
-  Array.isArray(g.attributes.role_id) &&
-  g.attributes.role_id.length > 0;
+  keycloakGroupSchema.safeParse(g).success;
 
 export const keycloakGroupAsRole = (
   group: ValidatedGroupRepresentation,
@@ -33,6 +45,7 @@ export const keycloakGroupAsRole = (
   name: group.name ?? 'Unknown role',
   description: group.attributes.role_description?.[0],
   permissions: group.clientRoles?.[appClientId] ?? [],
-  createdOn: group.attributes.role_created_at?.[0] ?? new Date().toISOString(),
-  updatedOn: group.attributes.role_updated_at?.[0] ?? new Date().toISOString(),
+  notificationGroups: group.attributes.role_notification_group ?? [],
+  createdOn: group.attributes.role_created_at[0],
+  updatedOn: group.attributes.role_updated_at[0],
 });

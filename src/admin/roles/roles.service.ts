@@ -12,7 +12,9 @@ import {
   VISIBILITY_PERMISSIONS,
 } from 'src/auth/permissions';
 import { ApiConfigService } from 'src/config/api-config.service';
+import { NotificationGroups } from 'src/notifications/notification-types';
 import { CreateRoleDto } from './dto/create-role.dto';
+import { UpdateNotificationGroupMappingDto } from './dto/update-notification-group-mapping.dto';
 import { UpdatePermissionMappingDto } from './dto/update-permission-mapping.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import {
@@ -104,6 +106,10 @@ export class RolesService {
     };
   }
 
+  getNotificationGroups() {
+    return Object.values(NotificationGroups);
+  }
+
   async getPermissionByName(name: string) {
     return this.keycloak.client.clients.findRole({
       id: (await this.appClientUuid) ?? '',
@@ -126,6 +132,9 @@ export class RolesService {
           ],
           role_created_at: [new Date().toISOString()],
           role_updated_at: [new Date().toISOString()],
+          role_notification_group: createRoleDto.notificationGroups && [
+            ...createRoleDto.notificationGroups,
+          ],
         },
       },
     );
@@ -164,16 +173,21 @@ export class RolesService {
 
   async updateRole(roleId: string, updateRoleDto: UpdateRoleDto) {
     const roleGroup = await this.getRoleGroup(roleId);
-    const { description, ...roleDefaults } = updateRoleDto;
+    const { description, notificationGroups, ...roleDefaults } = updateRoleDto;
+
+    const attributes = KeycloakService.mergeAttributes(
+      roleGroup.attributes,
+      ['role_description', description],
+      ['role_updated_at', new Date().toISOString()],
+      ['role_notification_group', notificationGroups],
+    );
+
     await this.keycloak.client.groups.update(
       { id: roleGroup.id },
       {
+        ...roleGroup,
         ...roleDefaults,
-        attributes: {
-          ...roleGroup.attributes,
-          role_description: description && [description],
-          role_updated_at: [new Date().toISOString()],
-        },
+        attributes,
       },
     );
     return this.getRole(roleId);
@@ -209,6 +223,16 @@ export class RolesService {
         })),
       });
     }
+  }
+
+  async updateNotificationGroups(
+    roleId: string,
+    updateNotificationGroupMappingDto: UpdateNotificationGroupMappingDto,
+  ) {
+    return await this.updateRole(roleId, {
+      notificationGroups:
+        updateNotificationGroupMappingDto.notificationGroupIds,
+    });
   }
 
   public async getRoleGroup(roleId: string) {
