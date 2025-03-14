@@ -112,9 +112,34 @@ export class UsersService {
 
   async assignRole(clientId: string, id: string, assignRoleDto: AssignRoleDto) {
     const keycloakUser = await this.getKeycloakUser(clientId, id);
-    const keycloakRoleGroup = await this.roles.getRoleGroup(
-      assignRoleDto.roleId,
+
+    // Get all role groups to check existing memberships and remove them. A user can only have one role.
+    const allRoleGroups = await this.roles.getRoleGroups();
+
+    // Get the role group to assign.
+    const keycloakRoleGroup = allRoleGroups.find(
+      (g) => g.attributes.role_id[0] === assignRoleDto.roleId,
     );
+    if (!keycloakRoleGroup) {
+      throw new NotFoundException(`Role ${assignRoleDto.roleId} not found`);
+    }
+
+    // Remove from any existing role groups before assigning a new one.
+    const existingJoinedRoleGroups = allRoleGroups.filter(
+      (g) =>
+        g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
+    );
+    if (existingJoinedRoleGroups.length > 0) {
+      await Promise.allSettled(
+        existingJoinedRoleGroups.map((g) =>
+          this.keycloak.client.users.delFromGroup({
+            id: keycloakUser.id,
+            groupId: g.id,
+          }),
+        ),
+      );
+    }
+
     return this.keycloak.client.users.addToGroup({
       id: keycloakUser.id,
       groupId: keycloakRoleGroup.id,

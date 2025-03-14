@@ -157,13 +157,9 @@ export class RolesService {
   }
 
   async getRoles(): Promise<Role[]> {
-    const { id } = await this.keycloak.getOrCreateManagedRolesGroup();
-    const groups = await this.keycloak.client.groups.listSubGroups({
-      parentId: id,
-    });
-    return groups
-      .filter(validateKeycloakGroup)
-      .map((g) => keycloakGroupAsRole(g, this.appClientId));
+    return this.getRoleGroups().then((groups) =>
+      groups.map((g) => keycloakGroupAsRole(g, this.appClientId)),
+    );
   }
 
   async getRole(id: string): Promise<Role> {
@@ -246,5 +242,12 @@ export class RolesService {
     if (!group || !validateKeycloakGroup(group))
       throw new NotFoundException(`Role ${roleId} not found`);
     return group;
+  }
+
+  public async getRoleGroups() {
+    const groups = await this.keycloak.client.groups.listSubGroups({
+      parentId: await this.parentRolesGroupId,
+    });
+    return groups.filter(validateKeycloakGroup);
   }
 }
