@@ -130,7 +130,8 @@ export class PoliciesGuard implements CanActivate {
       user,
     };
 
-    return policyHandlers.every((handler) =>
+    // Only one policy handler needs to be satisfied.
+    return policyHandlers.some((handler) =>
       this.execPolicyHandler(handler, policyHandlerContext),
     );
   }
