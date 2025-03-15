@@ -59,11 +59,19 @@ export class TagsService {
                   include: {
                     productCategory: {
                       include: {
-                        assetQuestions: true,
+                        assetQuestions: {
+                          where: {
+                            active: true,
+                          },
+                        },
                       },
                     },
                     manufacturer: true,
-                    assetQuestions: true,
+                    assetQuestions: {
+                      where: {
+                        active: true,
+                      },
+                    },
                   },
                 },
                 setupQuestionResponses: true,

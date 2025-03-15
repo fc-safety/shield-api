@@ -42,6 +42,16 @@ export class InspectionsService {
           .catch(as404OrThrow)
       : null;
 
+    if (inspectionSession) {
+      const currentUser = prisma.$currentUser();
+      if (currentUser.id !== inspectionSession.lastInspectorId) {
+        await prisma.inspectionSession.update({
+          where: { id: inspectionSession.id },
+          data: { lastInspectorId: currentUser.id },
+        });
+      }
+    }
+
     const currentRoutePoint =
       inspectionSession?.inspectionRoute.inspectionRoutePoints.find(
         (point) => point.assetId === assetId,
