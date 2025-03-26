@@ -171,7 +171,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       this.bypassRLS()
         .site.findUniqueOrThrow({
           where: { externalId: user.siteId },
-          // For simplicity, onlly including 2 levels deep (3 total).
+          // For simplicity, only including 2 levels deep (3 total).
           include: {
             subsites: {
               include: {

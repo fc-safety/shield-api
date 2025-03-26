@@ -103,8 +103,9 @@ export class PoliciesGuard implements CanActivate {
   canActivate(
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
+    // getAllAndOverride prefers method-level policies over class-level policies.
     const policyHandlers =
-      this.reflector.getAllAndMerge<PolicyHandler[]>(CHECK_POLICIES_KEY, [
+      this.reflector.getAllAndOverride<PolicyHandler[]>(CHECK_POLICIES_KEY, [
         context.getHandler(),
         context.getClass(),
       ]) || [];
@@ -130,8 +131,7 @@ export class PoliciesGuard implements CanActivate {
       user,
     };
 
-    // Only one policy handler needs to be satisfied.
-    return policyHandlers.some((handler) =>
+    return policyHandlers.every((handler) =>
       this.execPolicyHandler(handler, policyHandlerContext),
     );
   }

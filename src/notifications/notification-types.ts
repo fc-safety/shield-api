@@ -13,6 +13,7 @@ export type INotificationGroup = {
   id: NotificationGroupId;
   name: string;
   description: string;
+  config?: Record<string, number | string>;
 };
 
 export const NotificationGroups: Record<
@@ -24,30 +25,50 @@ export const NotificationGroups: Record<
     name: 'Inspection Reminder',
     description:
       "Initial reminder for inspections due in the next 25 days, or within 85% of the asset's inspection period, whichever is less.",
+    config: {
+      pctThreshold: 0.85,
+      daysThreshold: 25,
+    },
   },
   inspection_due_soon_alert_level_1: {
     id: 'inspection_due_soon_alert_level_1',
     name: 'Inspection Due Soon Alert (Level 1)',
     description:
       "Level 1: Alert for inspections due in the next 14 days, or within 50% of the asset's inspection period, whichever is less.",
+    config: {
+      pctThreshold: 0.5,
+      daysThreshold: 14,
+    },
   },
   inspection_due_soon_alert_level_2: {
     id: 'inspection_due_soon_alert_level_2',
     name: 'Inspection Due Soon Alert (Level 2)',
     description:
       "Level 2: Alert for inspections due in the next 10 days, or within 35% of the asset's inspection period, whichever is less.",
+    config: {
+      pctThreshold: 0.35,
+      daysThreshold: 10,
+    },
   },
   inspection_due_soon_alert_level_3: {
     id: 'inspection_due_soon_alert_level_3',
     name: 'Inspection Due Soon Alert (Level 3)',
     description:
       "Level 3: Alert for inspections due in the next 7 days, or within 25% of the asset's inspection period, whichever is less.",
+    config: {
+      pctThreshold: 0.25,
+      daysThreshold: 7,
+    },
   },
   inspection_due_soon_alert_level_4: {
     id: 'inspection_due_soon_alert_level_4',
     name: 'Inspection Due Soon Alert (Level 4)',
     description:
       "Level 4: Alert for inspections due in the next 3 days, or within 15% of the asset's inspection period, whichever is less.",
+    config: {
+      pctThreshold: 0.15,
+      daysThreshold: 3,
+    },
   },
   periodic_inspection_report: {
     id: 'periodic_inspection_report',

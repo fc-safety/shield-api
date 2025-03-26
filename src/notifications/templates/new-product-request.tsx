@@ -118,7 +118,7 @@ export function NewProductRequestTemplateText({
   return `New Product Request: ${productRequest.id}`;
 }
 
-export function NewProductRequestTemplateReact({
+export default function NewProductRequestTemplateReact({
   productRequest,
   frontendUrl,
 }: NewProductRequestTemplateProps): React.ReactElement {
@@ -172,6 +172,10 @@ export function NewProductRequestTemplateReact({
     </Layout>
   );
 }
+
+NewProductRequestTemplateReact.PreviewProps = {
+  ...NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS,
+};
 
 const getProductRequestUrl = (id: string, frontendUrl: string) => {
   return (

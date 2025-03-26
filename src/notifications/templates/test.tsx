@@ -17,7 +17,7 @@ export function TestTemplateText(): string {
   `;
 }
 
-export function TestTemplateReact(): React.ReactElement {
+export default function TestTemplateReact(): React.ReactElement {
   return (
     <Layout preview="This is a test email from Shield">
       <Block>

@@ -3,13 +3,12 @@ import { CreateEmailOptions, Resend } from 'resend';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { SettingsService } from 'src/settings/settings.service';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
-import {
+import NewProductRequestTemplateReact, {
   NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS,
   NewProductRequestTemplateProps,
-  NewProductRequestTemplateReact,
   NewProductRequestTemplateText,
 } from './templates/new-product-request';
-import { TestTemplateReact, TestTemplateText } from './templates/test';
+import TestTemplateReact, { TestTemplateText } from './templates/test';
 
 type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> &

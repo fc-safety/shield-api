@@ -47,6 +47,16 @@ export class SitesService {
                 address: true,
               },
             },
+            assets: {
+              include: {
+                product: {
+                  include: {
+                    productCategory: true,
+                    manufacturer: true,
+                  },
+                },
+              },
+            },
           },
         }),
       )

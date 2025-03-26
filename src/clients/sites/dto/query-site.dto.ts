@@ -26,8 +26,25 @@ const BaseQuerySiteFiltersSchema = z
   })
   .partial() satisfies z.Schema<Prisma.SiteWhereInput>;
 
-const QuerySiteFiltersSchema = BaseQuerySiteFiltersSchema.extend({
-  OR: z.array(BaseQuerySiteFiltersSchema).optional(),
+const BaseQuerySiteFilterSchemaWithSubsites = BaseQuerySiteFiltersSchema.extend(
+  {
+    subsites: z
+      .object({
+        every: BaseQuerySiteFiltersSchema,
+        some: BaseQuerySiteFiltersSchema,
+        none: z.preprocess((data) => {
+          if (data === undefined || data === '') {
+            return {};
+          }
+          return data;
+        }, BaseQuerySiteFiltersSchema),
+      })
+      .partial(),
+  },
+).partial();
+
+const QuerySiteFiltersSchema = BaseQuerySiteFilterSchemaWithSubsites.extend({
+  OR: z.array(BaseQuerySiteFilterSchemaWithSubsites).optional(),
 });
 
 const QuerySiteOrderSchema = z

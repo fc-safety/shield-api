@@ -56,21 +56,21 @@ const buildPermissions = <N extends string, P extends string>(
   ) as Record<ReplaceHyphensAndUppercase<P>, `${N}:${P}`>;
 };
 
-// Visibility permissions (determines scope of user access).
-export const VISIBILITY = buildPermissions('visibility', [
+export const VISIBILITY_VALUES = [
   'global',
   'client-sites',
   'site-group',
   'multi-site',
   'single-site',
   'self',
-]);
+] as const;
+
+// Visibility permissions (determines scope of user access).
+export const VISIBILITY = buildPermissions('visibility', VISIBILITY_VALUES);
 
 export type TVisibilityPermission =
   (typeof VISIBILITY)[keyof typeof VISIBILITY];
-export type TVisibility = TVisibilityPermission extends `visibility:${infer R}`
-  ? R
-  : never;
+export type TVisibility = (typeof VISIBILITY_VALUES)[number];
 
 export const VISIBILITY_PERMISSIONS = Object.values(VISIBILITY);
 

@@ -48,4 +48,9 @@ export class ClientsController {
   remove(@Param('id') id: string) {
     return this.clientsService.remove(id);
   }
+
+  @Get(':id/asset-visibility-mappings')
+  getAssetVisibilityMappings(@Param('id') id: string) {
+    return this.clientsService.getAssetVisibilityMappings(id);
+  }
 }
