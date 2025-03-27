@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import {
   AssetQuestion,
   AssetQuestionResponse,
@@ -6,9 +6,17 @@ import {
   Prisma,
 } from '@prisma/client';
 import { subDays } from 'date-fns';
+import { ClsService } from 'nestjs-cls';
+import { UsersService } from 'src/clients/users/users.service';
 import { testAlertRule } from 'src/common/alert-utils';
+import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
+import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow, ViewContext } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
+import { NotificationsService } from 'src/notifications/notifications.service';
+import TeamInspectionReminderTemplateReact, {
+  TeamInspectionReminderTemplateProps,
+} from 'src/notifications/templates/team-inspection-reminder';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetAlertCriterionRuleSchema } from 'src/products/asset-questions/dto/create-asset-question.dto';
 import { ConsumablesService } from '../consumables/consumables.service';
@@ -24,6 +32,9 @@ export class AssetsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly consumablesService: ConsumablesService,
+    private readonly notifications: NotificationsService,
+    private readonly usersService: UsersService,
+    private readonly cls: ClsService<CommonClsStore>,
   ) {}
 
   async create(createAssetDto: Prisma.AssetCreateInput) {
@@ -357,5 +368,39 @@ export class AssetsService {
     return this.prisma
       .forUser()
       .then((prisma) => prisma.asset.delete({ where: { id } }));
+  }
+
+  async sendReminderNotifications(id: string, body: SendNotificationsBodyDto) {
+    const user = this.cls.get('user');
+
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    const users = await this.usersService.findAll({
+      id: body.userIds,
+      limit: 10000,
+      offset: 0,
+    });
+
+    const asset = await this.findOne(id, 'user');
+    const templateProps: Omit<
+      TeamInspectionReminderTemplateProps,
+      'firstName'
+    > = {
+      asset,
+      requestorName: `${user.givenName} ${user.familyName}`,
+    };
+
+    await this.notifications.sendEmails(
+      users.results.map((user) => ({
+        react: TeamInspectionReminderTemplateReact({
+          ...templateProps,
+          firstName: user.firstName,
+        }),
+        to: [user.email],
+        subject: 'Team Inspection Reminder',
+      })),
+    );
   }
 }

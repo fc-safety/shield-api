@@ -8,5 +8,6 @@ import { UsersService } from './users.service';
   imports: [KeycloakModule, RolesModule],
   controllers: [UsersController],
   providers: [UsersService],
+  exports: [UsersService],
 })
 export class UsersModule {}

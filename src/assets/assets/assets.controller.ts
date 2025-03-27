@@ -13,6 +13,7 @@ import {
   CheckResourcePermissions,
 } from 'src/auth/policies.guard';
 import { ViewCtx } from 'src/common/decorators';
+import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
 import { ViewContext } from 'src/common/utils';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
@@ -48,6 +49,14 @@ export class AssetsController {
       queryAssetDto,
       context,
     );
+  }
+
+  @Post(':id/send-reminder-notifications')
+  sendReminderNotifications(
+    @Param('id') id: string,
+    @Body() body: SendNotificationsBodyDto,
+  ) {
+    return this.assetsService.sendReminderNotifications(id, body);
   }
 
   @Get(':id')

@@ -15,6 +15,10 @@ type RequireAtLeastOne<T> = {
     Partial<Pick<T, Exclude<keyof T, K>>>;
 }[keyof T];
 
+export type SendEmailOptions = Omit<CreateEmailOptions, 'from'> &
+  Partial<Pick<CreateEmailOptions, 'from'>> &
+  RequireAtLeastOne<Pick<CreateEmailOptions, 'react' | 'html' | 'text'>>;
+
 @Injectable()
 export class NotificationsService {
   private readonly resend: Resend;
@@ -26,11 +30,7 @@ export class NotificationsService {
     this.resend = new Resend(config.get('RESEND_API_KEY'));
   }
 
-  async sendEmail(
-    options: Omit<CreateEmailOptions, 'from'> &
-      Partial<Pick<CreateEmailOptions, 'from'>> &
-      RequireAtLeastOne<Pick<CreateEmailOptions, 'react' | 'html' | 'text'>>,
-  ) {
+  async sendEmail(options: SendEmailOptions) {
     const {
       data: { systemEmailFromAddress },
     } = await this.settings.getGlobalSettings();
@@ -39,6 +39,33 @@ export class NotificationsService {
       from: systemEmailFromAddress,
       ...options,
     });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async sendEmails(options: SendEmailOptions[]) {
+    const {
+      data: { systemEmailFromAddress },
+    } = await this.settings.getGlobalSettings();
+
+    const { data, error } = await Promise.all(
+      // Make sure we don't exceed Resend's batch size limit.
+      chunkArray(options, 100).map((batch) =>
+        this.resend.batch.send(
+          batch.map((o) => ({
+            from: systemEmailFromAddress,
+            ...o,
+          })),
+        ),
+      ),
+    ).then((results) => ({
+      data: results.flatMap((r) => r.data),
+      error: results.at(0)?.error,
+    }));
 
     if (error) {
       throw new Error(error.message);
@@ -84,4 +111,11 @@ export class NotificationsService {
       text: NewProductRequestTemplateText(props),
     });
   }
+}
+
+function chunkArray<T>(arr: T[], batchSize: number): T[][] {
+  return arr.reduce((acc: T[][], _, i: number) => {
+    if (i % batchSize === 0) acc.push(arr.slice(i, i + batchSize));
+    return acc;
+  }, []);
 }

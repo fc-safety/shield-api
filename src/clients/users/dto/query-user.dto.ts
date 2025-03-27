@@ -5,7 +5,9 @@ import { z } from 'zod';
 
 const QueryUserFiltersSchema = z
   .object({
-    siteId: z.string(),
+    id: z.union([z.string(), z.array(z.string())]),
+    siteExternalId: z.string(),
+    clientExternalId: z.string(),
   })
   .partial();
 
@@ -36,9 +38,25 @@ export function getOrderForKeycloak(query: QueryUserDto): string {
 export function asFilterConditions(query: QueryUserDto) {
   const qs: CustomQueryFilter[] = [];
 
-  if (query.siteId) {
+  if (query.siteExternalId) {
     qs.push({
-      q: { key: 'site_id', value: query.siteId },
+      q: { key: 'site_id', value: query.siteExternalId },
+    });
+  }
+
+  if (query.clientExternalId) {
+    qs.push({
+      q: { key: 'client_id', value: query.clientExternalId },
+    });
+  }
+
+  if (query.id) {
+    qs.push({
+      q: {
+        key: 'user_id',
+        value: query.id,
+        op: Array.isArray(query.id) ? 'in' : 'eq',
+      },
     });
   }
 

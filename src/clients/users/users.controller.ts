@@ -8,53 +8,68 @@ import {
   Query,
 } from '@nestjs/common';
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import { ViewCtx } from 'src/common/decorators';
+import { ViewContext } from 'src/common/utils';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 
-@Controller('clients/:clientId/users')
+@Controller('users')
 @CheckResourcePermissions('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
   create(
-    @Param('clientId') clientId: string,
     @Body() createUserDto: CreateUserDto,
+    @ViewCtx() viewContext: ViewContext,
+    @Query('clientId') clientId?: string,
   ) {
-    return this.usersService.create(clientId, createUserDto);
+    return this.usersService.create(createUserDto, clientId, viewContext);
   }
 
   @Get()
   findAll(
-    @Param('clientId') clientId: string,
     @Query() queryUserDto: QueryUserDto,
+    @ViewCtx() viewContext: ViewContext,
+    @Query('clientId') clientId?: string,
   ) {
-    return this.usersService.findAll(clientId, queryUserDto);
+    return this.usersService.findAll(queryUserDto, clientId, viewContext);
   }
 
   @Get(':id')
-  findOne(@Param('clientId') clientId: string, @Param('id') id: string) {
-    return this.usersService.findOne(clientId, id);
+  findOne(
+    @Param('id') id: string,
+    @ViewCtx() viewContext: ViewContext,
+    @Query('clientId') clientId?: string,
+  ) {
+    return this.usersService.findOne(id, clientId, viewContext);
   }
 
   @Patch(':id')
   update(
-    @Param('clientId') clientId: string,
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
+    @ViewCtx() viewContext: ViewContext,
+    @Query('clientId') clientId?: string,
   ) {
-    return this.usersService.update(clientId, id, updateUserDto);
+    return this.usersService.update(id, updateUserDto, clientId, viewContext);
   }
 
   @Post(':id/assign-role')
   assignRole(
-    @Param('clientId') clientId: string,
     @Param('id') id: string,
     @Body() assignRoleDto: AssignRoleDto,
+    @ViewCtx() viewContext: ViewContext,
+    @Query('clientId') clientId?: string,
   ) {
-    return this.usersService.assignRole(clientId, id, assignRoleDto);
+    return this.usersService.assignRole(
+      id,
+      assignRoleDto,
+      clientId,
+      viewContext,
+    );
   }
 }

@@ -1,8 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
+import { Prisma } from '@prisma/client';
+import { ClsService } from 'nestjs-cls';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import { as404OrThrow } from 'src/common/utils';
+import { CustomQueryFilter } from 'src/auth/keycloak/types';
+import { CommonClsStore } from 'src/common/types';
+import { as404OrThrow, ViewContext } from 'src/common/utils';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -19,10 +23,15 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly keycloak: KeycloakService,
     private readonly roles: RolesService,
+    private readonly cls: ClsService<CommonClsStore>,
   ) {}
 
-  async create(clientId: string, createUserDto: CreateUserDto) {
-    const client = await this.getClient(clientId);
+  async create(
+    createUserDto: CreateUserDto,
+    clientId?: string,
+    viewContext?: ViewContext,
+  ) {
+    const client = await this.getClient(clientId, viewContext);
     const newId = createId();
 
     const attributes = KeycloakService.mergeAttributes(
@@ -45,21 +54,22 @@ export class UsersService {
       emailVerified: true,
       attributes,
     });
-    return this.findOne(clientId, newId);
+    return this.findOne(newId, clientId, viewContext);
   }
 
   async findAll(
-    clientId: string,
     queryUserDto: QueryUserDto = new QueryUserDto(),
+    clientId?: string,
+    viewContext?: ViewContext,
   ) {
-    const client = await this.getClient(clientId);
+    const client = await this.getClient(clientId, viewContext);
 
     const { offset, limit } = queryUserDto;
     return this.keycloak
       .findUsersByAttribute({
         filter: {
           AND: [
-            { q: { key: 'client_id', value: client.externalId } },
+            ...this.buildSiteFilters(client),
             ...asFilterConditions(queryUserDto),
           ],
         },
@@ -79,13 +89,18 @@ export class UsersService {
       });
   }
 
-  async findOne(clientId: string, id: string) {
-    const keycloakUser = await this.getKeycloakUser(clientId, id);
+  async findOne(id: string, clientId?: string, viewContext?: ViewContext) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, viewContext);
     return keycloakUserAsClientUser(keycloakUser);
   }
 
-  async update(clientId: string, id: string, updateUserDto: UpdateUserDto) {
-    const keycloakUser = await this.getKeycloakUser(clientId, id);
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+    clientId?: string,
+    viewContext?: ViewContext,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, viewContext);
 
     const attributes = KeycloakService.mergeAttributes(
       keycloakUser.attributes,
@@ -110,8 +125,13 @@ export class UsersService {
     );
   }
 
-  async assignRole(clientId: string, id: string, assignRoleDto: AssignRoleDto) {
-    const keycloakUser = await this.getKeycloakUser(clientId, id);
+  async assignRole(
+    id: string,
+    assignRoleDto: AssignRoleDto,
+    clientId?: string,
+    viewContext?: ViewContext,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, viewContext);
 
     // Get all role groups to check existing memberships and remove them. A user can only have one role.
     const allRoleGroups = await this.roles.getRoleGroups();
@@ -146,22 +166,43 @@ export class UsersService {
     });
   }
 
-  private async getClient(clientId: string) {
-    return this.prisma
-      .forAdminOrUser()
-      .then((prisma) =>
-        prisma.client.findUniqueOrThrow({ where: { id: clientId } }),
-      )
+  private async getClient(clientId?: string, context?: ViewContext) {
+    let thisClientId = clientId;
+    let prisma: Awaited<
+      ReturnType<typeof this.prisma.forUser | typeof this.prisma.bypassRLS>
+    >;
+
+    if (!thisClientId) {
+      const prismaForUser = await this.prisma.forUser();
+      thisClientId = prismaForUser.$currentUser().clientId;
+      prisma = prismaForUser;
+    } else {
+      prisma = await (context
+        ? this.prisma.forContext(context)
+        : this.prisma.forAdminOrUser());
+    }
+
+    return prisma.client
+      .findUniqueOrThrow({
+        where: { id: thisClientId },
+        include: {
+          sites: true,
+        },
+      })
       .catch(as404OrThrow);
   }
 
-  private async getKeycloakUser(clientId: string, id: string) {
-    const client = await this.getClient(clientId);
+  private async getKeycloakUser(
+    id: string,
+    clientId?: string,
+    context?: ViewContext,
+  ) {
+    const client = await this.getClient(clientId, context);
     const user = await this.keycloak
       .findUsersByAttribute({
         filter: {
           AND: [
-            { q: { key: 'client_id', value: client.externalId } },
+            ...this.buildSiteFilters(client),
             { q: { key: 'user_id', value: id } },
           ],
         },
@@ -173,5 +214,32 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  private buildSiteFilters(
+    client: Prisma.ClientGetPayload<{
+      include: {
+        sites: true;
+      };
+    }>,
+  ) {
+    const filters: CustomQueryFilter[] = [
+      { q: { key: 'client_id', value: client.externalId } },
+    ];
+
+    const thisUser = this.cls.get('user');
+    const isNonGlobal =
+      !thisUser || !['global', 'client-sites'].includes(thisUser.visibility);
+    if (isNonGlobal) {
+      filters.push({
+        q: {
+          key: 'site_id',
+          value: client.sites.map((s) => s.externalId),
+          op: 'in',
+        },
+      });
+    }
+
+    return filters;
   }
 }
