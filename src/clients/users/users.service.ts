@@ -168,9 +168,7 @@ export class UsersService {
 
   private async getClient(clientId?: string, context?: ViewContext) {
     let thisClientId = clientId;
-    let prisma: Awaited<
-      ReturnType<typeof this.prisma.forUser | typeof this.prisma.bypassRLS>
-    >;
+    let prisma: ReturnType<typeof this.prisma.extended>;
 
     if (!thisClientId) {
       const prismaForUser = await this.prisma.forUser();

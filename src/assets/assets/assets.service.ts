@@ -16,6 +16,7 @@ import { buildPrismaFindArgs } from 'src/common/validation';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import TeamInspectionReminderTemplateReact, {
   TeamInspectionReminderTemplateProps,
+  TeamInspectionReminderTemplateSms,
 } from 'src/notifications/templates/team-inspection-reminder';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetAlertCriterionRuleSchema } from 'src/products/asset-questions/dto/create-asset-question.dto';
@@ -402,5 +403,39 @@ export class AssetsService {
         subject: 'Team Inspection Reminder',
       })),
     );
+
+    await Promise.allSettled(
+      users.results
+        .filter(
+          (user): user is typeof user & { phoneNumber: string } =>
+            !!user.phoneNumber,
+        )
+        .map(async (user) => {
+          const phoneNumber = formatPhoneNumber(user.phoneNumber);
+          return this.notifications
+            .sendSms({
+              to: phoneNumber,
+              text: TeamInspectionReminderTemplateSms({
+                ...templateProps,
+                firstName: user.firstName,
+              }),
+            })
+            .catch((e) => {
+              this.logger.error(
+                `Failed to send SMS to ${phoneNumber}: ${e.message}`,
+              );
+            });
+        }),
+    );
   }
+}
+
+function formatPhoneNumber(phoneNumber: string) {
+  const cleaned = phoneNumber.replace(/[^\d\+]/g, '');
+
+  if (cleaned.startsWith('+') || cleaned.length !== 10) {
+    return phoneNumber;
+  }
+
+  return `+1${cleaned}`;
 }

@@ -25,6 +25,10 @@ export const configSchema = z.object({
 
   // Email - Resend
   RESEND_API_KEY: z.string(),
+
+  // SMS - Telnyx
+  TELNYX_API_KEY: z.string(),
+  TELNYX_PHONE_NUMBER: z.string(),
 });
 
 export type Config = z.infer<typeof configSchema>;

@@ -52,6 +52,7 @@
     "resend": "^4.1.2",
     "rxjs": "^7.8.1",
     "tailwind-merge": "^3.0.2",
+    "telnyx": "^2.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

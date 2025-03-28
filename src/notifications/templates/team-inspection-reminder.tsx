@@ -61,6 +61,18 @@ export const TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: TeamInspectionReminde
     },
   };
 
+export function TeamInspectionReminderTemplateSms(
+  props: TeamInspectionReminderTemplateProps,
+): string {
+  return `[FC Safety Shield] ${props.requestorName} requested we remind you that the following asset may be due soon for inspection:
+  ---
+  ${props.asset.name} ${props.asset.tag ? `(${props.asset.tag.serialNumber})` : ''}
+  ${props.asset.site.name} - ${props.asset.location}, ${props.asset.placement}`.replace(
+    /(\s*\n\s*)+/g,
+    '\n',
+  );
+}
+
 export function TeamInspectionReminderTemplateText(
   props: TeamInspectionReminderTemplateProps,
 ): string {
@@ -70,6 +82,7 @@ export function TeamInspectionReminderTemplateText(
   ${props.requestorName} has requested that we remind you that the following asset may be due soon for inspection:
 
   Name: ${props.asset.name}
+  Site: ${props.asset.site.name}
   Location: ${props.asset.location}
   Placement: ${props.asset.placement}
   Tag Serial No.: ${props.asset.tag?.serialNumber ?? '-'}
