@@ -29,6 +29,10 @@ export const configSchema = z.object({
   // SMS - Telnyx
   TELNYX_API_KEY: z.string(),
   TELNYX_PHONE_NUMBER: z.string(),
+
+  // Redis/ValKey Store
+  KV_STORE_HOST: z.string().default('localhost'),
+  KV_STORE_PORT: z.coerce.number().default(6379),
 });
 
 export type Config = z.infer<typeof configSchema>;

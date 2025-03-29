@@ -30,8 +30,9 @@ export class UsersService {
     createUserDto: CreateUserDto,
     clientId?: string,
     viewContext?: ViewContext,
+    bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, viewContext);
+    const client = await this.getClient(clientId, viewContext, bypassRLS);
     const newId = createId();
 
     const attributes = KeycloakService.mergeAttributes(
@@ -61,8 +62,9 @@ export class UsersService {
     queryUserDto: QueryUserDto = new QueryUserDto(),
     clientId?: string,
     viewContext?: ViewContext,
+    bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, viewContext);
+    const client = await this.getClient(clientId, viewContext, bypassRLS);
 
     const { offset, limit } = queryUserDto;
     return this.keycloak
@@ -89,18 +91,33 @@ export class UsersService {
       });
   }
 
-  async findOne(id: string, clientId?: string, viewContext?: ViewContext) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, viewContext);
+  async findOne(
+    id: string,
+    clientId?: string,
+    viewContext?: ViewContext,
+    bypassRLS?: boolean,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(
+      id,
+      clientId,
+      viewContext,
+      bypassRLS,
+    );
     return keycloakUserAsClientUser(keycloakUser);
   }
-
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
     clientId?: string,
     viewContext?: ViewContext,
+    bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, viewContext);
+    const keycloakUser = await this.getKeycloakUser(
+      id,
+      clientId,
+      viewContext,
+      bypassRLS,
+    );
 
     const attributes = KeycloakService.mergeAttributes(
       keycloakUser.attributes,
@@ -130,8 +147,14 @@ export class UsersService {
     assignRoleDto: AssignRoleDto,
     clientId?: string,
     viewContext?: ViewContext,
+    bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, viewContext);
+    const keycloakUser = await this.getKeycloakUser(
+      id,
+      clientId,
+      viewContext,
+      bypassRLS,
+    );
 
     // Get all role groups to check existing memberships and remove them. A user can only have one role.
     const allRoleGroups = await this.roles.getRoleGroups();
@@ -166,7 +189,11 @@ export class UsersService {
     });
   }
 
-  private async getClient(clientId?: string, context?: ViewContext) {
+  private async getClient(
+    clientId?: string,
+    context?: ViewContext,
+    bypassRLS?: boolean,
+  ) {
     let thisClientId = clientId;
     let prisma: ReturnType<typeof this.prisma.extended>;
 
@@ -174,6 +201,8 @@ export class UsersService {
       const prismaForUser = await this.prisma.forUser();
       thisClientId = prismaForUser.$currentUser().clientId;
       prisma = prismaForUser;
+    } else if (bypassRLS) {
+      prisma = this.prisma.bypassRLS();
     } else {
       prisma = await (context
         ? this.prisma.forContext(context)
@@ -194,8 +223,9 @@ export class UsersService {
     id: string,
     clientId?: string,
     context?: ViewContext,
+    bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, context);
+    const client = await this.getClient(clientId, context, bypassRLS);
     const user = await this.keycloak
       .findUsersByAttribute({
         filter: {

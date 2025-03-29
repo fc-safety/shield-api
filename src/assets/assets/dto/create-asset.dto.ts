@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
+import { MINIMUM_INSPECTION_CYCLE } from 'src/notifications/notification-types';
 import { z } from 'zod';
 
 export const CreateAssetSchema = z.object({
@@ -8,7 +9,7 @@ export const CreateAssetSchema = z.object({
   location: z.string(),
   placement: z.string(),
   serialNumber: z.string(),
-  inspectionCycle: z.number().optional(),
+  inspectionCycle: z.number().min(MINIMUM_INSPECTION_CYCLE).optional(),
   product: z.object({
     connect: z.object({
       id: z.string(),

@@ -8,6 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   CheckPolicies,
   CheckResourcePermissions,
@@ -51,6 +52,11 @@ export class AssetsController {
     );
   }
 
+  // No more than 10 requests per minute or 100 requests per 15 minutes.
+  @Throttle({
+    default: { limit: 10, ttl: 1 * 60 * 1000 },
+    long: { limit: 100, ttl: 15 * 60 * 1000 },
+  })
   @Post(':id/send-reminder-notifications')
   sendReminderNotifications(
     @Param('id') id: string,

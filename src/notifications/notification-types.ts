@@ -81,3 +81,31 @@ export const NotificationGroups: Record<
     description: 'Monthly report of asset compliance status.',
   },
 };
+
+export function isInspectionReminderNotificationGroup(
+  group: INotificationGroup,
+): group is INotificationGroup & {
+  config: {
+    pctThreshold: number;
+    daysThreshold: number;
+  };
+} {
+  return (
+    group.config !== undefined &&
+    'pctThreshold' in group.config &&
+    'daysThreshold' in group.config
+  );
+}
+
+/**
+ * The minimum inspection cycle that can be used for a client or client asset where
+ * inspection reminders can still span full days.
+ */
+export const MINIMUM_INSPECTION_CYCLE = Math.ceil(
+  1 /
+    Object.values(NotificationGroups)
+      .filter(isInspectionReminderNotificationGroup)
+      .reduce((min, group) => {
+        return Math.min(min, group.config.pctThreshold);
+      }, Infinity),
+);
