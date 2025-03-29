@@ -8,6 +8,7 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsScheduler } from './notifications.scheduler';
 import { NotificationsService } from './notifications.service';
 import { ClientNotificationsProcessor } from './processors/client-notifications.processor';
+import { NotificationsProcessor } from './processors/notifications.processor';
 @Module({
   imports: [
     SettingsModule,
@@ -22,6 +23,7 @@ import { ClientNotificationsProcessor } from './processors/client-notifications.
     NotificationsService,
     NotificationsScheduler,
     ClientNotificationsProcessor,
+    NotificationsProcessor,
   ],
   exports: [NotificationsService],
   controllers: [NotificationsController],

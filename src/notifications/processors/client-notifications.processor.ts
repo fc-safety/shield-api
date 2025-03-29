@@ -15,7 +15,11 @@ import { TVisibility, VISIBILITY_VALUES } from 'src/auth/permissions';
 import { ClientUser } from 'src/clients/users/model/client-user';
 import { UsersService } from 'src/clients/users/users.service';
 import { extensions, PrismaService } from 'src/prisma/prisma.service';
-import { JOB_NAMES, QUEUE_NAMES, QUEUE_PREFIX } from '../lib/constants';
+import {
+  CLIENT_NOTIFICATIONS_JOB_NAMES,
+  QUEUE_NAMES,
+  QUEUE_PREFIX,
+} from '../lib/constants';
 import { ClientNotificationJobData, SendEmailJobData } from '../lib/types';
 import {
   isInspectionReminderNotificationGroup,
@@ -61,18 +65,18 @@ export class ClientNotificationsProcessor extends WorkerHost {
 
   @OnWorkerEvent('active')
   onActive(job: Job<unknown>) {
-    this.logger.debug(
-      `Processing job ${job.id} of type ${job.name} with data ${job.data}...`,
-    );
+    this.logger.debug(`Processing job ${job.id} of type ${job.name}...`, {
+      jobData: job.data,
+    });
   }
 
   async process(job: Job<unknown>): Promise<any> {
     switch (job.name) {
-      case JOB_NAMES.PROCESS_CLIENT_INSPECTION_REMINDERS:
+      case CLIENT_NOTIFICATIONS_JOB_NAMES.PROCESS_CLIENT_INSPECTION_REMINDERS:
         return await this.processClientInspectionReminders(
           job as Job<ClientNotificationJobData>,
         );
-      case JOB_NAMES.SEND_EMAIL:
+      case CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_EMAIL:
         return await this.sendEmail(job as Job<SendEmailJobData>);
       default:
         this.logger.warn('--> Unknown job name', { jobName: job.name });
@@ -181,12 +185,15 @@ export class ClientNotificationsProcessor extends WorkerHost {
           continue;
         }
 
-        await this.clientNotificationsQueue.add(JOB_NAMES.SEND_EMAIL, {
-          notificationGroupId: notificationGroupId as NotificationGroupId,
-          subject: Template.Subject,
-          to: [user.email],
-          templateProps: props,
-        } satisfies SendEmailJobData);
+        await this.clientNotificationsQueue.add(
+          CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
+          {
+            notificationGroupId: notificationGroupId as NotificationGroupId,
+            subject: Template.Subject,
+            to: [user.email],
+            templateProps: props,
+          } satisfies SendEmailJobData,
+        );
       }
     }
 

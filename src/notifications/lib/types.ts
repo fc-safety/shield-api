@@ -10,3 +10,7 @@ export interface SendEmailJobData {
   to: string[];
   templateProps?: Record<string, unknown>;
 }
+
+export interface SendNewProductRequestEmailJobData {
+  productRequestId: string;
+}

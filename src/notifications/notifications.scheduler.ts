@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { JOB_NAMES, QUEUE_NAMES } from './lib/constants';
+import { CLIENT_NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
 import { ClientNotificationJobData } from './lib/types';
 
 @Injectable()
@@ -30,7 +30,7 @@ export class NotificationsScheduler {
     });
     for (const client of clients) {
       await this.clientNotificationsQueue.add(
-        JOB_NAMES.PROCESS_CLIENT_INSPECTION_REMINDERS,
+        CLIENT_NOTIFICATIONS_JOB_NAMES.PROCESS_CLIENT_INSPECTION_REMINDERS,
         {
           clientId: client.id,
         } satisfies ClientNotificationJobData,

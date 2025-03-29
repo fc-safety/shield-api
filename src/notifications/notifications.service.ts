@@ -1,9 +1,12 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable } from '@nestjs/common';
+import { Queue } from 'bullmq';
 import { CreateEmailOptions, Resend } from 'resend';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { SettingsService } from 'src/settings/settings.service';
 import type Telnyx from 'telnyx';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
+import { NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
 import NewProductRequestTemplateReact, {
   NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS,
   NewProductRequestTemplateProps,
@@ -37,9 +40,12 @@ const loadTelnyxModule = async () => {
 export class NotificationsService {
   private readonly resend: Resend;
   private readonly telnyx: Promise<Telnyx>;
+
   constructor(
     private readonly settings: SettingsService,
     private readonly config: ApiConfigService,
+    @InjectQueue(QUEUE_NAMES.SEND_NOTIFICATIONS)
+    private readonly notificationsQueue: Queue,
   ) {
     this.resend = new Resend(config.get('RESEND_API_KEY'));
     this.telnyx = loadTelnyxModule().then(
@@ -121,6 +127,15 @@ export class NotificationsService {
       react: TestTemplateReact(),
       text: TestTemplateText(),
     });
+  }
+
+  async queueNewProductRequestEmail(productRequestId: string) {
+    await this.notificationsQueue.add(
+      NOTIFICATIONS_JOB_NAMES.SEND_NEW_PRODUCT_REQUEST_EMAIL,
+      {
+        productRequestId,
+      },
+    );
   }
 
   async sendNewProductRequestEmail(

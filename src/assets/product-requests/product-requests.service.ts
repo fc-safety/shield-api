@@ -24,27 +24,11 @@ export class ProductRequestsService {
       client.productRequest
         .create({
           data,
-          include: {
-            productRequestItems: {
-              include: {
-                product: true,
-              },
-            },
-            client: true,
-            requestor: true,
-            site: true,
-          },
         })
         .then(async (productRequest) => {
-          // TODO: This is only a temporary solution. If the email fails to send, the product
-          // request is still created but the user receives an error.
-          await this.notifications
-            .sendNewProductRequestEmail(productRequest)
-            .catch((e) => {
-              this.logger.error('Failed to send new product request email', e, {
-                productRequestId: productRequest.id,
-              });
-            });
+          await this.notifications.queueNewProductRequestEmail(
+            productRequest.id,
+          );
           return productRequest;
         }),
     );
