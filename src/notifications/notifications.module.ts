@@ -16,6 +16,10 @@ import { NotificationsProcessor } from './processors/notifications.processor';
       name: QUEUE_NAMES.CLIENT_NOTIFICATIONS,
       prefix: QUEUE_PREFIX,
     }),
+    BullModule.registerQueue({
+      name: QUEUE_NAMES.SEND_NOTIFICATIONS,
+      prefix: QUEUE_PREFIX,
+    }),
     RolesModule,
     UsersModule,
   ],
