@@ -7,26 +7,35 @@ import {
 
 type InspectionReminderTemplateReactProps = Pick<
   React.ComponentProps<typeof InspectionReminderLayout>,
-  'recipientFirstName' | 'assetsDueForInspection'
+  'recipientFirstName' | 'assetsDueForInspectionBySite' | 'singleSite'
 >;
 
 export const INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: InspectionReminderTemplateReactProps =
   {
     recipientFirstName: 'John',
-    assetsDueForInspection: [
+    assetsDueForInspectionBySite: [
       {
-        assetId: '1',
-        assetName: 'Break Room Extinguisher',
-        category: 'Fire Extinguishers',
-        product: ' Class A Fire Extinguisher',
-        dueDate: addDays(new Date(), 25),
-      },
-      {
-        assetId: '2',
-        assetName: 'Main First Aid',
-        category: 'First Aid',
-        product: 'First Aid Cabinet',
-        dueDate: addDays(new Date(), 25),
+        siteName: 'Site 1',
+        assetsDueForInspection: [
+          {
+            assetId: '1',
+            assetName: 'Break Room Extinguisher',
+            categoryName: 'Fire Extinguishers',
+            categoryIcon: 'fa-fire-extinguisher',
+            categoryColor: 'rgb(253, 11, 55)',
+            product: ' Class A Fire Extinguisher',
+            dueDate: addDays(new Date(), 25),
+          },
+          {
+            assetId: '2',
+            assetName: 'Main First Aid',
+            categoryName: 'First Aid',
+            categoryIcon: 'fa-suitcase-medical',
+            categoryColor: 'rgb(246, 98, 106)',
+            product: 'First Aid Cabinet',
+            dueDate: addDays(new Date(), 25),
+          },
+        ],
       },
     ],
   };
@@ -38,11 +47,11 @@ const INSPECTION_REMINDER_TEXT_CLOSING_MESSAGE =
 
 function InspectionReminderTemplateText({
   recipientFirstName,
-  assetsDueForInspection,
+  assetsDueForInspectionBySite: assetsDueForInspection,
 }: InspectionReminderTemplateReactProps) {
   return InspectionReminderTextLayout({
     recipientFirstName,
-    assetsDueForInspection,
+    assetsDueForInspectionBySite: assetsDueForInspection,
     openingMessage: INSPECTION_REMINDER_TEXT_OPENING_MESSAGE,
     closingMessage: INSPECTION_REMINDER_TEXT_CLOSING_MESSAGE,
   });
@@ -50,12 +59,12 @@ function InspectionReminderTemplateText({
 
 export default function InspectionReminderTemplateReact({
   recipientFirstName,
-  assetsDueForInspection,
+  assetsDueForInspectionBySite: assetsDueForInspection,
 }: InspectionReminderTemplateReactProps): React.ReactElement {
   return (
     <InspectionReminderLayout
       recipientFirstName={recipientFirstName}
-      assetsDueForInspection={assetsDueForInspection}
+      assetsDueForInspectionBySite={assetsDueForInspection}
       openingMessage={INSPECTION_REMINDER_TEXT_OPENING_MESSAGE}
       closingMessage={INSPECTION_REMINDER_TEXT_CLOSING_MESSAGE}
       urgency="normal"

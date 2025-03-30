@@ -27,10 +27,15 @@ export default function TestTemplateReact(): React.ReactElement {
           this email.
         </Paragraph>
         <Paragraph>
-          If you have any questions, please contact support@fc-safety.com.
+          If you have any questions, please contact{' '}
+          <a href="mailto:support@fc-safety.com">support@fc-safety.com</a>.
         </Paragraph>
         <Paragraph>Regards,</Paragraph>
-        <Paragraph>The FC Safety Team</Paragraph>
+        <Paragraph>
+          Shield Team
+          <br />
+          FC Safety
+        </Paragraph>
       </Block>
     </Layout>
   );

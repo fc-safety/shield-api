@@ -37,4 +37,26 @@ export class NotificationsScheduler {
       );
     }
   }
+
+  @Cron('0 5 1 * *')
+  async handleMonthlyInspectionReports() {
+    this.logger.debug('--> Running monthly inspection reports...');
+    const prisma = this.prisma.bypassRLS();
+    const clients = await prisma.client.findMany({
+      select: {
+        id: true,
+      },
+      where: {
+        status: 'ACTIVE',
+      },
+    });
+    for (const client of clients) {
+      await this.clientNotificationsQueue.add(
+        CLIENT_NOTIFICATIONS_JOB_NAMES.PROCESS_CLIENT_MONTHLY_INSPECTION_REPORTS,
+        {
+          clientId: client.id,
+        } satisfies ClientNotificationJobData,
+      );
+    }
+  }
 }

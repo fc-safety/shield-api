@@ -6,7 +6,7 @@ export interface ClientNotificationJobData {
 
 export interface SendEmailJobData {
   notificationGroupId: NotificationGroupId;
-  subject: string;
+  subject?: string;
   to: string[];
   templateProps?: Record<string, unknown>;
 }

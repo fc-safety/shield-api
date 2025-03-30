@@ -7,26 +7,35 @@ import {
 
 type InspectionDueSoonAlertLevel4TemplateReactProps = Pick<
   React.ComponentProps<typeof InspectionReminderLayout>,
-  'recipientFirstName' | 'assetsDueForInspection'
+  'recipientFirstName' | 'assetsDueForInspectionBySite' | 'singleSite'
 >;
 
 export const INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEMPLATE_TEST_PROPS: InspectionDueSoonAlertLevel4TemplateReactProps =
   {
     recipientFirstName: 'John',
-    assetsDueForInspection: [
+    assetsDueForInspectionBySite: [
       {
-        assetId: '1',
-        assetName: 'Break Room Extinguisher',
-        category: 'Fire Extinguishers',
-        product: ' Class A Fire Extinguisher',
-        dueDate: addDays(new Date(), 3),
-      },
-      {
-        assetId: '2',
-        assetName: 'Main First Aid',
-        category: 'First Aid',
-        product: 'First Aid Cabinet',
-        dueDate: addDays(new Date(), 3),
+        siteName: 'Site 1',
+        assetsDueForInspection: [
+          {
+            assetId: '1',
+            assetName: 'Break Room Extinguisher',
+            categoryName: 'Fire Extinguishers',
+            categoryIcon: 'fa-fire-extinguisher',
+            categoryColor: 'rgb(253, 11, 55)',
+            product: ' Class A Fire Extinguisher',
+            dueDate: addDays(new Date(), 3),
+          },
+          {
+            assetId: '2',
+            assetName: 'Main First Aid',
+            categoryName: 'First Aid',
+            categoryIcon: 'fa-suitcase-medical',
+            categoryColor: 'rgb(246, 98, 106)',
+            product: 'First Aid Cabinet',
+            dueDate: addDays(new Date(), 3),
+          },
+        ],
       },
     ],
   };
@@ -38,11 +47,11 @@ const INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_CLOSING_MESSAGE =
 
 function InspectionDueSoonAlertLevel4TemplateText({
   recipientFirstName,
-  assetsDueForInspection,
+  assetsDueForInspectionBySite: assetsDueForInspection,
 }: InspectionDueSoonAlertLevel4TemplateReactProps) {
   return InspectionReminderTextLayout({
     recipientFirstName,
-    assetsDueForInspection,
+    assetsDueForInspectionBySite: assetsDueForInspection,
     openingMessage: INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_OPENING_MESSAGE,
     closingMessage: INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_CLOSING_MESSAGE,
   });
@@ -50,12 +59,12 @@ function InspectionDueSoonAlertLevel4TemplateText({
 
 export default function InspectionDueSoonAlertLevel4TemplateReact({
   recipientFirstName,
-  assetsDueForInspection,
+  assetsDueForInspectionBySite: assetsDueForInspection,
 }: InspectionDueSoonAlertLevel4TemplateReactProps): React.ReactElement {
   return (
     <InspectionReminderLayout
       recipientFirstName={recipientFirstName}
-      assetsDueForInspection={assetsDueForInspection}
+      assetsDueForInspectionBySite={assetsDueForInspection}
       openingMessage={INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_OPENING_MESSAGE}
       closingMessage={INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_CLOSING_MESSAGE}
       urgency="critical"

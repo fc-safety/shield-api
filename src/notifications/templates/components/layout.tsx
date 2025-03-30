@@ -14,10 +14,11 @@ import React from 'react';
 export function Layout({
   preview,
   children,
-}: React.PropsWithChildren<{ preview?: string }>) {
+  head,
+}: React.PropsWithChildren<{ preview?: string; head?: React.ReactNode[] }>) {
   return (
     <Html lang="en">
-      <Head />
+      <Head>{head}</Head>
       <Tailwind
         config={{
           theme: {

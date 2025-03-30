@@ -167,7 +167,11 @@ export default function NewProductRequestTemplateReact({
       </Block>
       <Block>
         <Paragraph>Regards,</Paragraph>
-        <Paragraph>Shield Team</Paragraph>
+        <Paragraph>
+          Shield Team
+          <br />
+          FC Safety
+        </Paragraph>
       </Block>
     </Layout>
   );

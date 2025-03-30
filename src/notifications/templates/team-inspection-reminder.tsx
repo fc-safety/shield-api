@@ -137,7 +137,11 @@ export default function TeamInspectionReminderTemplateReact(
           </Row>
         ))}
         <Paragraph>Regards,</Paragraph>
-        <Paragraph>The FC Safety Team</Paragraph>
+        <Paragraph>
+          Shield Team
+          <br />
+          FC Safety
+        </Paragraph>
       </Block>
     </Layout>
   );

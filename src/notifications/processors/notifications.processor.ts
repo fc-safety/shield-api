@@ -10,7 +10,16 @@ import {
 import { SendNewProductRequestEmailJobData } from '../lib/types';
 import { NotificationsService } from '../notifications.service';
 
-@Processor(QUEUE_NAMES.SEND_NOTIFICATIONS, { prefix: QUEUE_PREFIX })
+@Processor(QUEUE_NAMES.SEND_NOTIFICATIONS, {
+  prefix: QUEUE_PREFIX,
+  removeOnComplete: {
+    age: 3600, // keep up to 1 hour
+    count: 1000, // keep up to 1000 jobs
+  },
+  removeOnFail: {
+    age: 24 * 3600 * 7, // keep up to 7 days
+  },
+})
 export class NotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationsProcessor.name);
 
@@ -33,9 +42,7 @@ export class NotificationsProcessor extends WorkerHost {
 
   @OnWorkerEvent('active')
   onActive(job: Job<unknown>) {
-    this.logger.debug(`Processing job ${job.id} of type ${job.name}...`, {
-      jobData: job.data,
-    });
+    this.logger.debug(`Processing job ${job.id} of type ${job.name}...`);
   }
 
   async process(job: Job<unknown>) {

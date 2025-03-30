@@ -4,7 +4,7 @@ export const NotificationGroupIds = [
   'inspection_due_soon_alert_level_2',
   'inspection_due_soon_alert_level_3',
   'inspection_due_soon_alert_level_4',
-  'periodic_inspection_report',
+  'monthly_compliance_report',
   'asset_compliance_report',
 ] as const;
 export type NotificationGroupId = (typeof NotificationGroupIds)[number];
@@ -70,10 +70,10 @@ export const NotificationGroups: Record<
       daysThreshold: 3,
     },
   },
-  periodic_inspection_report: {
-    id: 'periodic_inspection_report',
-    name: 'Periodic Inspection Report',
-    description: 'Report of most recent inspection period.',
+  monthly_compliance_report: {
+    id: 'monthly_compliance_report',
+    name: 'Monthly Compliance Report',
+    description: 'Monthly report of asset compliance.',
   },
   asset_compliance_report: {
     id: 'asset_compliance_report',

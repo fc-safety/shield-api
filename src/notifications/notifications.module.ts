@@ -15,10 +15,22 @@ import { NotificationsProcessor } from './processors/notifications.processor';
     BullModule.registerQueue({
       name: QUEUE_NAMES.CLIENT_NOTIFICATIONS,
       prefix: QUEUE_PREFIX,
+      defaultJobOptions: {
+        backoff: {
+          type: 'exponential',
+          delay: 1000,
+        },
+      },
     }),
     BullModule.registerQueue({
       name: QUEUE_NAMES.SEND_NOTIFICATIONS,
       prefix: QUEUE_PREFIX,
+      defaultJobOptions: {
+        backoff: {
+          type: 'exponential',
+          delay: 1000,
+        },
+      },
     }),
     RolesModule,
     UsersModule,
