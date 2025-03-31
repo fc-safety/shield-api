@@ -33,11 +33,11 @@ import { NotificationsProcessor } from './processors/notifications.processor';
       name: QUEUE_NAMES.SEND_NOTIFICATIONS,
       prefix: QUEUE_PREFIX,
       defaultJobOptions: {
-        // attempts: 15,
-        // backoff: {
-        //   type: 'exponential',
-        //   delay: 3000,
-        // },
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
       },
     }),
     RolesModule,

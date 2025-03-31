@@ -177,7 +177,6 @@ export class NotificationsService {
   }
 
   async retryJob(queueName: string, jobId: string) {
-    console.debug('Retrying job', queueName, jobId);
     const job = await this.queues[queueName].getJob(jobId);
     if (!job) {
       throw new NotFoundException('Job not found');

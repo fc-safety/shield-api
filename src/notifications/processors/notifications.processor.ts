@@ -7,7 +7,11 @@ import {
   QUEUE_NAMES,
   QUEUE_PREFIX,
 } from '../lib/constants';
-import { SendNewProductRequestEmailJobData } from '../lib/types';
+import { TEMPLATE_NAME_MAP } from '../lib/templates';
+import {
+  SendEmailJobData,
+  SendNewProductRequestEmailJobData,
+} from '../lib/types';
 import { NotificationsService } from '../notifications.service';
 
 @Processor(QUEUE_NAMES.SEND_NOTIFICATIONS, {
@@ -61,6 +65,10 @@ export class NotificationsProcessor
         return await this.sendNewProductRequestEmail(
           job as Job<SendNewProductRequestEmailJobData>,
         );
+      case NOTIFICATIONS_JOB_NAMES.SEND_EMAIL:
+        return await this.sendEmail(job as Job<SendEmailJobData>);
+      default:
+        throw new Error(`Unknown job name: ${job.name}`);
     }
   }
 
@@ -85,5 +93,38 @@ export class NotificationsProcessor
         },
       });
     await this.notificationsService.sendNewProductRequestEmail(productRequest);
+  }
+
+  /**
+   * Sends an email.
+   *
+   * @param job The job to send the email for.
+   * @returns The result of the job.
+   */
+  private async sendEmail(job: Job<SendEmailJobData>) {
+    const { templateName, subject, to, templateProps } = job.data;
+
+    const Template = TEMPLATE_NAME_MAP[templateName];
+
+    if (!Template) {
+      throw new Error(
+        `Template for template name "${templateName}" is not defined.`,
+      );
+    }
+
+    if (!subject && !Template.Subject) {
+      throw new Error(
+        `Subject for notification group "${templateName}" is not defined.`,
+      );
+    }
+
+    const text = Template.Text(templateProps);
+
+    await this.notificationsService.sendEmail({
+      subject: subject ?? Template.Subject,
+      to,
+      text,
+      react: Template(templateProps),
+    });
   }
 }

@@ -18,6 +18,7 @@ import { groupBy } from 'src/common/utils';
 import { extensions, PrismaService } from 'src/prisma/prisma.service';
 import {
   CLIENT_NOTIFICATIONS_JOB_NAMES,
+  NOTIFICATIONS_JOB_NAMES,
   QUEUE_NAMES,
   QUEUE_PREFIX,
 } from '../lib/constants';
@@ -28,7 +29,6 @@ import {
   NotificationGroupId,
   NotificationGroups,
 } from '../notification-types';
-import { NotificationsService } from '../notifications.service';
 import InspectionDueSoonAlertLevel1TemplateReact from '../templates/inspection_due_soon_alert_level_1';
 import InspectionDueSoonAlertLevel2TemplateReact from '../templates/inspection_due_soon_alert_level_2';
 import InspectionDueSoonAlertLevel3TemplateReact from '../templates/inspection_due_soon_alert_level_3';
@@ -58,7 +58,8 @@ export class ClientNotificationsProcessor
     private readonly users: UsersService,
     @InjectQueue(QUEUE_NAMES.CLIENT_NOTIFICATIONS)
     private readonly clientNotificationsQueue: Queue,
-    private readonly notifications: NotificationsService,
+    @InjectQueue(QUEUE_NAMES.SEND_NOTIFICATIONS)
+    private readonly notificationsQueue: Queue,
   ) {
     super();
   }
@@ -94,8 +95,6 @@ export class ClientNotificationsProcessor
         return await this.processClientInspectionReminders(
           job as Job<ClientNotificationJobData>,
         );
-      case CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_EMAIL:
-        return await this.sendEmail(job as Job<SendEmailJobData>);
       case CLIENT_NOTIFICATIONS_JOB_NAMES.PROCESS_CLIENT_MONTHLY_INSPECTION_REPORTS:
         return await this.processClientMonthlyInspectionReports(
           job as Job<ClientNotificationJobData>,
@@ -251,14 +250,11 @@ export class ClientNotificationsProcessor
           ),
         };
 
-        await this.clientNotificationsQueue.add(
-          CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
-          {
-            notificationGroupId: notificationGroupId as NotificationGroupId,
-            to: [user.email],
-            templateProps: props,
-          } satisfies SendEmailJobData,
-        );
+        await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
+          templateName: notificationGroupId,
+          to: [user.email],
+          templateProps: props,
+        } satisfies SendEmailJobData);
       }
     }
 
@@ -397,14 +393,11 @@ export class ClientNotificationsProcessor
           typeof MonthlyInspectionReportTemplateReact
         >;
 
-        await this.clientNotificationsQueue.add(
-          CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
-          {
-            notificationGroupId: 'monthly_compliance_report',
-            to: [user.email],
-            templateProps: props,
-          } satisfies SendEmailJobData,
-        );
+        await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
+          templateName: 'monthly_compliance_report',
+          to: [user.email],
+          templateProps: props,
+        } satisfies SendEmailJobData);
       }
     }
 
@@ -417,39 +410,6 @@ export class ClientNotificationsProcessor
     }
 
     return {};
-  }
-
-  /**
-   * Sends an email.
-   *
-   * @param job The job to send the email for.
-   * @returns The result of the job.
-   */
-  private async sendEmail(job: Job<SendEmailJobData>) {
-    const { notificationGroupId, subject, to, templateProps } = job.data;
-
-    const Template = NOTIFICATION_GROUP_ID_TO_TEMPLATE_MAP[notificationGroupId];
-
-    if (!Template) {
-      throw new Error(
-        `Template for notification group "${notificationGroupId}" is not defined.`,
-      );
-    }
-
-    if (!subject && !Template.Subject) {
-      throw new Error(
-        `Subject for notification group "${notificationGroupId}" is not defined.`,
-      );
-    }
-
-    const text = Template.Text(templateProps);
-
-    await this.notifications.sendEmail({
-      subject: subject ?? Template.Subject,
-      to,
-      text,
-      react: Template(templateProps),
-    });
   }
 
   // Utility methods
@@ -546,16 +506,6 @@ type SharedInspectionReminderTemplateProps = React.ComponentProps<
   React.ComponentProps<typeof InspectionDueSoonAlertLevel2TemplateReact> &
   React.ComponentProps<typeof InspectionDueSoonAlertLevel3TemplateReact> &
   React.ComponentProps<typeof InspectionDueSoonAlertLevel4TemplateReact>;
-
-const NOTIFICATION_GROUP_ID_TO_TEMPLATE_MAP = {
-  inspection_reminder: InspectionReminderTemplateReact,
-  inspection_due_soon_alert_level_1: InspectionDueSoonAlertLevel1TemplateReact,
-  inspection_due_soon_alert_level_2: InspectionDueSoonAlertLevel2TemplateReact,
-  inspection_due_soon_alert_level_3: InspectionDueSoonAlertLevel3TemplateReact,
-  inspection_due_soon_alert_level_4: InspectionDueSoonAlertLevel4TemplateReact,
-  monthly_compliance_report: MonthlyInspectionReportTemplateReact,
-  // asset_compliance_report: AssetComplianceReportTemplateReact,
-} as const satisfies Partial<Record<NotificationGroupId, React.FC<any>>>;
 
 /**
  * Returns true if, given an inspection cycle and last inspected date, the threshold for the given notification group

@@ -1,11 +1,9 @@
-import { NotificationGroupId } from '../notification-types';
-
 export interface ClientNotificationJobData {
   clientId: string;
 }
 
 export interface SendEmailJobData {
-  notificationGroupId: NotificationGroupId;
+  templateName: string;
   subject?: string;
   to: string[];
   templateProps?: Record<string, unknown>;
