@@ -26,7 +26,6 @@ export class NotificationsController {
     @Param('queueName') queueName: string,
     @Param('jobId') jobId: string,
   ) {
-    console.debug('Retrying job', queueName, jobId);
     return this.notifications.retryJob(queueName, jobId);
   }
 
