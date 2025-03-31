@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { CreateEmailOptions, Resend } from 'resend';
 import { ApiConfigService } from 'src/config/api-config.service';
@@ -40,17 +40,24 @@ const loadTelnyxModule = async () => {
 export class NotificationsService {
   private readonly resend: Resend;
   private readonly telnyx: Promise<Telnyx>;
-
+  private readonly queues: Record<string, Queue>;
   constructor(
     private readonly settings: SettingsService,
     private readonly config: ApiConfigService,
     @InjectQueue(QUEUE_NAMES.SEND_NOTIFICATIONS)
     private readonly notificationsQueue: Queue,
+    @InjectQueue(QUEUE_NAMES.CLIENT_NOTIFICATIONS)
+    private readonly clientNotificationsQueue: Queue,
   ) {
     this.resend = new Resend(config.get('RESEND_API_KEY'));
     this.telnyx = loadTelnyxModule().then(
       (m) => new m.Telnyx(config.get('TELNYX_API_KEY')),
     );
+
+    this.queues = {
+      [this.notificationsQueue.name]: this.notificationsQueue,
+      [this.clientNotificationsQueue.name]: this.clientNotificationsQueue,
+    };
   }
 
   async sendEmail(options: SendEmailOptions) {
@@ -159,14 +166,28 @@ export class NotificationsService {
   }
 
   async getJobQueues() {
-    return [
-      {
-        queueName: this.notificationsQueue.name,
-        failedJobs: await this.notificationsQueue.getFailed(),
-        waitingJobs: await this.notificationsQueue.getWaiting(),
-        activeJobs: await this.notificationsQueue.getActive(),
-      },
-    ];
+    return Promise.all(
+      Object.values(this.queues).map(async (q) => ({
+        queueName: q.name,
+        failedJobs: await q.getFailed(),
+        waitingJobs: await q.getWaiting(),
+        activeJobs: await q.getActive(),
+      })),
+    );
+  }
+
+  async retryJob(queueName: string, jobId: string) {
+    console.debug('Retrying job', queueName, jobId);
+    const job = await this.queues[queueName].getJob(jobId);
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    await job.retry();
+  }
+
+  async removeJob(queueName: string, jobId: string) {
+    await this.queues[queueName].remove(jobId);
   }
 }
 

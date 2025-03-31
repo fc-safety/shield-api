@@ -1,5 +1,5 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Logger, OnApplicationShutdown } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
@@ -20,7 +20,10 @@ import { NotificationsService } from '../notifications.service';
     age: 24 * 3600 * 7, // keep up to 7 days
   },
 })
-export class NotificationsProcessor extends WorkerHost {
+export class NotificationsProcessor
+  extends WorkerHost
+  implements OnApplicationShutdown
+{
   private readonly logger = new Logger(NotificationsProcessor.name);
 
   constructor(
@@ -28,6 +31,13 @@ export class NotificationsProcessor extends WorkerHost {
     private readonly notificationsService: NotificationsService,
   ) {
     super();
+  }
+
+  async onApplicationShutdown(signal?: string): Promise<void> {
+    this.logger.log(
+      `Received shutdown signal: ${signal}. Closing ${NotificationsProcessor.name}...`,
+    );
+    await this.worker.close().catch((e) => this.logger.warn(e));
   }
 
   @OnWorkerEvent('error')

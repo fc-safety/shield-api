@@ -153,7 +153,7 @@ export default function MonthlyInspectionReportTemplateReact({
                 <Column align="left" className="h-10 w-1/4 bg-gray-50 px-2">
                   {row.categoryColor && (
                     <div
-                      className="size-3 rounded-sm inline-block mr-0.5"
+                      className="size-3 rounded-sm inline-block mr-1"
                       style={{ backgroundColor: row.categoryColor }}
                     />
                   )}
