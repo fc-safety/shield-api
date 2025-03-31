@@ -157,6 +157,17 @@ export class NotificationsService {
       text: NewProductRequestTemplateText(props),
     });
   }
+
+  async getJobQueues() {
+    return [
+      {
+        queueName: this.notificationsQueue.name,
+        failedJobs: await this.notificationsQueue.getFailed(),
+        waitingJobs: await this.notificationsQueue.getWaiting(),
+        activeJobs: await this.notificationsQueue.getActive(),
+      },
+    ];
+  }
 }
 
 function chunkArray<T>(arr: T[], batchSize: number): T[][] {

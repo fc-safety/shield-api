@@ -16,20 +16,28 @@ import { NotificationsProcessor } from './processors/notifications.processor';
       name: QUEUE_NAMES.CLIENT_NOTIFICATIONS,
       prefix: QUEUE_PREFIX,
       defaultJobOptions: {
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
+        // TODO: Determine appropriate number of attempts and delay. We don't want a parent job
+        // to repeat if it's already started adding children jobs to the next queue (aka sending
+        // duplicate notifications).
+        //
+        // This amounts to roughly half a day of retries, following this formula:
+        // 2^(attempts - 1) * delay ~= 13.65 hours
+        // attempts: 15,
+        // backoff: {
+        //   type: 'exponential',
+        //   delay: 3000,
+        // },
       },
     }),
     BullModule.registerQueue({
       name: QUEUE_NAMES.SEND_NOTIFICATIONS,
       prefix: QUEUE_PREFIX,
       defaultJobOptions: {
-        backoff: {
-          type: 'exponential',
-          delay: 1000,
-        },
+        // attempts: 15,
+        // backoff: {
+        //   type: 'exponential',
+        //   delay: 3000,
+        // },
       },
     }),
     RolesModule,

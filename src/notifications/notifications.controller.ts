@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { CheckPolicies } from 'src/auth/policies.guard';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
 import { NotificationsService } from './notifications.service';
@@ -14,5 +14,10 @@ export class NotificationsController {
     @Query('template') template?: 'test' | 'new-product-request',
   ) {
     return this.notifications.sendTestEmail(body, template);
+  }
+
+  @Get('job-queues')
+  async getJobQueues() {
+    return this.notifications.getJobQueues();
   }
 }
