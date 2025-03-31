@@ -170,7 +170,10 @@ export class ClientNotificationsProcessor extends WorkerHost {
             thresholdConfig: group.config,
           })
         ) {
-          inspectionReminderBuckets[group.id].push(asset);
+          if (!inspectionReminderBuckets.has(group.id)) {
+            inspectionReminderBuckets.set(group.id, []);
+          }
+          inspectionReminderBuckets.get(group.id)?.push(asset);
           break;
         }
       }
