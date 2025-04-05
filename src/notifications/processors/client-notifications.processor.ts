@@ -416,7 +416,7 @@ export class ClientNotificationsProcessor
 
   private async getClientUsers(clientId: string) {
     return this.users
-      .findAll({ limit: 10000, offset: 0 }, clientId, 'admin', true)
+      .findAll({ limit: 10000, offset: 0 }, clientId, true)
       .then((response) => response.results);
   }
 
