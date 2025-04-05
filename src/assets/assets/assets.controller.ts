@@ -13,9 +13,7 @@ import {
   CheckPolicies,
   CheckResourcePermissions,
 } from 'src/auth/policies.guard';
-import { ViewCtx } from 'src/common/decorators';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
-import { ViewContext } from 'src/common/utils';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
@@ -34,22 +32,13 @@ export class AssetsController {
   }
 
   @Get()
-  findAll(
-    @Query() queryAssetDto: QueryAssetDto,
-    @ViewCtx() context: ViewContext,
-  ) {
-    return this.assetsService.findAll(queryAssetDto, context);
+  findAll(@Query() queryAssetDto: QueryAssetDto) {
+    return this.assetsService.findAll(queryAssetDto);
   }
 
   @Get('latest-inspection')
-  findManyWithLatestInspection(
-    @Query() queryAssetDto: QueryAssetDto,
-    @ViewCtx() context: ViewContext,
-  ) {
-    return this.assetsService.findManyWithLatestInspection(
-      queryAssetDto,
-      context,
-    );
+  findManyWithLatestInspection(@Query() queryAssetDto: QueryAssetDto) {
+    return this.assetsService.findManyWithLatestInspection(queryAssetDto);
   }
 
   // No more than 10 requests per minute or 100 requests per 15 minutes.
@@ -66,8 +55,8 @@ export class AssetsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @ViewCtx() context: ViewContext) {
-    return this.assetsService.findOne(id, context);
+  findOne(@Param('id') id: string) {
+    return this.assetsService.findOne(id);
   }
 
   @Patch(':id')

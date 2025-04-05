@@ -13,6 +13,7 @@ import { Jwt, TokenExpiredError } from 'jsonwebtoken';
 import { expressJwtSecret } from 'jwks-rsa';
 import { ClsService } from 'nestjs-cls';
 import { isIPv4, isIPv6 } from 'net';
+import { getViewContext } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { buildUserFromToken } from './user.schema';
 
@@ -37,6 +38,8 @@ export class AuthGuard implements CanActivate {
     ]);
 
     const request = context.switchToHttp().getRequest<Request>();
+    this.cls.set('viewContext', getViewContext(request));
+
     const token = this.extractTokenFromHeader(request);
     if (!token) {
       if (isPublic) {

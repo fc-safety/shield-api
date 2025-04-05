@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { as404OrThrow, ViewContext } from 'src/common/utils';
+import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -16,8 +16,8 @@ export class ClientsService {
       .then((prisma) => prisma.client.create({ data: createClientDto }));
   }
 
-  async findAll(queryClientDto: QueryClientDto, context: ViewContext) {
-    return this.prisma.forContext(context).then((prisma) =>
+  async findAll(queryClientDto: QueryClientDto) {
+    return this.prisma.forContext().then((prisma) =>
       prisma.client.findManyForPage(
         buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
           include: {
@@ -32,7 +32,7 @@ export class ClientsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.client
         .findUniqueOrThrow({
           where: { id },

@@ -113,7 +113,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     }
   }
 
-  public async forContext(context: ViewContext) {
+  public async forContext(_context?: ViewContext) {
+    const context = _context ?? this.cls.get('viewContext');
     if (context === 'admin') {
       return this.forAdminOrUser();
     } else {
@@ -198,6 +199,9 @@ export const extensions = {
   bypassRLS: () => {
     return Prisma.defineExtension((prisma) =>
       prisma.$extends({
+        client: {
+          $viewContext: 'admin' as ViewContext,
+        },
         query: {
           $allModels: {
             async $allOperations({ args, query }) {
@@ -218,6 +222,7 @@ export const extensions = {
       prisma.$extends({
         client: {
           $currentUser: () => person,
+          $viewContext: 'user' as ViewContext,
         },
         query: {
           $allModels: {

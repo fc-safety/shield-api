@@ -18,10 +18,7 @@ const BaseQuerySiteFiltersSchema = z
     externalId: prismaStringFilter(z.string()),
     address: filterAddressSchema,
     primary: prismaBoolFilter(z.coerce.boolean()),
-    parentSiteId: prismaStringFilter(
-      z.string(),
-      z.string().transform((id) => (id === 'null' ? null : id)),
-    ),
+    parentSiteId: prismaStringFilter(z.string()),
     clientId: prismaStringFilter(z.string()),
   })
   .partial() satisfies z.Schema<Prisma.SiteWhereInput>;

@@ -11,7 +11,7 @@ import { UsersService } from 'src/clients/users/users.service';
 import { testAlertRule } from 'src/common/alert-utils';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
 import { CommonClsStore } from 'src/common/types';
-import { as404OrThrow, ViewContext } from 'src/common/utils';
+import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import TeamInspectionReminderTemplateReact, {
@@ -44,8 +44,8 @@ export class AssetsService {
       .then((prisma) => prisma.asset.create({ data: createAssetDto }));
   }
 
-  async findAll(queryAssetDto: QueryAssetDto, context: ViewContext) {
-    return this.prisma.forContext(context).then(async (prisma) =>
+  async findAll(queryAssetDto: QueryAssetDto) {
+    return this.prisma.forContext().then(async (prisma) =>
       prisma.asset.findManyForPage(
         buildPrismaFindArgs<typeof prisma.asset>(queryAssetDto, {
           include: {
@@ -72,9 +72,9 @@ export class AssetsService {
     );
   }
 
-  async findOne(id: string, context: ViewContext) {
+  async findOne(id: string) {
     return this.prisma
-      .forContext(context)
+      .forContext()
       .then((prisma) =>
         prisma.asset.findUniqueOrThrow({
           where: { id },
@@ -138,11 +138,8 @@ export class AssetsService {
       .catch(as404OrThrow);
   }
 
-  async findManyWithLatestInspection(
-    queryAssetDto: QueryAssetDto,
-    context: ViewContext,
-  ) {
-    return this.prisma.forContext(context).then((prisma) =>
+  async findManyWithLatestInspection(queryAssetDto: QueryAssetDto) {
+    return this.prisma.forContext().then((prisma) =>
       prisma.asset.findManyForPage(
         buildPrismaFindArgs<typeof prisma.asset>(queryAssetDto, {
           include: {
@@ -384,7 +381,7 @@ export class AssetsService {
       offset: 0,
     });
 
-    const asset = await this.findOne(id, 'user');
+    const asset = await this.findOne(id);
     const templateProps: Omit<
       TeamInspectionReminderTemplateProps,
       'firstName'

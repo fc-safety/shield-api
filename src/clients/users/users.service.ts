@@ -6,7 +6,7 @@ import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
 import { CommonClsStore } from 'src/common/types';
-import { as404OrThrow, ViewContext } from 'src/common/utils';
+import { as404OrThrow } from 'src/common/utils';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -29,10 +29,9 @@ export class UsersService {
   async create(
     createUserDto: CreateUserDto,
     clientId?: string,
-    viewContext?: ViewContext,
     bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, viewContext, bypassRLS);
+    const client = await this.getClient(clientId, bypassRLS);
     const newId = createId();
 
     const attributes = KeycloakService.mergeAttributes(
@@ -55,16 +54,15 @@ export class UsersService {
       emailVerified: true,
       attributes,
     });
-    return this.findOne(newId, clientId, viewContext);
+    return this.findOne(newId, clientId);
   }
 
   async findAll(
     queryUserDto: QueryUserDto = new QueryUserDto(),
     clientId?: string,
-    viewContext?: ViewContext,
     bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, viewContext, bypassRLS);
+    const client = await this.getClient(clientId, bypassRLS);
 
     const { offset, limit } = queryUserDto;
     return this.keycloak
@@ -91,33 +89,17 @@ export class UsersService {
       });
   }
 
-  async findOne(
-    id: string,
-    clientId?: string,
-    viewContext?: ViewContext,
-    bypassRLS?: boolean,
-  ) {
-    const keycloakUser = await this.getKeycloakUser(
-      id,
-      clientId,
-      viewContext,
-      bypassRLS,
-    );
+  async findOne(id: string, clientId?: string, bypassRLS?: boolean) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
     return keycloakUserAsClientUser(keycloakUser);
   }
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
     clientId?: string,
-    viewContext?: ViewContext,
     bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(
-      id,
-      clientId,
-      viewContext,
-      bypassRLS,
-    );
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
 
     const attributes = KeycloakService.mergeAttributes(
       keycloakUser.attributes,
@@ -146,15 +128,9 @@ export class UsersService {
     id: string,
     assignRoleDto: AssignRoleDto,
     clientId?: string,
-    viewContext?: ViewContext,
     bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(
-      id,
-      clientId,
-      viewContext,
-      bypassRLS,
-    );
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
 
     // Get all role groups to check existing memberships and remove them. A user can only have one role.
     const allRoleGroups = await this.roles.getRoleGroups();
@@ -189,11 +165,7 @@ export class UsersService {
     });
   }
 
-  private async getClient(
-    clientId?: string,
-    context?: ViewContext,
-    bypassRLS?: boolean,
-  ) {
+  private async getClient(clientId?: string, bypassRLS?: boolean) {
     let thisClientId = clientId;
     let prisma: ReturnType<typeof this.prisma.extended>;
 
@@ -204,9 +176,7 @@ export class UsersService {
     } else if (bypassRLS) {
       prisma = this.prisma.bypassRLS();
     } else {
-      prisma = await (context
-        ? this.prisma.forContext(context)
-        : this.prisma.forAdminOrUser());
+      prisma = await this.prisma.forContext();
     }
 
     return prisma.client
@@ -222,10 +192,9 @@ export class UsersService {
   private async getKeycloakUser(
     id: string,
     clientId?: string,
-    context?: ViewContext,
     bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, context, bypassRLS);
+    const client = await this.getClient(clientId, bypassRLS);
     const user = await this.keycloak
       .findUsersByAttribute({
         filter: {

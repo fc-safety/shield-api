@@ -9,8 +9,6 @@ import {
   Query,
 } from '@nestjs/common';
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
-import { ViewCtx } from 'src/common/decorators';
-import { ViewContext } from 'src/common/utils';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { QueryTagDto } from './dto/query-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
@@ -27,16 +25,13 @@ export class TagsController {
   }
 
   @Get()
-  findAll(@Query() queryTagDto: QueryTagDto, @ViewCtx() context: ViewContext) {
-    return this.tagsService.findAll(queryTagDto, context);
+  findAll(@Query() queryTagDto: QueryTagDto) {
+    return this.tagsService.findAll(queryTagDto);
   }
 
   @Get('externalId/:externalId')
-  findOneByExternalId(
-    @Param('externalId') externalId: string,
-    @ViewCtx() context: ViewContext,
-  ) {
-    return this.tagsService.findOneByExternalId(externalId, context);
+  findOneByExternalId(@Param('externalId') externalId: string) {
+    return this.tagsService.findOneByExternalId(externalId);
   }
 
   @Get(':id')

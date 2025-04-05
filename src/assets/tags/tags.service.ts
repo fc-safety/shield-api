@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { as404OrThrow, ViewContext } from 'src/common/utils';
+import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTagDto } from './dto/create-tag.dto';
@@ -16,8 +16,8 @@ export class TagsService {
       .then((prisma) => prisma.tag.create({ data: createTagDto }));
   }
 
-  async findAll(queryTagDto: QueryTagDto | undefined, context: ViewContext) {
-    return this.prisma.forContext(context).then(async (prisma) =>
+  async findAll(queryTagDto: QueryTagDto | undefined) {
+    return this.prisma.forContext().then(async (prisma) =>
       prisma.tag.findManyForPage(
         buildPrismaFindArgs<typeof prisma.tag>(queryTagDto, {
           include: {
@@ -32,7 +32,7 @@ export class TagsService {
 
   async findOne(id: string) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) =>
         prisma.tag.findUniqueOrThrow({
           where: { id },
@@ -46,9 +46,9 @@ export class TagsService {
       .catch(as404OrThrow);
   }
 
-  async findOneByExternalId(externalId: string, context: ViewContext) {
+  async findOneByExternalId(externalId: string) {
     return this.prisma
-      .forContext(context)
+      .forContext()
       .then((prisma) =>
         prisma.tag.findFirstOrThrow({
           where: { externalId },

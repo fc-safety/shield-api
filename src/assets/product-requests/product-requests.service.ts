@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProductRequestStatus } from '@prisma/client';
-import { ViewContext } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -34,15 +33,10 @@ export class ProductRequestsService {
     );
   }
 
-  async findAll(query?: QueryProductRequestDto, context?: ViewContext) {
-    const getClient =
-      context === 'admin'
-        ? this.prisma.forAdminOrUser()
-        : this.prisma.forUser();
-
-    return getClient.then((client) =>
-      client.productRequest.findManyForPage(
-        buildPrismaFindArgs<typeof client.productRequest>(query, {
+  async findAll(query?: QueryProductRequestDto) {
+    return this.prisma.forContext().then((prisma) =>
+      prisma.productRequest.findManyForPage(
+        buildPrismaFindArgs<typeof prisma.productRequest>(query, {
           include: {
             productRequestItems: {
               include: {
@@ -64,7 +58,7 @@ export class ProductRequestsService {
               },
             },
             requestor: true,
-            client: context === 'admin',
+            client: prisma.$viewContext === 'admin',
             site: true,
           },
         }),

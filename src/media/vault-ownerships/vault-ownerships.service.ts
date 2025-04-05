@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ViewContext } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from '../../prisma/prisma.service'; // Adjusted the import path
 import { CreateVaultOwnershipDto } from './dto/create-vault-ownership.dto';
@@ -18,12 +17,9 @@ export class VaultOwnershipsService {
     );
   }
 
-  async findAll(
-    queryViewOwnershipDto: QueryViewOwnershipDto,
-    context: ViewContext,
-  ) {
+  async findAll(queryViewOwnershipDto: QueryViewOwnershipDto) {
     return await this.prisma
-      .forContext(context)
+      .forContext()
       .then((prisma) =>
         prisma.vaultOwnership.findManyForPage(
           buildPrismaFindArgs<typeof prisma.vaultOwnership>(
@@ -34,7 +30,7 @@ export class VaultOwnershipsService {
   }
 
   async findOne(id: string) {
-    return await this.prisma.forUser().then((prisma) =>
+    return await this.prisma.forContext().then((prisma) =>
       prisma.vaultOwnership.findUnique({
         where: { id },
       }),

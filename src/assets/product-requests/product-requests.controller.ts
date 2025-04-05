@@ -12,8 +12,6 @@ import {
   CheckPolicies,
   CheckResourcePermissions,
 } from 'src/auth/policies.guard';
-import { ViewCtx } from 'src/common/decorators';
-import { ViewContext } from 'src/common/utils';
 import { CreateProductRequestDto } from './dto/create-product-request.dto';
 import { QueryProductRequestDto } from './dto/query-product-request.dto';
 import { ReviewProductRequestDto } from './dto/review-product-request.dto';
@@ -34,11 +32,8 @@ export class ProductRequestsController {
   }
 
   @Get()
-  findAll(
-    @Query() query: QueryProductRequestDto,
-    @ViewCtx() context: ViewContext,
-  ) {
-    return this.productRequestsService.findAll(query, context);
+  findAll(@Query() query: QueryProductRequestDto) {
+    return this.productRequestsService.findAll(query);
   }
 
   @Get(':id')

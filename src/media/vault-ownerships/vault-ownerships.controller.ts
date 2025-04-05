@@ -9,8 +9,6 @@ import {
   Query,
 } from '@nestjs/common';
 import { CheckIsAuthenticated } from 'src/auth/policies.guard';
-import { ViewCtx } from 'src/common/decorators';
-import { type ViewContext } from 'src/common/utils';
 import { CreateVaultOwnershipDto } from './dto/create-vault-ownership.dto';
 import { QueryViewOwnershipDto } from './dto/query-view-ownership.dto';
 import { UpdateVaultOwnershipDto } from './dto/update-vault-ownership.dto';
@@ -29,11 +27,8 @@ export class VaultOwnershipsController {
   }
 
   @Get()
-  findAll(
-    @Query() queryViewOwnershipDto: QueryViewOwnershipDto,
-    @ViewCtx() context: ViewContext,
-  ) {
-    return this.vaultOwnershipsService.findAll(queryViewOwnershipDto, context);
+  findAll(@Query() queryViewOwnershipDto: QueryViewOwnershipDto) {
+    return this.vaultOwnershipsService.findAll(queryViewOwnershipDto);
   }
 
   @Get('key/*')

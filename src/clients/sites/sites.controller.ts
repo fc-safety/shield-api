@@ -9,8 +9,6 @@ import {
   Query,
 } from '@nestjs/common';
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
-import { ViewCtx } from 'src/common/decorators';
-import { ViewContext } from 'src/common/utils';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { QuerySiteDto } from './dto/query-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
@@ -27,11 +25,8 @@ export class SitesController {
   }
 
   @Get()
-  findAll(
-    @Query() querySiteDto: QuerySiteDto,
-    @ViewCtx() context: ViewContext,
-  ) {
-    return this.sitesService.findAll(querySiteDto, context);
+  findAll(@Query() querySiteDto: QuerySiteDto) {
+    return this.sitesService.findAll(querySiteDto);
   }
 
   @Get(':id')
