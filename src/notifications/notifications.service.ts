@@ -7,10 +7,10 @@ import { SettingsService } from 'src/settings/settings.service';
 import type Telnyx from 'telnyx';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
 import { NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
-import NewProductRequestTemplateReact, {
+import { SendEmailJobData } from './lib/types';
+import {
   NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS,
   NewProductRequestTemplateProps,
-  NewProductRequestTemplateText,
 } from './templates/new-product-request';
 import TestTemplateReact, { TestTemplateText } from './templates/test';
 
@@ -152,17 +152,16 @@ export class NotificationsService {
       data: { productRequestToAddress },
     } = await this.settings.getGlobalSettings();
 
-    const props: NewProductRequestTemplateProps = {
+    const props = {
       productRequest,
       frontendUrl: this.config.get('FRONTEND_URL'),
-    };
+    } satisfies NewProductRequestTemplateProps;
 
-    return this.sendEmail({
-      to: productRequestToAddress,
-      subject: 'New Product Request',
-      react: NewProductRequestTemplateReact(props),
-      text: NewProductRequestTemplateText(props),
-    });
+    await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
+      templateName: 'new_product_request',
+      to: [productRequestToAddress],
+      templateProps: props,
+    } satisfies SendEmailJobData);
   }
 
   async getJobQueues() {

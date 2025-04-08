@@ -112,10 +112,28 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
     },
   };
 
-export function NewProductRequestTemplateText({
+function NewProductRequestTemplateText({
   productRequest,
+  frontendUrl,
 }: NewProductRequestTemplateProps) {
-  return `New Product Request: ${productRequest.id}`;
+  return `
+  Hi,
+
+  ${productRequest.requestor.firstName} ${productRequest.requestor.lastName} has submitted a new supply request on behalf of ${productRequest.client.name}.
+
+  Supply Name               | SKU           | Qty
+  ------------------------- | ------------- | ---------
+  ${productRequest.productRequestItems.map((item) => `${item.product.name} | ${item.product.sku} | ${item.quantity}`).join('\n')}
+
+  To view the supply request, please visit the link below:
+
+  ${getProductRequestUrl(productRequest.id, frontendUrl)}
+
+  Regards,
+
+  Shield Team
+  FC Safety
+  `;
 }
 
 export default function NewProductRequestTemplateReact({
@@ -130,25 +148,31 @@ export default function NewProductRequestTemplateReact({
         <Paragraph>Hi,</Paragraph>
         <Paragraph>
           {productRequest.requestor.firstName}{' '}
-          {productRequest.requestor.lastName} has submitted a new product
-          request on behalf of {productRequest.client.name}.
+          {productRequest.requestor.lastName} has submitted a new supply request
+          on behalf of {productRequest.client.name}.
         </Paragraph>
       </Block>
       <Block>
         <Row>
-          <Column align="left" className="h-10 w-5/6 bg-gray-200 px-2">
-            Items
+          <Column align="left" className="h-10 w-4/6 bg-gray-200 px-2">
+            Supply Name
           </Column>
-          <Column align="center" className="h-10 w-1/6 bg-gray-200 px-2">
+          <Column align="right" className="h-10 w-1/6 bg-gray-200 px-2">
+            SKU
+          </Column>
+          <Column align="right" className="h-10 w-1/6 bg-gray-200 px-2">
             Qty
           </Column>
         </Row>
         {productRequest.productRequestItems.map((item) => (
           <Row key={item.id} className="text-sm">
-            <Column align="left" className="h-8 w-5/6 bg-gray-50 px-2">
+            <Column align="left" className="h-8 w-4/6 bg-gray-50 px-2">
               {item.product.name}
             </Column>
-            <Column align="center" className="h-8 w-1/6 bg-gray-50 px-2">
+            <Column align="right" className="h-8 w-1/6 bg-gray-50 px-2">
+              {item.product.sku}
+            </Column>
+            <Column align="right" className="h-8 w-1/6 bg-gray-50 px-2">
               {item.quantity}
             </Column>
           </Row>
@@ -156,7 +180,7 @@ export default function NewProductRequestTemplateReact({
       </Block>
       <Block className="text-center">
         <Paragraph>
-          To view the product request, please click the link below:
+          To view the supply request, please click the link below:
         </Paragraph>
         <Button
           href={url}
@@ -180,6 +204,8 @@ export default function NewProductRequestTemplateReact({
 NewProductRequestTemplateReact.PreviewProps = {
   ...NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS,
 };
+
+NewProductRequestTemplateReact.Text = NewProductRequestTemplateText;
 
 const getProductRequestUrl = (id: string, frontendUrl: string) => {
   return (
