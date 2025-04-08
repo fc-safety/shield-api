@@ -73,7 +73,7 @@ export function TeamInspectionReminderTemplateSms(
   );
 }
 
-export function TeamInspectionReminderTemplateText(
+function TeamInspectionReminderTemplateText(
   props: TeamInspectionReminderTemplateProps,
 ): string {
   return `
@@ -146,6 +146,9 @@ export default function TeamInspectionReminderTemplateReact(
     </Layout>
   );
 }
+
+TeamInspectionReminderTemplateReact.Subject = 'Team Inspection Reminder';
+TeamInspectionReminderTemplateReact.Text = TeamInspectionReminderTemplateText;
 
 TeamInspectionReminderTemplateReact.PreviewProps = {
   ...TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS,

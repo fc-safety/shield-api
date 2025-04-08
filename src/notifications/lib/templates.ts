@@ -20,4 +20,12 @@ export const TEMPLATE_NAME_MAP = {
   // Other templates
   new_product_request: NewProductRequestTemplateReact,
   team_inspection_reminder: TeamInspectionReminderTemplateReact,
-} as const satisfies Record<string, React.FC<any>>;
+} as const satisfies Record<
+  string,
+  React.FC<any> & {
+    Subject: string;
+    Text: (props: any) => string;
+    // TODO: Make required once we fully implement SMS notifications.
+    Sms?: (props: any) => string;
+  }
+>;

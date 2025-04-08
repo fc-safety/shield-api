@@ -207,6 +207,7 @@ NewProductRequestTemplateReact.PreviewProps = {
 
 NewProductRequestTemplateReact.Text = NewProductRequestTemplateText;
 
+NewProductRequestTemplateReact.Subject = 'New Product Request';
 const getProductRequestUrl = (id: string, frontendUrl: string) => {
   return (
     URL.parse(`/admin/product-requests/${id}`, frontendUrl)?.toString() ?? '#'
