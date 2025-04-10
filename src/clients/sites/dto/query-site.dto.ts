@@ -3,6 +3,7 @@ import { createZodDto } from 'nestjs-zod';
 import { filterAddressSchema, orderAddressSchema } from 'src/common/schema';
 import {
   buildFixedQuerySchema,
+  emptyAsObject,
   prismaBoolFilter,
   prismaDateTimeFilter,
   PrismaOrderEmum,
@@ -27,14 +28,9 @@ const BaseQuerySiteFilterSchemaWithSubsites = BaseQuerySiteFiltersSchema.extend(
   {
     subsites: z
       .object({
-        every: BaseQuerySiteFiltersSchema,
-        some: BaseQuerySiteFiltersSchema,
-        none: z.preprocess((data) => {
-          if (data === undefined || data === '') {
-            return {};
-          }
-          return data;
-        }, BaseQuerySiteFiltersSchema),
+        every: emptyAsObject(BaseQuerySiteFiltersSchema),
+        some: emptyAsObject(BaseQuerySiteFiltersSchema),
+        none: emptyAsObject(BaseQuerySiteFiltersSchema),
       })
       .partial(),
   },

@@ -25,7 +25,7 @@ export const CreateSiteSchema = z.object({
   phoneNumber: z.string(),
   subsites: z
     .object({
-      connect: z.array(z.object({ id: z.string() })),
+      connect: z.array(z.object({ id: z.string() })).min(1),
     })
     .optional(),
 }) satisfies z.Schema<Prisma.SiteCreateInput>;

@@ -119,3 +119,11 @@ export const buildPrismaFindArgs = <T>(
     skip: offset,
   } as any;
 };
+
+export const emptyAsObject = <T extends z.ZodTypeAny>(zodType: T) =>
+  z.preprocess((data) => {
+    if (data === undefined || data === '') {
+      return {};
+    }
+    return data;
+  }, zodType);
