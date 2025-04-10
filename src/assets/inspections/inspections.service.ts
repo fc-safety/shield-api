@@ -154,6 +154,7 @@ export class InspectionsService {
               },
             },
             inspector: true,
+            site: true,
           },
         }),
       ),
