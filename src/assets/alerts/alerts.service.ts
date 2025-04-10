@@ -29,6 +29,7 @@ export class AlertsService {
                 assetQuestion: true,
               },
             },
+            site: true,
           },
         }),
       ),
