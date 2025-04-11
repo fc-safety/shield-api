@@ -145,6 +145,7 @@ export class AssetsService {
           include: {
             inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
             client: true,
+            product: true,
           },
         }),
       ),
