@@ -1,6 +1,8 @@
 # Builder image
 FROM node:22 AS builder
 
+ARG DATABASE_URL
+
 # Create app directory
 WORKDIR /usr/src/app
 
