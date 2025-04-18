@@ -1,0 +1,27 @@
+SELECT
+    i."id",
+    i."createdOn",
+    i."assetId",
+    i."inspectorId",
+    i."siteId",
+    person."firstName" || ' ' || person."lastName" AS "inspectorName",
+    a."name" AS "assetName",
+    a."serialNumber" AS "assetSerialNumber",
+    a."location" AS "assetLocation",
+    a."placement" AS "assetPlacement",
+    p."name" AS "productName",
+    pc."name" AS "productCategoryName",
+    pc."shortName" AS "productCategoryShortName",
+    pc."icon" AS "productCategoryIcon",
+    pc."color" AS "productCategoryColor",
+    m."name" AS "manufacturerName",
+    s."name" AS "siteName",
+    t."serialNumber" AS "tagSerialNumber"
+FROM "Inspection" i
+JOIN "Asset" a ON i."assetId" = a."id"
+JOIN "Product" p ON a."productId" = p."id"
+JOIN "ProductCategory" pc ON p."productCategoryId" = pc."id"
+JOIN "Manufacturer" m ON p."manufacturerId" = m."id"
+JOIN "Site" s ON a."siteId" = s."id"
+JOIN "Tag" t ON a."tagId" = t."id"
+JOIN "Person" person ON i."inspectorId" = person."id"

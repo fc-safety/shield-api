@@ -1,6 +1,6 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, PrismaPromise } from '@prisma/client';
 import { Cache } from 'cache-manager';
 import { ClsService } from 'nestjs-cls';
 import { TVisibility } from 'src/auth/permissions';
@@ -218,8 +218,22 @@ export const extensions = {
   },
 
   forUser: (person: Person) => {
-    return Prisma.defineExtension((prisma) =>
-      prisma.$extends({
+    return Prisma.defineExtension((prisma) => {
+      const setContextAndExecute = async <P extends PrismaPromise<any>>(
+        transactionArg: P,
+      ) => {
+        const [, , , , , result] = await prisma.$transaction([
+          prisma.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
+          prisma.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
+          prisma.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIds}, TRUE)`,
+          prisma.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
+          prisma.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
+          transactionArg,
+        ]);
+        return result;
+      };
+
+      return prisma.$extends({
         client: {
           $currentUser: () => person,
           $viewContext: 'user' as ViewContext,
@@ -237,21 +251,27 @@ export const extensions = {
                   client: { connect: { id: person.clientId } },
                 };
               }
-
-              const [, , , , , result] = await prisma.$transaction([
-                prisma.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
-                prisma.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
-                prisma.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIds}, TRUE)`,
-                prisma.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
-                prisma.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
-                query(args),
-              ]);
-              return result;
+              return await setContextAndExecute(query(args));
             },
           },
+          $queryRaw: ({ args, query }) => {
+            return setContextAndExecute(query(args));
+          },
+          $queryRawTyped: ({ args, query }) => {
+            return setContextAndExecute(query(args));
+          },
+          $queryRawUnsafe: ({ args, query }) => {
+            return setContextAndExecute(query(args));
+          },
+          $executeRaw: ({ args, query }) => {
+            return setContextAndExecute(query(args));
+          },
+          $executeRawUnsafe: ({ args, query }) => {
+            return setContextAndExecute(query(args));
+          },
         },
-      }),
-    );
+      });
+    });
   },
 
   restExtensions: () => {
