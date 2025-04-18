@@ -29,7 +29,7 @@ WORKDIR /app
 
 COPY --from=builder /usr/src/app/dist ./dist
 # Copy Prisma engines to a special tmp directory for Prisma to find.
-COPY --from=builder /usr/src/app/src/generated/prisma/client/*.node /tmp/prisma-engines/
+COPY --from=builder /usr/src/app/src/generated/prisma/client/*.node ./dist/generated/prisma/client/
 COPY --from=builder /usr/src/app/prisma ./prisma
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/entrypoint.sh .
