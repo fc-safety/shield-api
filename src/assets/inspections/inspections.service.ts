@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { InspectionSessionStatus } from '@prisma/client';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
+import { InspectionSessionStatus } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssetsService } from '../assets/assets.service';
 import { CreateInspectionDto } from './dto/create-inspection.dto';

@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export type PrismaQueryFilters<T extends { where?: any; orderBy?: any }> =

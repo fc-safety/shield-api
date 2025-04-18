@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from 'src/generated/prisma/client';
 const prisma = new PrismaClient();
 async function main() {
   await prisma.$executeRaw`SELECT set_config('app.bypass_rls', 'on', FAlSE)`;

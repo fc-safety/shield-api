@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from 'src/generated/prisma/client';
 
 // Utility type to replace hyphens with underscores
 type ReplaceHyphensAndUppercase<T extends string> =

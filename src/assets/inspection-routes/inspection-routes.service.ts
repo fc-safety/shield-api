@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { buildPrismaFindArgs } from 'src/common/validation';
+import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInspectionRoutePointDto } from './dto/create-inspection-route-point.dto';
 import { CreateInspectionRouteDto } from './dto/create-inspection-route.dto';

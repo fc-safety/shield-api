@@ -1,11 +1,11 @@
+import { Button, Column, Row } from '@react-email/components';
+import React from 'react';
 import {
   ClientStatus,
   Prisma,
   ProductRequestStatus,
   ProductType,
-} from '@prisma/client';
-import { Button, Column, Row } from '@react-email/components';
-import React from 'react';
+} from 'src/generated/prisma/client';
 import { Block } from './components/block';
 import { Layout } from './components/layout';
 import { Paragraph } from './components/paragraph';

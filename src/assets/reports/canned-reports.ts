@@ -1,17 +1,15 @@
 import { TypedSql } from '@prisma/client/runtime/library';
+import { format } from 'date-fns';
 import {
   getActiveAssets,
   getInspections,
   getOverdueAssets,
-} from '@prisma/client/sql';
-import { format } from 'date-fns';
+} from 'src/generated/prisma/client/sql';
 import { CannedReport } from './types';
 
 type TypedSqlResult<T> = T extends TypedSql<[], infer R> ? R : never;
 
-type ActiveAssetRow = TypedSqlResult<
-  Awaited<ReturnType<typeof getActiveAssets>>
->;
+type ActiveAssetRow = TypedSqlResult<ReturnType<typeof getActiveAssets>>;
 const ActiveAssetsCannedReport: CannedReport<ActiveAssetRow> = {
   id: 'active-assets',
   name: 'Active Assets',
@@ -43,9 +41,7 @@ const ActiveAssetsCannedReport: CannedReport<ActiveAssetRow> = {
   },
 };
 
-type OverdueAssetRow = TypedSqlResult<
-  Awaited<ReturnType<typeof getOverdueAssets>>
->;
+type OverdueAssetRow = TypedSqlResult<ReturnType<typeof getOverdueAssets>>;
 const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
   id: 'overdue-assets',
   name: 'Overdue Assets',
@@ -78,7 +74,7 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
   },
 };
 
-type InspectionRow = TypedSqlResult<Awaited<ReturnType<typeof getInspections>>>;
+type InspectionRow = TypedSqlResult<ReturnType<typeof getInspections>>;
 const AllInspectionsCannedReport: CannedReport<InspectionRow> = {
   id: 'all-inspections',
   name: 'All Inspections',

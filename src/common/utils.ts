@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { Request } from 'express';
+import { Prisma } from 'src/generated/prisma/client';
 
 export const as404OrThrow = (e: unknown) => {
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {

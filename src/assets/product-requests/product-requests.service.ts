@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ProductRequestStatus } from '@prisma/client';
 import { buildPrismaFindArgs } from 'src/common/validation';
+import { ProductRequestStatus } from 'src/generated/prisma/client';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProductRequestDto } from './dto/create-product-request.dto';

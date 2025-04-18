@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { QueryConsumableFiltersSchema } from 'src/assets/consumables/dto/query-consumable.dto';
 import {
@@ -10,6 +9,7 @@ import {
   PrismaOrderEmum,
   prismaStringFilter,
 } from 'src/common/validation';
+import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 const BaseQueryProductFiltersSchema = z

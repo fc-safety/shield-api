@@ -1,5 +1,5 @@
-import { Prisma, ProductRequestStatus } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
+import { Prisma, ProductRequestStatus } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 const UpdateProductRequestStatusSchema = z.object({

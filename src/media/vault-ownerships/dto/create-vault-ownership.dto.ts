@@ -1,5 +1,5 @@
-import { Prisma, VaultAccessType } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
+import { Prisma, VaultAccessType } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export const CreateVaultOwnershipSchema = z.object({

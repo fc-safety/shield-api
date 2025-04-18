@@ -5,7 +5,6 @@ import {
   WorkerHost,
 } from '@nestjs/bullmq';
 import { Logger, OnApplicationShutdown } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { Job, Queue } from 'bullmq';
 import { addDays, addMilliseconds, isBefore, isToday } from 'date-fns';
 import React from 'react';
@@ -15,6 +14,7 @@ import { TVisibility, VISIBILITY_VALUES } from 'src/auth/permissions';
 import { ClientUser } from 'src/clients/users/model/client-user';
 import { UsersService } from 'src/clients/users/users.service';
 import { groupBy } from 'src/common/utils';
+import { Prisma } from 'src/generated/prisma/client';
 import { extensions, PrismaService } from 'src/prisma/prisma.service';
 import {
   CLIENT_NOTIFICATIONS_JOB_NAMES,

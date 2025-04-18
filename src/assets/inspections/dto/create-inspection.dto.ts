@@ -1,6 +1,6 @@
-import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { CreateAssetQuestionResponseSchema } from 'src/assets/assets/dto/setup-asset.dto';
+import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 const CreateInspectionSchema = z.object({

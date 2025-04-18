@@ -1,4 +1,3 @@
-import { $Enums } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import {
   differenceInDays,
@@ -8,6 +7,7 @@ import {
   isSameDay,
   parseISO,
 } from 'date-fns';
+import { $Enums } from 'src/generated/prisma/client';
 import {
   CreateAssetAlertCriterionRuleSchema,
   RuleClauseSchema,

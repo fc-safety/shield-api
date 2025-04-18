@@ -1,11 +1,11 @@
+import { createZodDto } from 'nestjs-zod';
 import {
   AlertLevel,
   AssetQuestionResponseType,
   AssetQuestionType,
   ConsumableMappingType,
   Prisma,
-} from '@prisma/client';
-import { createZodDto } from 'nestjs-zod';
+} from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 const RuleClauseObjectSchema = z

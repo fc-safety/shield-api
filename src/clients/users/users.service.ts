@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
-import { Prisma } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
+import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';

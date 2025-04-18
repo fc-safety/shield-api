@@ -1,4 +1,3 @@
-import { Prisma, VaultAccessType } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import {
   buildFixedQuerySchema,
@@ -6,6 +5,7 @@ import {
   PrismaOrderEmum,
   prismaStringFilter,
 } from 'src/common/validation';
+import { Prisma, VaultAccessType } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 const QueryViewOwnershipFiltersSchema = z

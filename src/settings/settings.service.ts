@@ -1,7 +1,10 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable } from '@nestjs/common';
-import { Prisma, SettingsBlock as PrismaSettingsBlock } from '@prisma/client';
 import { Cache } from 'cache-manager';
+import {
+  Prisma,
+  SettingsBlock as PrismaSettingsBlock,
+} from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { z } from 'zod';
 import { GLOBAL_SETTINGS_FRIENDLY_ID } from './constants';
@@ -57,7 +60,7 @@ export class SettingsService {
     const { cache = false } = options;
     const cacheKey = `settings-block:${friendlyId}`;
 
-    let settings: SettingsBlock<T> | undefined = undefined;
+    let settings: SettingsBlock<T> | null = null;
     if (cache) {
       settings = await this.cache.get<SettingsBlock<T>>(cacheKey);
     }

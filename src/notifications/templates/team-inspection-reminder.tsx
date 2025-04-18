@@ -1,6 +1,6 @@
-import { Prisma } from '@prisma/client';
 import { Column, Row } from '@react-email/components';
 import React from 'react';
+import { Prisma } from 'src/generated/prisma/client';
 import { Block } from './components/block';
 import { Layout } from './components/layout';
 import { Paragraph } from './components/paragraph';

@@ -1,6 +1,6 @@
-import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { createAddressSchema } from 'src/common/schema';
+import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export const CreateSiteSchema = z.object({

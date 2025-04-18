@@ -1,11 +1,15 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import { Prisma, PrismaClient, PrismaPromise } from '@prisma/client';
 import { Cache } from 'cache-manager';
 import { ClsService } from 'nestjs-cls';
 import { TVisibility } from 'src/auth/permissions';
 import { StatelessUser } from 'src/auth/user.schema';
 import { ViewContext } from 'src/common/utils';
+import {
+  Prisma,
+  PrismaClient,
+  PrismaPromise,
+} from 'src/generated/prisma/client';
 import { CommonClsStore } from '../common/types';
 
 interface Person {
@@ -131,7 +135,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   ) {
     const cachedValue = await this.cache.get<T>(cacheKey);
 
-    if (cachedValue !== undefined) {
+    if (cachedValue !== null) {
       return cachedValue;
     }
 

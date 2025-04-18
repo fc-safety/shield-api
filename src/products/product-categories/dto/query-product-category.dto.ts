@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import {
   buildFixedQuerySchema,
@@ -6,6 +5,7 @@ import {
   PrismaOrderEmum,
   prismaStringFilter,
 } from 'src/common/validation';
+import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 const QueryProductCateogryFiltersSchema = z

@@ -1,10 +1,4 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import {
-  AssetQuestion,
-  AssetQuestionResponse,
-  ConsumableQuestionConfig,
-  Prisma,
-} from '@prisma/client';
 import { subDays } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import { UsersService } from 'src/clients/users/users.service';
@@ -13,6 +7,12 @@ import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
+import {
+  AssetQuestion,
+  AssetQuestionResponse,
+  ConsumableQuestionConfig,
+  Prisma,
+} from 'src/generated/prisma/client';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import TeamInspectionReminderTemplateReact, {
   TeamInspectionReminderTemplateProps,

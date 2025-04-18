@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import { as404OrThrow } from 'src/common/utils';
+import { buildPrismaFindArgs } from 'src/common/validation';
 import type {
   AssetQuestion,
   AssetQuestionResponse,
   ConsumableQuestionConfig,
   Prisma,
-} from '@prisma/client';
-import { ConsumableMappingType } from '@prisma/client';
-import { as404OrThrow } from 'src/common/utils';
-import { buildPrismaFindArgs } from 'src/common/validation';
+} from 'src/generated/prisma/client';
+import { ConsumableMappingType } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateConsumableDto } from './dto/create-consumable.dto';
 import { QueryConsumableDto } from './dto/query-consumable.dto';
