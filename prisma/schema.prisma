@@ -9,7 +9,7 @@ generator client {
   previewFeatures = ["typedSql"]
   // For Docker deployments.
   binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
-  // output   = "generated/prisma/client"
+  output   = "generated/prisma/client"
 }
 
 datasource db {
