@@ -13,12 +13,12 @@ export class ReportsService {
 
   findAllReports() {
     return CANNED_REPORTS.map(
-      ({ id, name, description, type, supportsDateRange }) => ({
+      ({ id, name, description, type, dateRangeSupport }) => ({
         id,
         name,
         description,
         type,
-        supportsDateRange,
+        dateRangeSupport,
       }),
     );
   }

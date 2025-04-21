@@ -26,5 +26,5 @@ export interface CannedReport<T> extends Report {
     prismaService: PrismaService,
     query: z.infer<typeof BaseCannedReportsQuerySchema>,
   ) => Promise<T[]>;
-  supportsDateRange: boolean;
+  dateRangeSupport: 'NONE' | 'PAST' | 'FUTURE' | 'BOTH';
 }

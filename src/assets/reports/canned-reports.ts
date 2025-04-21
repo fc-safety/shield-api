@@ -1,8 +1,12 @@
 import { format } from 'date-fns';
 import {
   getActiveAssets,
-  getInspections,
+  getExpiredConsumables,
+  getExpiringConsumables,
   getOverdueAssets,
+  getRecentAlerts,
+  getRecentInspections,
+  getUnresolvedAlerts,
 } from 'src/generated/prisma/client/sql';
 import { CannedReport } from './types';
 
@@ -32,13 +36,11 @@ const ActiveAssetsCannedReport: CannedReport<ActiveAssetRow> = {
     'productCategoryShortName',
     'manufacturerName',
   ],
-  build: async (prismaService, query) => {
+  build: async (prismaService) => {
     const prisma = await prismaService.forContext();
-    return prisma.$queryRawTyped(
-      getActiveAssets(query.startDate, query.endDate),
-    );
+    return prisma.$queryRawTyped(getActiveAssets());
   },
-  supportsDateRange: true,
+  dateRangeSupport: 'NONE',
 };
 
 type OverdueAssetRow = getOverdueAssets.Result;
@@ -73,14 +75,14 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
     const prisma = await prismaService.forContext();
     return prisma.$queryRawTyped(getOverdueAssets());
   },
-  supportsDateRange: false,
+  dateRangeSupport: 'NONE',
 };
 
-type InspectionRow = getInspections.Result;
+type InspectionRow = getRecentInspections.Result;
 const AllInspectionsCannedReport: CannedReport<InspectionRow> = {
-  id: 'all-inspections',
-  name: 'All Inspections',
-  description: 'Results from all asset inspections.',
+  id: 'recent-inspections',
+  name: 'Recent Inspections',
+  description: 'Results from recent asset inspections.',
   type: 'CANNED',
   columns: [
     {
@@ -103,14 +105,172 @@ const AllInspectionsCannedReport: CannedReport<InspectionRow> = {
   build: async (prismaService, query) => {
     const prisma = await prismaService.forContext();
     return prisma.$queryRawTyped(
-      getInspections(query.startDate, query.endDate),
+      getRecentInspections(query.startDate ?? null, query.endDate ?? null),
     );
   },
-  supportsDateRange: true,
+  dateRangeSupport: 'PAST',
+};
+
+type ExpiringConsumableRow = getExpiringConsumables.Result;
+const ExpiringConsumablesCannedReport: CannedReport<ExpiringConsumableRow> = {
+  id: 'expiring-consumables',
+  name: 'Expiring Consumables',
+  description: 'Consumables that are expiring soon.',
+  type: 'CANNED',
+  columns: [
+    {
+      alias: 'createdOn',
+      valueFn: (row) => format(row.createdOn, 'PPpp'),
+    },
+    {
+      alias: 'expiresOn',
+      valueFn: (row) => (row.expiresOn ? format(row.expiresOn, 'PPpp') : ''),
+    },
+    'quantity',
+    'assetName',
+    'assetSerialNumber',
+    'assetLocation',
+    'assetPlacement',
+    'productName',
+    'productCategoryName',
+    'productCategoryShortName',
+    'manufacturerName',
+    'siteName',
+  ],
+  build: async (prismaService, query) => {
+    const prisma = await prismaService.forContext();
+    return prisma.$queryRawTyped(
+      getExpiringConsumables(query.startDate ?? null, query.endDate ?? null),
+    );
+  },
+  dateRangeSupport: 'FUTURE',
+};
+
+type ExpiredConsumableRow = getExpiredConsumables.Result;
+const ExpiredConsumablesCannedReport: CannedReport<ExpiredConsumableRow> = {
+  id: 'expired-consumables',
+  name: 'Expired Consumables',
+  description: 'Consumables that have expired.',
+  type: 'CANNED',
+  columns: [
+    {
+      alias: 'createdOn',
+      valueFn: (row) => format(row.createdOn, 'PPpp'),
+    },
+    {
+      alias: 'expiresOn',
+      valueFn: (row) => (row.expiresOn ? format(row.expiresOn, 'PPpp') : ''),
+    },
+    'quantity',
+    'assetName',
+    'assetSerialNumber',
+    'assetLocation',
+    'assetPlacement',
+    'productName',
+    'productCategoryName',
+    'productCategoryShortName',
+    'manufacturerName',
+    'siteName',
+  ],
+  build: async (prismaService) => {
+    const prisma = await prismaService.forContext();
+    return prisma.$queryRawTyped(getExpiredConsumables());
+  },
+  dateRangeSupport: 'NONE',
+};
+
+type RecentAlertRow = getRecentAlerts.Result;
+const RecentAlertsCannedReport: CannedReport<RecentAlertRow> = {
+  id: 'recent-alerts',
+  name: 'Recent Alerts',
+  description: 'Inspection alerts that have occurred recently.',
+  type: 'CANNED',
+  columns: [
+    {
+      alias: 'createdOn',
+      valueFn: (row) => format(row.createdOn, 'PPpp'),
+    },
+    'alertLevel',
+    'message',
+    'resolved',
+    {
+      alias: 'resolvedOn',
+      valueFn: (row) => (row.resolvedOn ? format(row.resolvedOn, 'PPpp') : ''),
+    },
+    'resolutionNote',
+    {
+      alias: 'inspectionDate',
+      valueFn: (row) => format(row.inspectionDate, 'PPpp'),
+    },
+    'inspectorName',
+    'assetName',
+    'assetSerialNumber',
+    'assetLocation',
+    'assetPlacement',
+    'productName',
+    'productCategoryName',
+    'productCategoryShortName',
+    'manufacturerName',
+    'siteName',
+  ],
+  build: async (prismaService, query) => {
+    const prisma = await prismaService.forContext();
+    return prisma.$queryRawTyped(
+      getRecentAlerts(query.startDate ?? null, query.endDate ?? null),
+    );
+  },
+  dateRangeSupport: 'PAST',
+};
+
+type UnresolvedAlertRow = getUnresolvedAlerts.Result;
+const UnresolvedAlertsCannedReport: CannedReport<UnresolvedAlertRow> = {
+  id: 'unresolved-alerts',
+  name: 'Unresolved Alerts',
+  description: 'Inspection alerts that have not been resolved.',
+  type: 'CANNED',
+  columns: [
+    {
+      alias: 'createdOn',
+      valueFn: (row) => format(row.createdOn, 'PPpp'),
+    },
+    'alertLevel',
+    'message',
+    'resolved',
+    {
+      alias: 'resolvedOn',
+      valueFn: (row) => (row.resolvedOn ? format(row.resolvedOn, 'PPpp') : ''),
+    },
+    'resolutionNote',
+    {
+      alias: 'inspectionDate',
+      valueFn: (row) => format(row.inspectionDate, 'PPpp'),
+    },
+    'inspectorName',
+    'assetName',
+    'assetSerialNumber',
+    'assetLocation',
+    'assetPlacement',
+    'productName',
+    'productCategoryName',
+    'productCategoryShortName',
+    'manufacturerName',
+    'siteName',
+  ],
+  build: async (prismaService, query) => {
+    const prisma = await prismaService.forContext();
+    return prisma.$queryRawTyped(
+      getUnresolvedAlerts(query.startDate ?? null, query.endDate ?? null),
+    );
+  },
+  dateRangeSupport: 'PAST',
 };
 
 export const CANNED_REPORTS = [
   ActiveAssetsCannedReport,
   OverdueAssetsCannedReport,
   AllInspectionsCannedReport,
+  ExpiringConsumablesCannedReport,
+  ExpiredConsumablesCannedReport,
+  RecentAlertsCannedReport,
+  UnresolvedAlertsCannedReport,
 ] as const satisfies CannedReport<any>[];

@@ -1,5 +1,5 @@
--- @param {String} $1:startDate The start date of the report
--- @param {String} $2:endDate The end date of the report
+-- @param {String} $1:startDate? The start date of the report (optional)
+-- @param {String} $2:endDate? The end date of the report (optional)
 
 SELECT
     i."id",
@@ -28,5 +28,5 @@ JOIN "Manufacturer" m ON p."manufacturerId" = m."id"
 JOIN "Site" s ON a."siteId" = s."id"
 JOIN "Tag" t ON a."tagId" = t."id"
 JOIN "Person" person ON i."inspectorId" = person."id"
-WHERE i."createdOn" >= $1::timestamptz
-AND i."createdOn" <= $2::timestamptz;
+WHERE ($1::timestamptz IS NULL OR i."createdOn" >= $1::timestamptz)
+AND ($2::timestamptz IS NULL OR i."createdOn" <= $2::timestamptz);

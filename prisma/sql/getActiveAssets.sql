@@ -1,6 +1,3 @@
--- @param {String} $1:startDate The start date of the report
--- @param {String} $2:endDate The end date of the report
-
 SELECT
     a."id",
     a."createdOn",
@@ -24,6 +21,4 @@ JOIN "ProductCategory" pc ON p."productCategoryId" = pc."id"
 JOIN "Manufacturer" m ON p."manufacturerId" = m."id"
 JOIN "Site" s ON a."siteId" = s."id"
 JOIN "Tag" t ON a."tagId" = t."id"
-WHERE a."active" = TRUE
-AND a."createdOn" >= $1::timestamptz
-AND a."createdOn" <= $2::timestamptz;
+WHERE a."active" = TRUE;
