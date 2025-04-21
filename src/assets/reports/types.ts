@@ -24,6 +24,7 @@ export interface CannedReport<T> extends Report {
   )[];
   build: (
     prismaService: PrismaService,
-    query?: z.infer<typeof BaseCannedReportsQuerySchema>,
+    query: z.infer<typeof BaseCannedReportsQuerySchema>,
   ) => Promise<T[]>;
+  supportsDateRange: boolean;
 }

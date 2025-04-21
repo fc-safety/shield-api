@@ -32,10 +32,13 @@ const ActiveAssetsCannedReport: CannedReport<ActiveAssetRow> = {
     'productCategoryShortName',
     'manufacturerName',
   ],
-  build: async (prismaService) => {
+  build: async (prismaService, query) => {
     const prisma = await prismaService.forContext();
-    return prisma.$queryRawTyped(getActiveAssets());
+    return prisma.$queryRawTyped(
+      getActiveAssets(query.startDate, query.endDate),
+    );
   },
+  supportsDateRange: true,
 };
 
 type OverdueAssetRow = getOverdueAssets.Result;
@@ -47,6 +50,7 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
   columns: [
     {
       alias: 'lastInspectionDate',
+      label: 'Last Inspected',
       valueFn: (row) =>
         row.lastInspectionDate ? format(row.lastInspectionDate, 'PPpp') : '',
     },
@@ -69,6 +73,7 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
     const prisma = await prismaService.forContext();
     return prisma.$queryRawTyped(getOverdueAssets());
   },
+  supportsDateRange: false,
 };
 
 type InspectionRow = getInspections.Result;
@@ -95,10 +100,13 @@ const AllInspectionsCannedReport: CannedReport<InspectionRow> = {
     'productCategoryShortName',
     'manufacturerName',
   ],
-  build: async (prismaService) => {
+  build: async (prismaService, query) => {
     const prisma = await prismaService.forContext();
-    return prisma.$queryRawTyped(getInspections());
+    return prisma.$queryRawTyped(
+      getInspections(query.startDate, query.endDate),
+    );
   },
+  supportsDateRange: true,
 };
 
 export const CANNED_REPORTS = [

@@ -2,6 +2,7 @@ import * as csv from '@fast-csv/format';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CANNED_REPORTS } from './canned-reports';
+import { BaseCannedReportsQueryDto } from './dto/base-canned-reports-query.dto';
 import { CannedReport } from './types';
 
 type ReportColumn<T> = CannedReport<T>['columns'][number];
@@ -11,17 +12,20 @@ export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
   findAllReports() {
-    return CANNED_REPORTS.map(({ id, name, description, type }) => ({
-      id,
-      name,
-      description,
-      type,
-    }));
+    return CANNED_REPORTS.map(
+      ({ id, name, description, type, supportsDateRange }) => ({
+        id,
+        name,
+        description,
+        type,
+        supportsDateRange,
+      }),
+    );
   }
 
-  async buildReport(id: string) {
+  async buildReport(id: string, query: BaseCannedReportsQueryDto) {
     const { build, columns, ...report } = this.getCannedReport(id);
-    const data = await build(this.prisma);
+    const data = await build(this.prisma, query);
     const mappedData = data.map((r) =>
       this.mapColumnData<typeof r>(r, columns),
     );
@@ -32,8 +36,8 @@ export class ReportsService {
     };
   }
 
-  async buildReportCsv(id: string) {
-    const { data } = await this.buildReport(id);
+  async buildReportCsv(id: string, query: BaseCannedReportsQueryDto) {
+    const { data } = await this.buildReport(id, query);
     const stream = csv.write<(typeof data)[number], (typeof data)[number]>(
       data,
       {

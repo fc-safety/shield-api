@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Controller, Get, Param, Query, Res } from '@nestjs/common';
 import { format } from 'date-fns';
 import { Response } from 'express';
 import { CheckIsAuthenticated } from 'src/auth/policies.guard';
 import { streamToCsv } from 'src/common/stream-utils';
+import { BaseCannedReportsQueryDto } from './dto/base-canned-reports-query.dto';
 import { ReportsService } from './reports.service';
 
 @Controller('reports')
@@ -16,13 +17,20 @@ export class ReportsController {
   }
 
   @Get(':id')
-  findOneReport(@Param('id') id: string) {
-    return this.reportsService.buildReport(id);
+  findOneReport(
+    @Param('id') id: string,
+    @Query() query: BaseCannedReportsQueryDto,
+  ) {
+    return this.reportsService.buildReport(id, query);
   }
 
   @Get(':id/csv')
-  async findOneReportCsv(@Param('id') id: string, @Res() res: Response) {
-    const stream = await this.reportsService.buildReportCsv(id);
+  async findOneReportCsv(
+    @Param('id') id: string,
+    @Query() query: BaseCannedReportsQueryDto,
+    @Res() res: Response,
+  ) {
+    const stream = await this.reportsService.buildReportCsv(id, query);
     streamToCsv(stream, res, {
       filename: `report-${id}-${format(new Date(), 'yyyy_MM_dd_HH_mm_ss')}.csv`,
     });
