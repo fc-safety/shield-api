@@ -31,9 +31,9 @@ export class VaultOwnershipsController {
     return this.vaultOwnershipsService.findAll(queryViewOwnershipDto);
   }
 
-  @Get('key/*')
-  async findOneByKey(@Param() params: string[]) {
-    const key = params[0];
+  @Get('key/*path')
+  async findOneByKey(@Param('path') path: string[]) {
+    const key = path.join('/');
     return this.vaultOwnershipsService.findOneByKey(key);
   }
 
