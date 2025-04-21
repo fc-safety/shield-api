@@ -1,4 +1,4 @@
-import { Column, Row } from '@react-email/components';
+import { Column, Heading, Row } from '@react-email/components';
 import React from 'react';
 import { Block } from './components/block';
 import { Layout } from './components/layout';
@@ -86,9 +86,12 @@ function MonthlyInspectionReportTemplateText({
   singleSite,
 }: MonthlyInspectionReportProps) {
   return `
+  Monthly Compliance Report for ${clientName}
+
   Hi ${recipientFirstName},
 
-  Here is your monthly compliance report for ${clientName}.
+  Please review the following report of site copmliance grouped by asset
+  category.
 
   ${reportRowsBySite
     .map(
@@ -104,7 +107,7 @@ function MonthlyInspectionReportTemplateText({
     )
     .join('\n\n')}
 
-  Thank you,
+  Regards,
   Shield Team
   FC Safety
   `;
@@ -119,9 +122,13 @@ export default function MonthlyInspectionReportTemplateReact({
   return (
     <Layout>
       <Block>
+        <Heading className="text-[16px] font-bold text-gray-800 mt-[10px] mb-[20px]">
+          Monthly Compliance Report for {clientName}
+        </Heading>
         <Paragraph>Hi {recipientFirstName},</Paragraph>
         <Paragraph>
-          Here is your monthly compliance report for {clientName}.
+          Please review the following report of site copmliance grouped by asset
+          category.
         </Paragraph>
       </Block>
       {reportRowsBySite.map((site) => (

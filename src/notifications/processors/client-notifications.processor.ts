@@ -6,7 +6,13 @@ import {
 } from '@nestjs/bullmq';
 import { Logger, OnApplicationShutdown } from '@nestjs/common';
 import { Job, Queue } from 'bullmq';
-import { addDays, addMilliseconds, isBefore, isToday } from 'date-fns';
+import {
+  addDays,
+  addMilliseconds,
+  differenceInDays,
+  isBefore,
+  isToday,
+} from 'date-fns';
 import React from 'react';
 import { Role } from 'src/admin/roles/model/role';
 import { RolesService } from 'src/admin/roles/roles.service';
@@ -14,6 +20,7 @@ import { TVisibility, VISIBILITY_VALUES } from 'src/auth/permissions';
 import { ClientUser } from 'src/clients/users/model/client-user';
 import { UsersService } from 'src/clients/users/users.service';
 import { groupBy } from 'src/common/utils';
+import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma } from 'src/generated/prisma/client';
 import { extensions, PrismaService } from 'src/prisma/prisma.service';
 import {
@@ -34,6 +41,7 @@ import InspectionDueSoonAlertLevel2TemplateReact from '../templates/inspection_d
 import InspectionDueSoonAlertLevel3TemplateReact from '../templates/inspection_due_soon_alert_level_3';
 import InspectionDueSoonAlertLevel4TemplateReact from '../templates/inspection_due_soon_alert_level_4';
 import InspectionReminderTemplateReact from '../templates/inspection_reminder';
+import MonthlyConsumableReportTemplateReact from '../templates/monthly_consumables_report';
 import MonthlyInspectionReportTemplateReact from '../templates/monthly_inspection_report';
 
 @Processor(QUEUE_NAMES.CLIENT_NOTIFICATIONS, {
@@ -60,6 +68,7 @@ export class ClientNotificationsProcessor
     private readonly clientNotificationsQueue: Queue,
     @InjectQueue(QUEUE_NAMES.SEND_NOTIFICATIONS)
     private readonly notificationsQueue: Queue,
+    private readonly config: ApiConfigService,
   ) {
     super();
   }
@@ -283,7 +292,12 @@ export class ClientNotificationsProcessor
       clientUsers,
       roleMap,
       Object.values(NotificationGroups).filter((g) =>
-        ['monthly_compliance_report', 'asset_compliance_report'].includes(g.id),
+        (
+          [
+            'monthly_compliance_report',
+            'monthly_consumables_report',
+          ] satisfies NotificationGroupId[] as string[]
+        ).includes(g.id),
       ),
     );
 
@@ -370,16 +384,16 @@ export class ClientNotificationsProcessor
                       );
                     }).length;
 
+                    const productCategory =
+                      categoryAssets.at(0)?.product.productCategory;
+
                     return {
                       categoryName:
-                        categoryAssets.at(0)?.product.productCategory.name ??
+                        productCategory?.shortName ??
+                        productCategory?.name ??
                         'Unknown',
-                      categoryIcon:
-                        categoryAssets.at(0)?.product.productCategory.icon ??
-                        undefined,
-                      categoryColor:
-                        categoryAssets.at(0)?.product.productCategory.color ??
-                        undefined,
+                      categoryIcon: productCategory?.icon ?? undefined,
+                      categoryColor: productCategory?.color ?? undefined,
                       assetCount: categoryAssets.length,
                       pctCompliant: totalCompliant / categoryAssets.length,
                       unresolvedAlertsCount: totalAlerts,
@@ -402,11 +416,107 @@ export class ClientNotificationsProcessor
     }
 
     // Build and send asset compliance reports.
-    const assetComplianceReportUsers = usersByNotificationGroupId.get(
-      'asset_compliance_report',
+    const monthlyConsumableReportUsers = usersByNotificationGroupId.get(
+      'monthly_consumables_report',
     );
-    if (assetComplianceReportUsers && assetComplianceReportUsers.length > 0) {
-      // todo
+    if (
+      monthlyConsumableReportUsers &&
+      monthlyConsumableReportUsers.length > 0
+    ) {
+      const consumables = await this.prisma
+        .bypassRLS()
+        .consumable.findMany({
+          where: {
+            clientId: job.data.clientId,
+            expiresOn: {
+              not: null,
+              lte: addDays(new Date(), 90),
+            },
+          },
+          include: {
+            asset: true,
+            product: {
+              include: {
+                productCategory: true,
+              },
+            },
+            site: true,
+          },
+        })
+        .then((consumables) =>
+          // Ensure that all consumables have an expiration date.
+          consumables.filter(
+            (
+              c,
+            ): c is typeof c & {
+              expiresOn: NonNullable<(typeof c)['expiresOn']>;
+            } => c.expiresOn !== null,
+          ),
+        );
+
+      for (const user of monthlyConsumableReportUsers) {
+        const visibleAssetIds = getVisibleAssetIdsForUser(
+          user,
+          assetVisibilityMappings,
+          roleMap,
+        );
+        const visibleConsumables = consumables.filter((c) =>
+          visibleAssetIds.includes(c.assetId),
+        );
+
+        if (visibleConsumables.length === 0) {
+          continue;
+        }
+
+        const consumablesByExpiration = groupBy(visibleConsumables, (c) => {
+          const daysUntilExpiration = differenceInDays(c.expiresOn, new Date());
+          if (daysUntilExpiration <= 30) {
+            return '30-days';
+          } else if (daysUntilExpiration <= 60) {
+            return '60-days';
+          } else {
+            return '90-days';
+          }
+        });
+
+        const mapToConsumableItem = (
+          consumable: (typeof consumables)[number],
+        ) => ({
+          siteName: consumable.site.name,
+          item: consumable.product.name,
+          assetName: consumable.asset?.name ?? 'Unknown',
+          category:
+            consumable.product.productCategory.shortName ??
+            consumable.product.productCategory.name,
+          categoryColor: consumable.product.productCategory.color,
+          expiryDate: consumable.expiresOn.toISOString(),
+        });
+
+        const props = {
+          recipientFirstName: user.firstName,
+          clientName: client.name,
+          frontendUrl: this.config.get('FRONTEND_URL'),
+          data: {
+            thirtyDays: (consumablesByExpiration['30-days'] ?? []).map(
+              mapToConsumableItem,
+            ),
+            sixtyDays: (consumablesByExpiration['60-days'] ?? []).map(
+              mapToConsumableItem,
+            ),
+            ninetyDays: (consumablesByExpiration['90-days'] ?? []).map(
+              mapToConsumableItem,
+            ),
+          },
+        } satisfies React.ComponentProps<
+          typeof MonthlyConsumableReportTemplateReact
+        >;
+
+        await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
+          templateName: 'monthly_consumables_report',
+          to: [user.email],
+          templateProps: props,
+        } satisfies SendEmailJobData);
+      }
     }
 
     return {};

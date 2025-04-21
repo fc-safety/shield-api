@@ -24,7 +24,7 @@ export const keycloakGroupSchema = z.object({
     role_description: z.array(z.string()).optional(),
     role_created_at: z.array(z.string()).min(1),
     role_updated_at: z.array(z.string()).min(1),
-    role_notification_group: z.array(z.enum(NotificationGroupIds)).optional(),
+    role_notification_group: z.array(z.string()).optional(),
   }),
 });
 
@@ -45,7 +45,11 @@ export const keycloakGroupAsRole = (
   name: group.name ?? 'Unknown role',
   description: group.attributes.role_description?.[0],
   permissions: group.clientRoles?.[appClientId] ?? [],
-  notificationGroups: group.attributes.role_notification_group ?? [],
+  notificationGroups:
+    group.attributes.role_notification_group?.filter(
+      (ngId): ngId is NotificationGroupId =>
+        NotificationGroupIds.includes(ngId as NotificationGroupId),
+    ) ?? [],
   createdOn: group.attributes.role_created_at[0],
   updatedOn: group.attributes.role_updated_at[0],
 });
