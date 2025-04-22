@@ -29,7 +29,8 @@ import {
   QUEUE_NAMES,
   QUEUE_PREFIX,
 } from '../lib/constants';
-import { ClientNotificationJobData, SendEmailJobData } from '../lib/types';
+import { SendEmailJobData } from '../lib/templates';
+import { ClientNotificationJobData } from '../lib/types';
 import {
   INotificationGroup,
   isInspectionReminderNotificationGroup,
@@ -263,7 +264,7 @@ export class ClientNotificationsProcessor
           templateName: notificationGroupId,
           to: [user.email],
           templateProps: props,
-        } satisfies SendEmailJobData);
+        } satisfies SendEmailJobData<typeof notificationGroupId>);
       }
     }
 
@@ -411,7 +412,7 @@ export class ClientNotificationsProcessor
           templateName: 'monthly_compliance_report',
           to: [user.email],
           templateProps: props,
-        } satisfies SendEmailJobData);
+        } satisfies SendEmailJobData<'monthly_compliance_report'>);
       }
     }
 
@@ -515,7 +516,7 @@ export class ClientNotificationsProcessor
           templateName: 'monthly_consumables_report',
           to: [user.email],
           templateProps: props,
-        } satisfies SendEmailJobData);
+        } satisfies SendEmailJobData<'monthly_consumables_report'>);
       }
     }
 

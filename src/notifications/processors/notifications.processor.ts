@@ -7,11 +7,8 @@ import {
   QUEUE_NAMES,
   QUEUE_PREFIX,
 } from '../lib/constants';
-import { TEMPLATE_NAME_MAP } from '../lib/templates';
-import {
-  SendEmailJobData,
-  SendNewProductRequestEmailJobData,
-} from '../lib/types';
+import { SendEmailJobData, TEMPLATE_NAME_MAP } from '../lib/templates';
+import { SendNewProductRequestEmailJobData } from '../lib/types';
 import { NotificationsService } from '../notifications.service';
 
 @Processor(QUEUE_NAMES.SEND_NOTIFICATIONS, {
@@ -66,7 +63,7 @@ export class NotificationsProcessor
           job as Job<SendNewProductRequestEmailJobData>,
         );
       case NOTIFICATIONS_JOB_NAMES.SEND_EMAIL:
-        return await this.sendEmail(job as Job<SendEmailJobData>);
+        return await this.sendEmail(job as Job<SendEmailJobData<any>>);
       default:
         throw new Error(`Unknown job name: ${job.name}`);
     }
@@ -101,7 +98,7 @@ export class NotificationsProcessor
    * @param job The job to send the email for.
    * @returns The result of the job.
    */
-  private async sendEmail(job: Job<SendEmailJobData>) {
+  private async sendEmail(job: Job<SendEmailJobData<any>>) {
     const { templateName, subject, to, templateProps } = job.data;
 
     const Template = TEMPLATE_NAME_MAP[templateName];

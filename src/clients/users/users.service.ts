@@ -1,16 +1,20 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
+import crypto from 'crypto';
 import { ClsService } from 'nestjs-cls';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
+import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma } from 'src/generated/prisma/client';
+import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { asFilterConditions, QueryUserDto } from './dto/query-user.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
   keycloakUserAsClientUser,
@@ -24,6 +28,8 @@ export class UsersService {
     private readonly keycloak: KeycloakService,
     private readonly roles: RolesService,
     private readonly cls: ClsService<CommonClsStore>,
+    private readonly notifications: NotificationsService,
+    private readonly config: ApiConfigService,
   ) {}
 
   async create(
@@ -163,6 +169,95 @@ export class UsersService {
       id: keycloakUser.id,
       groupId: keycloakRoleGroup.id,
     });
+  }
+
+  async resetPassword(
+    id: string,
+    resetPasswordDto: ResetPasswordDto,
+    clientId?: string,
+    bypassRLS?: boolean,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+
+    await this.keycloak.client.users.resetPassword({
+      id: keycloakUser.id,
+      credential: {
+        type: 'password',
+        value: resetPasswordDto.password,
+      },
+    });
+
+    if (resetPasswordDto.sendEmail) {
+      await this.notifications.queueEmail({
+        to: [keycloakUser.email],
+        templateName: 'manager_password_reset',
+        templateProps: {
+          recipientFirstName: keycloakUser.firstName ?? '',
+          password: resetPasswordDto.password,
+          frontendUrl: this.config.get('FRONTEND_URL'),
+        },
+      });
+    }
+
+    return {
+      success: true,
+    };
+  }
+
+  async sendResetPasswordEmail(
+    id: string,
+    appClientId: string,
+    clientId?: string,
+    bypassRLS?: boolean,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+
+    await this.keycloak.client.users.resetPasswordEmail({
+      id: keycloakUser.id,
+      client_id: appClientId,
+      redirect_uri: this.config.get('FRONTEND_URL'),
+    });
+
+    return {
+      success: true,
+    };
+  }
+
+  /**
+   * Generates a cryptographically secure random password
+   * @param length The length of the password to generate (default: 12)
+   * @returns A secure random password string
+   */
+  generatePassword(length: number = 12) {
+    const uppercaseChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lowercaseChars = 'abcdefghijklmnopqrstuvwxyz';
+    const numberChars = '0123456789';
+    const specialChars = '!@#$%^&*()';
+
+    const allChars =
+      uppercaseChars + lowercaseChars + numberChars + specialChars;
+
+    // Use Node.js crypto module for cryptographically secure random values
+    let password = '';
+
+    // Ensure at least one character from each character set
+    password += uppercaseChars.charAt(crypto.randomInt(uppercaseChars.length));
+    password += lowercaseChars.charAt(crypto.randomInt(lowercaseChars.length));
+    password += numberChars.charAt(crypto.randomInt(numberChars.length));
+    password += specialChars.charAt(crypto.randomInt(specialChars.length));
+
+    // Fill the rest of the password with random characters
+    for (let i = 4; i < length; i++) {
+      password += allChars.charAt(crypto.randomInt(allChars.length));
+    }
+
+    // Shuffle the password to avoid predictable character positions
+    password = password
+      .split('')
+      .sort(() => crypto.randomInt(3) - 1)
+      .join('');
+
+    return { password };
   }
 
   private async getClient(clientId?: string, bypassRLS?: boolean) {

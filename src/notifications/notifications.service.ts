@@ -7,7 +7,7 @@ import { SettingsService } from 'src/settings/settings.service';
 import type Telnyx from 'telnyx';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
 import { NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
-import { SendEmailJobData } from './lib/types';
+import { NotificationTemplateId, SendEmailJobData } from './lib/templates';
 import {
   NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS,
   NewProductRequestTemplateProps,
@@ -136,6 +136,12 @@ export class NotificationsService {
     });
   }
 
+  async queueEmail<T extends NotificationTemplateId>(
+    data: SendEmailJobData<T>,
+  ) {
+    await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, data);
+  }
+
   async queueNewProductRequestEmail(productRequestId: string) {
     await this.notificationsQueue.add(
       NOTIFICATIONS_JOB_NAMES.SEND_NEW_PRODUCT_REQUEST_EMAIL,
@@ -161,7 +167,7 @@ export class NotificationsService {
       templateName: 'new_product_request',
       to: [productRequestToAddress],
       templateProps: props,
-    } satisfies SendEmailJobData);
+    } satisfies SendEmailJobData<'new_product_request'>);
   }
 
   async getJobQueues() {

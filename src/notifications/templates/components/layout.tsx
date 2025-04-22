@@ -37,7 +37,9 @@ export function Layout({
             <Section className="flex justify-center items-center p-6">
               <Img
                 width={150}
-                src={'https://content.fc-safety.com/fc-safety-banner-logo.png'}
+                src={
+                  'https://content.fc-safety.com/fc_safety_logo_full_05x-light.png'
+                }
               />
             </Section>
             <Hr />

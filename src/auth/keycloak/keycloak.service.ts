@@ -131,12 +131,32 @@ type ConditionalGroupReturnType<T extends boolean> = T extends true
   ? GroupRepresentation & { id: string }
   : { id: string };
 
+const resetPasswordEmail = (client: KeycloakAdminClient) => {
+  return client.users.makeRequest<
+    { id: string; client_id?: string; redirect_uri?: string },
+    void
+  >({
+    method: 'PUT',
+    path: '/{id}/reset-password-email',
+    urlParamKeys: ['id'],
+  });
+};
+
+type ModifiedKeycloakAdminClient = KeycloakAdminClient & {
+  users: {
+    resetPasswordEmail: ReturnType<typeof resetPasswordEmail>;
+  };
+};
+
 @Injectable()
 export class KeycloakService {
   constructor(
-    @Inject(KEYCLOAK_ADMIN_CLIENT) public readonly client: KeycloakAdminClient,
+    @Inject(KEYCLOAK_ADMIN_CLIENT)
+    public readonly client: ModifiedKeycloakAdminClient,
     private readonly config: ApiConfigService,
-  ) {}
+  ) {
+    this.client.users.resetPasswordEmail = resetPasswordEmail(this.client);
+  }
 
   public async getOrCreateManagedRolesGroup<F extends boolean = false>(
     returnFull?: F,
