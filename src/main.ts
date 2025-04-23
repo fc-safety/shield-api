@@ -15,6 +15,9 @@ declare module 'express' {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // As of Express 5, the default query parser is 'simple'.
+  app.set('query parser', 'extended');
+
   const config = app.get(ApiConfigService);
 
   app.enableCors({
