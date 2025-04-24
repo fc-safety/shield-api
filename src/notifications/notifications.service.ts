@@ -131,7 +131,7 @@ export class NotificationsService {
       );
     } else {
       return this.sendTemplateEmail({
-        templateName: 'new_landing_form_lead',
+        templateName: template ?? 'test',
         to: [sendTestEmailDto.to],
       });
     }
