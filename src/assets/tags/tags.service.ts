@@ -53,6 +53,8 @@ export class TagsService {
         prisma.tag.findFirstOrThrow({
           where: { externalId },
           include: {
+            client: true,
+            site: true,
             asset: {
               include: {
                 product: {
