@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CheckPolicies } from 'src/auth/policies.guard';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
+import { NotificationTemplateId } from './lib/templates';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
@@ -11,7 +12,7 @@ export class NotificationsController {
   @Post('send-test-email')
   async sendTestEmail(
     @Body() body: SendTestEmailDto,
-    @Query('template') template?: 'test' | 'new-product-request',
+    @Query('template') template?: NotificationTemplateId,
   ) {
     return this.notifications.sendTestEmail(body, template);
   }

@@ -122,7 +122,7 @@ export default function MonthlyInspectionReportTemplateReact({
   return (
     <Layout>
       <Block>
-        <Heading className="text-[16px] font-bold text-gray-800 mt-[10px] mb-[20px]">
+        <Heading className="text-lg">
           Monthly Compliance Report for {clientName}
         </Heading>
         <Paragraph>Hi {recipientFirstName},</Paragraph>

@@ -7,12 +7,15 @@ import { SettingsService } from 'src/settings/settings.service';
 import type Telnyx from 'telnyx';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
 import { NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
-import { NotificationTemplateId, SendEmailJobData } from './lib/templates';
+import {
+  NotificationTemplateId,
+  SendEmailJobData,
+  TEMPLATE_NAME_MAP,
+} from './lib/templates';
 import {
   NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS,
   NewProductRequestTemplateProps,
 } from './templates/new-product-request';
-import TestTemplateReact, { TestTemplateText } from './templates/test';
 
 type RequireAtLeastOne<T> = {
   [K in keyof T]-?: Required<Pick<T, K>> &
@@ -120,19 +123,54 @@ export class NotificationsService {
 
   async sendTestEmail(
     sendTestEmailDto: SendTestEmailDto,
-    template?: 'test' | 'new-product-request',
+    template?: NotificationTemplateId,
   ) {
-    if (template === 'new-product-request') {
+    if (template === 'new_product_request') {
       return this.sendNewProductRequestEmail(
         NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS.productRequest,
       );
+    } else {
+      return this.sendTemplateEmail({
+        templateName: 'new_landing_form_lead',
+        to: [sendTestEmailDto.to],
+      });
+    }
+  }
+
+  async sendTemplateEmail<T extends NotificationTemplateId>({
+    templateName,
+    subject,
+    to,
+    templateProps,
+  }: {
+    templateName: T;
+    subject?: string;
+    to: string[];
+    templateProps?: React.ComponentProps<(typeof TEMPLATE_NAME_MAP)[T]>;
+  }) {
+    const Template = TEMPLATE_NAME_MAP[templateName];
+
+    if (!Template) {
+      throw new Error(
+        `Template for template name "${templateName}" is not defined.`,
+      );
     }
 
-    return this.sendEmail({
-      ...sendTestEmailDto,
-      subject: 'Test Email',
-      react: TestTemplateReact(),
-      text: TestTemplateText(),
+    if (!subject && !Template.Subject) {
+      throw new Error(
+        `Subject for notification group "${templateName}" is not defined.`,
+      );
+    }
+
+    const props = templateProps ?? Template.PreviewProps;
+
+    const text = Template.Text(props as any);
+
+    await this.sendEmail({
+      subject: subject ?? Template.Subject,
+      to,
+      text,
+      react: Template(props as any),
     });
   }
 

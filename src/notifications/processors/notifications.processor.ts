@@ -7,7 +7,7 @@ import {
   QUEUE_NAMES,
   QUEUE_PREFIX,
 } from '../lib/constants';
-import { SendEmailJobData, TEMPLATE_NAME_MAP } from '../lib/templates';
+import { SendEmailJobData } from '../lib/templates';
 import { SendNewProductRequestEmailJobData } from '../lib/types';
 import { NotificationsService } from '../notifications.service';
 
@@ -99,29 +99,6 @@ export class NotificationsProcessor
    * @returns The result of the job.
    */
   private async sendEmail(job: Job<SendEmailJobData<any>>) {
-    const { templateName, subject, to, templateProps } = job.data;
-
-    const Template = TEMPLATE_NAME_MAP[templateName];
-
-    if (!Template) {
-      throw new Error(
-        `Template for template name "${templateName}" is not defined.`,
-      );
-    }
-
-    if (!subject && !Template.Subject) {
-      throw new Error(
-        `Subject for notification group "${templateName}" is not defined.`,
-      );
-    }
-
-    const text = Template.Text(templateProps);
-
-    await this.notificationsService.sendEmail({
-      subject: subject ?? Template.Subject,
-      to,
-      text,
-      react: Template(templateProps),
-    });
+    await this.notificationsService.sendTemplateEmail(job.data);
   }
 }

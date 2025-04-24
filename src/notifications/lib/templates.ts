@@ -7,8 +7,10 @@ import InspectionReminderTemplateReact from '../templates/inspection_reminder';
 import ManagerPasswordResetTemplateReact from '../templates/manager_password_reset';
 import MonthlyConsumableReportTemplateReact from '../templates/monthly_consumables_report';
 import MonthlyInspectionReportTemplateReact from '../templates/monthly_inspection_report';
+import NewLandingFormLeadTemplateReact from '../templates/new-landing-form-lead';
 import NewProductRequestTemplateReact from '../templates/new-product-request';
 import TeamInspectionReminderTemplateReact from '../templates/team-inspection-reminder';
+import TestTemplateReact from '../templates/test';
 
 export const TEMPLATE_NAME_MAP = {
   // Client notification reminder templates
@@ -24,6 +26,8 @@ export const TEMPLATE_NAME_MAP = {
   new_product_request: NewProductRequestTemplateReact,
   team_inspection_reminder: TeamInspectionReminderTemplateReact,
   manager_password_reset: ManagerPasswordResetTemplateReact,
+  new_landing_form_lead: NewLandingFormLeadTemplateReact,
+  test: TestTemplateReact,
 } as const satisfies Record<
   string,
   React.FC<any> & {

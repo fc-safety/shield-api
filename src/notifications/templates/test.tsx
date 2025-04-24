@@ -40,3 +40,7 @@ export default function TestTemplateReact(): React.ReactElement {
     </Layout>
   );
 }
+
+TestTemplateReact.Subject = 'Test Email';
+TestTemplateReact.Text = TestTemplateText;
+TestTemplateReact.PreviewProps = {};

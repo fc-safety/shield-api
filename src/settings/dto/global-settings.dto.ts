@@ -5,6 +5,7 @@ import { z } from 'zod';
 export const GlobalSettingsSchema = z.object({
   systemEmailFromAddress: FromAddressSchema,
   productRequestToAddress: z.string().email(),
+  landingFormLeadToAddress: z.string().email(),
 });
 
 export class GlobalSettingsDto extends createZodDto(GlobalSettingsSchema) {}
@@ -12,4 +13,5 @@ export class GlobalSettingsDto extends createZodDto(GlobalSettingsSchema) {}
 export const DEFAULT_GLOBAL_SETTINGS = {
   systemEmailFromAddress: 'support@notify.fc-safety.com',
   productRequestToAddress: 'orders@fc-safety.com',
+  landingFormLeadToAddress: 'sales@fc-safety.com',
 } satisfies z.infer<typeof GlobalSettingsSchema>;

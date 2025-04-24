@@ -8,6 +8,7 @@ const GetStartedFormSchema = z.object({
   email: z.string().email(),
   phone: z.string().nonempty('Phone number is required'),
   message: z.string().optional(),
+  turnstileToken: z.string().nonempty('Validation is required'),
 });
 
 export class GetStartedFormDto extends createZodDto(GetStartedFormSchema) {}

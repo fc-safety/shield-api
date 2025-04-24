@@ -66,7 +66,13 @@ export class SettingsService {
     }
 
     if (settings) {
-      return settings;
+      if (
+        this.isNullOrObject(settings.data) &&
+        this.isNullOrObject(defaultData) &&
+        !this.shouldUpdateDefaultValues(settings.data, defaultData)
+      ) {
+        return settings;
+      }
     }
 
     return this.prisma.settingsBlock
@@ -75,16 +81,36 @@ export class SettingsService {
           friendlyId,
         },
       })
-      .then((settings) =>
-        settings
-          ? settings
-          : this.prisma.settingsBlock.create({
-              data: {
+      .then((settings) => {
+        if (settings) {
+          if (
+            this.isNullOrObject(settings.data) &&
+            this.isNullOrObject(defaultData) &&
+            this.shouldUpdateDefaultValues(settings.data, defaultData)
+          ) {
+            return this.prisma.settingsBlock.update({
+              where: {
                 friendlyId,
-                data: defaultData,
               },
-            }),
-      )
+              data: {
+                data: {
+                  ...(settings.data ?? {}),
+                  ...defaultData,
+                },
+              },
+            });
+          } else {
+            return settings;
+          }
+        }
+
+        return this.prisma.settingsBlock.create({
+          data: {
+            friendlyId,
+            data: defaultData,
+          },
+        });
+      })
       .then(async (settings) => {
         if (cache) {
           await this.cache.set(cacheKey, settings);
@@ -118,5 +144,27 @@ export class SettingsService {
         }
         return settings;
       });
+  }
+
+  private isNullOrObject(value: unknown): value is object | null {
+    return typeof value === 'object' || value === null;
+  }
+
+  private shouldUpdateDefaultValues(
+    settingsData: object | null,
+    defaultData: object | null,
+  ): defaultData is NonNullable<object> {
+    if (defaultData === null) {
+      return false;
+    }
+
+    if (settingsData === null) {
+      return true;
+    }
+
+    const existingKeys = Object.keys(settingsData);
+    const defaultKeys = Object.keys(defaultData);
+
+    return defaultKeys.some((key) => !existingKeys.includes(key));
   }
 }
