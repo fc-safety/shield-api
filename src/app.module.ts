@@ -17,6 +17,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { SettingsModule } from './settings/settings.module';
+import { LandingModule } from './landing/landing.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { SettingsModule } from './settings/settings.module';
     SettingsModule,
     NotificationsModule,
     MediaModule,
+    LandingModule,
   ],
   controllers: [],
   providers: [
