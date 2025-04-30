@@ -142,6 +142,7 @@ export const REVIEW = buildPermissions('review', [
 ] as const);
 export const NOTIFY = buildPermissions('notify', [RESOURCE.USERS] as const);
 export const PROGRAM = buildPermissions('program', [RESOURCE.TAGS] as const);
+export const REGISTER = buildPermissions('register', [RESOURCE.TAGS] as const);
 
 export type TSetupPermission = (typeof SETUP)[keyof typeof SETUP];
 export type TUpdateStatusPermission =
@@ -151,6 +152,7 @@ export type TResolvePermission = (typeof RESOLVE)[keyof typeof RESOLVE];
 export type TReviewPermission = (typeof REVIEW)[keyof typeof REVIEW];
 export type TNotifyPermission = (typeof NOTIFY)[keyof typeof NOTIFY];
 export type TProgramPermission = (typeof PROGRAM)[keyof typeof PROGRAM];
+export type TRegisterPermission = (typeof REGISTER)[keyof typeof REGISTER];
 
 // NOTE: Make sure to add types to TActionPermission AND values to ACTION_PERMISSIONS below.
 // ***********************************************************************
@@ -169,7 +171,8 @@ export type TActionPermission =
   | TResolvePermission
   | TReviewPermission
   | TNotifyPermission
-  | TProgramPermission;
+  | TProgramPermission
+  | TRegisterPermission;
 
 // Parse permissions into { namespace: string; value: string }
 type ParsePermissions<T extends string> = T extends `${infer N}:${infer V}`
@@ -200,6 +203,7 @@ export const ACTION_PERMISSIONS = [
   ...Object.values(REVIEW),
   ...Object.values(NOTIFY),
   ...Object.values(PROGRAM),
+  ...Object.values(REGISTER),
 ];
 
 export const VALID_PERMISSIONS = [

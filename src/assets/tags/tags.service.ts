@@ -5,6 +5,8 @@ import { createId } from '@paralleldrive/cuid2';
 import { Cache } from 'cache-manager';
 import crypto from 'crypto';
 import { add, isAfter, isBefore } from 'date-fns';
+import { ClsService } from 'nestjs-cls';
+import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from 'src/config/api-config.service';
@@ -15,6 +17,7 @@ import { BulkGenerateSignedTagUrlDto } from './dto/bulk-generate-signed-tag-url.
 import { CreateTagDto } from './dto/create-tag.dto';
 import { GenerateSignedTagUrlDto } from './dto/generate-signed-tag-url.dto';
 import { QueryTagDto } from './dto/query-tag.dto';
+import { RegisterTagDto } from './dto/register-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import {
   ValidateSignedUrlDto,
@@ -29,6 +32,7 @@ export class TagsService {
     private readonly prisma: PrismaService,
     private readonly config: ApiConfigService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly cls: ClsService<CommonClsStore>,
   ) {}
 
   async create(createTagDto: CreateTagDto) {
@@ -144,13 +148,116 @@ export class TagsService {
   async checkRegistration(inspectionToken: string) {
     const { tagExternalId } =
       await this.validateInspectionToken(inspectionToken);
-    return this.prisma.bypassRLS().tag.findUnique({
+    const tag = await this.prisma.bypassRLS().tag.findUnique({
       where: {
         externalId: tagExternalId,
       },
       include: {
         asset: true,
       },
+    });
+
+    // Tag is considered unregistered if not in database or has no client.
+    // If unregistered, the tag is available for registration.
+    if (!tag || tag.clientId === null) {
+      return tag;
+    }
+
+    // If the tag is registered to a client, the user must belong to that
+    // client.
+    const userPerson = (await this.prisma.forUser()).$currentUser();
+    if (userPerson.clientId !== tag.clientId) {
+      throw new BadRequestException('Tag is not registered to your client.');
+    }
+
+    // If the tag is registered to a site, the user must belong to that
+    // site.
+    if (userPerson.siteId !== tag.siteId) {
+      throw new BadRequestException('Tag is not registered to your site.');
+    }
+
+    return tag;
+  }
+
+  async registerTag(
+    inspectionToken: string,
+    { client: newClient, ...dto }: RegisterTagDto,
+  ) {
+    // Determine if the user can and intends to act as a global admin.
+    const user = this.cls.get('user');
+    const viewContext = this.cls.get('viewContext');
+    const actingAsGlobalAdmin =
+      user?.isGlobalAdmin() === true && viewContext === 'admin';
+
+    // Get tag data from inspection token.
+    const { tagExternalId, serialNumber } =
+      this.parseInspectionToken(inspectionToken);
+
+    // If acting as a global admin, simply upsert registration data.
+    if (actingAsGlobalAdmin && newClient !== undefined) {
+      const prisma = this.prisma.bypassRLS();
+      return prisma.tag.upsert({
+        where: { externalId: tagExternalId },
+        update: {
+          ...dto,
+          client: newClient,
+        },
+        // NOTE: This would throw an error if no site is provided. There isn't
+        // a great way to handle this gracefully.
+        create: {
+          ...dto,
+          externalId: tagExternalId,
+          serialNumber,
+          client: newClient,
+        },
+      });
+    }
+
+    // Because of RLS policies, the user scoped prisma client won't have access
+    // to this tag to update it if it already exists but has no client or site.
+    // So, we need to bypass RLS to check if the tag exists.
+    const existingTag = await this.prisma.bypassRLS().tag.findUnique({
+      where: { externalId: tagExternalId },
+    });
+
+    return this.prisma.forUser().then(async (prisma) => {
+      const person = prisma.$currentUser();
+
+      if (existingTag) {
+        // If the tag exists but has no client or site assigned, RLS will
+        // prevent the user from updating it. We'll bypass RLS to update it
+        // and **then** allow the user's updates to take effect.
+        if (existingTag.clientId === null || existingTag.siteId === null) {
+          await this.prisma.bypassRLS().tag.update({
+            where: { id: existingTag.id },
+            data: {
+              clientId: person.clientId,
+              siteId: person.siteId,
+            },
+          });
+        }
+
+        // If the tag exists, the user can only update it if it's
+        // within their scope.
+        return prisma.tag.update({
+          where: { id: existingTag.id },
+          data: dto,
+        });
+      }
+
+      // Otherwise, the user should be able to create a new tag, but will
+      // fail if the user tries to set a client or site other than what
+      // they have access to.
+      const { site: newSite, ...createDto } = dto;
+      return prisma.tag.create({
+        data: {
+          externalId: tagExternalId,
+          serialNumber,
+          ...createDto,
+          clientId: person.clientId,
+          siteId: newSite?.connect.id ?? person.siteId,
+        },
+      });
     });
   }
 

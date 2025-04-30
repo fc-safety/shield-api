@@ -15,7 +15,6 @@ import {
 import { format } from 'date-fns';
 import { Response } from 'express';
 import {
-  CheckIsAuthenticated,
   CheckPolicies,
   CheckResourcePermissions,
 } from 'src/auth/policies.guard';
@@ -25,8 +24,8 @@ import { BulkGenerateSignedTagUrlDto } from './dto/bulk-generate-signed-tag-url.
 import { CreateTagDto } from './dto/create-tag.dto';
 import { GenerateSignedTagUrlDto } from './dto/generate-signed-tag-url.dto';
 import { QueryTagDto } from './dto/query-tag.dto';
+import { RegisterTagDto } from './dto/register-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
-import { ValidateSignedUrlDto } from './dto/validate-signed-url.dto';
 import { TagsService } from './tags.service';
 
 @Controller('tags')
@@ -110,16 +109,12 @@ export class TagsController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @CheckIsAuthenticated()
-  @Post('validate-tag-url')
-  validateSignedUrl(@Query('tagUrl') tagUrl: string) {
-    return this.tagsService.validateTagUrl(tagUrl);
-  }
-
-  @HttpCode(HttpStatus.OK)
-  @CheckIsAuthenticated()
-  @Post('validate-tag-signature')
-  validateTagSignature(@Body() validateSignedUrlDto: ValidateSignedUrlDto) {
-    return this.tagsService.validateTagSignature(validateSignedUrlDto);
+  @CheckPolicies(({ user }) => user.can('register', 'tags'))
+  @Post('register-tag')
+  registerTag(
+    @Headers(INSPECTION_TOKEN_HEADER) inspectionToken: string,
+    @Body() registerTagDto: RegisterTagDto,
+  ) {
+    return this.tagsService.registerTag(inspectionToken, registerTagDto);
   }
 }
