@@ -126,7 +126,9 @@ export type TDeletePermission = (typeof DELETE)[keyof typeof DELETE];
 
 export type TManagePermissions = (typeof MANAGE)[keyof typeof MANAGE];
 
-// Specific/custom actions on resources.
+// ***********************************************************************
+// START: Specific/custom actions on resources.
+// ***********************************************************************
 export const SETUP = buildPermissions('setup', [RESOURCE.ASSETS] as const);
 export const UPDATE_STATUS = buildPermissions('update-status', [
   RESOURCE.PRODUCT_REQUESTS,
@@ -139,6 +141,7 @@ export const REVIEW = buildPermissions('review', [
   RESOURCE.PRODUCT_REQUESTS,
 ] as const);
 export const NOTIFY = buildPermissions('notify', [RESOURCE.USERS] as const);
+export const PROGRAM = buildPermissions('program', [RESOURCE.TAGS] as const);
 
 export type TSetupPermission = (typeof SETUP)[keyof typeof SETUP];
 export type TUpdateStatusPermission =
@@ -147,6 +150,13 @@ export type TCancelPermission = (typeof CANCEL)[keyof typeof CANCEL];
 export type TResolvePermission = (typeof RESOLVE)[keyof typeof RESOLVE];
 export type TReviewPermission = (typeof REVIEW)[keyof typeof REVIEW];
 export type TNotifyPermission = (typeof NOTIFY)[keyof typeof NOTIFY];
+export type TProgramPermission = (typeof PROGRAM)[keyof typeof PROGRAM];
+
+// NOTE: Make sure to add types to TActionPermission AND values to ACTION_PERMISSIONS below.
+// ***********************************************************************
+// END: Specific/custom actions on resources.
+// ***********************************************************************
+
 export type TActionPermission =
   | TCreatePermission
   | TReadPermission
@@ -158,7 +168,8 @@ export type TActionPermission =
   | TCancelPermission
   | TResolvePermission
   | TReviewPermission
-  | TNotifyPermission;
+  | TNotifyPermission
+  | TProgramPermission;
 
 // Parse permissions into { namespace: string; value: string }
 type ParsePermissions<T extends string> = T extends `${infer N}:${infer V}`
@@ -188,6 +199,7 @@ export const ACTION_PERMISSIONS = [
   ...Object.values(RESOLVE),
   ...Object.values(REVIEW),
   ...Object.values(NOTIFY),
+  ...Object.values(PROGRAM),
 ];
 
 export const VALID_PERMISSIONS = [

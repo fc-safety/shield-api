@@ -3,6 +3,7 @@ import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export const CreateTagSchema = z.object({
+  externalId: z.string().optional(),
   serialNumber: z.string(),
   asset: z
     .object({

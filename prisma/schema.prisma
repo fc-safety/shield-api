@@ -9,7 +9,7 @@ generator client {
   previewFeatures = ["typedSql"]
   // For Docker deployments.
   binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
-  output   = "../src/generated/prisma/client"
+  output          = "../src/generated/prisma/client"
 }
 
 datasource db {
@@ -550,4 +550,12 @@ enum VaultAccessType {
   CLIENT_SITE
   CLIENT_OWNER
   STRICT_OWNER
+}
+
+model SigningKey {
+  id        String    @id @default(cuid(2))
+  createdOn DateTime  @default(now()) @db.Timestamptz()
+  keyId     String    @unique
+  keySecret String    @unique @default(cuid(2))
+  expiredOn DateTime? @db.Timestamptz()
 }

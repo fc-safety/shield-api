@@ -12,12 +12,12 @@ import { configSchema } from './config';
 import { ApiConfigModule } from './config/api-config.module';
 import { ApiConfigService } from './config/api-config.service';
 import { HealthModule } from './health/health.module';
+import { LandingModule } from './landing/landing.module';
 import { MediaModule } from './media/media.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { SettingsModule } from './settings/settings.module';
-import { LandingModule } from './landing/landing.module';
 
 @Module({
   imports: [
@@ -46,7 +46,7 @@ import { LandingModule } from './landing/landing.module';
     ThrottlerModule.forRoot([
       {
         ttl: 1 * 60 * 1000, // 1 minute
-        limit: 300,
+        limit: 300000000,
       },
     ]),
     AssetsModule,

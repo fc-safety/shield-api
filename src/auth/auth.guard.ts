@@ -15,6 +15,11 @@ import { ClsService } from 'nestjs-cls';
 import { isIPv4, isIPv6 } from 'net';
 import { getViewContext } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
+import {
+  CHECK_PUBLIC_POLICIES_KEY,
+  PolicyHandler,
+  PublicPolicyHandlerContext,
+} from './policies.guard';
 import { buildUserFromToken } from './user.schema';
 
 export const IS_PUBLIC_KEY = 'isPublic';
@@ -37,12 +42,22 @@ export class AuthGuard implements CanActivate {
       context.getClass(),
     ]);
 
+    const publicPolicyHandlers =
+      this.reflector.getAllAndOverride<
+        PolicyHandler<PublicPolicyHandlerContext>[]
+      >(CHECK_PUBLIC_POLICIES_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) || [];
+
+    const allowPublic = isPublic || publicPolicyHandlers.length > 0;
+
     const request = context.switchToHttp().getRequest<Request>();
     this.cls.set('viewContext', getViewContext(request));
 
     const token = this.extractTokenFromHeader(request);
     if (!token) {
-      if (isPublic) {
+      if (allowPublic) {
         return true;
       }
 
@@ -90,7 +105,7 @@ export class AuthGuard implements CanActivate {
         this.logger.error('Error validating JWT token', e);
       }
 
-      if (isPublic) {
+      if (allowPublic) {
         return true;
       }
 

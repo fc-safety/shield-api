@@ -25,3 +25,27 @@ export const streamToCsv = (
 
   stream.pipe(res);
 };
+
+export const streamToNdJson = (
+  stream: Readable,
+  res: Response,
+  options: {
+    filename: string;
+    logger?: Logger;
+  },
+) => {
+  stream.on('error', (e) => {
+    options.logger?.error(
+      'An error occurred while streaming NDJSON data.',
+      e.stack,
+    );
+    res.status(500).send('An error occurred while downloading data.');
+  });
+
+  res.setHeader('Content-Type', 'application/x-ndjson');
+
+  const filename = options.filename.replace(/(\.ndjson)?$/, '.ndjson');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  stream.pipe(res);
+};

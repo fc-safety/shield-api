@@ -3,12 +3,14 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import { INSPECTION_TOKEN_HEADER } from './constants/headers';
 import { CreateInspectionDto } from './dto/create-inspection.dto';
 import { QueryInspectionDto } from './dto/query-inspection.dto';
 import { UpdateInspectionDto } from './dto/update-inspection.dto';
@@ -24,9 +26,11 @@ export class InspectionsController {
     @Body() createInspectionDto: CreateInspectionDto,
     @Query('sessionId') sessionId?: string,
     @Query('routeId') routeId?: string,
+    @Headers(INSPECTION_TOKEN_HEADER) inspectionToken?: string,
   ) {
     return this.inspectionsService.create(
       createInspectionDto,
+      inspectionToken,
       sessionId,
       routeId,
     );

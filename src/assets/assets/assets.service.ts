@@ -40,7 +40,7 @@ export class AssetsService {
 
   async create(createAssetDto: Prisma.AssetCreateInput) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) => prisma.asset.create({ data: createAssetDto }));
   }
 

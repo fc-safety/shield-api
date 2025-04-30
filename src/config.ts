@@ -36,6 +36,9 @@ export const configSchema = z.object({
 
   // Cloudflare Turnstile
   CLOUDFLARE_TURNSTILE_SECRET_KEY_SHIELD_LANDING: z.string(),
+
+  // Signing
+  DEFAULT_SIGNING_KEY_ID: z.string(),
 });
 
 export type Config = z.infer<typeof configSchema>;

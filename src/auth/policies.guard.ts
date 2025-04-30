@@ -4,9 +4,8 @@ import {
   Injectable,
   SetMetadata,
 } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import { ModuleRef, Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import { Observable } from 'rxjs';
 import { IS_PUBLIC_KEY } from './auth.guard';
 import { TPermission, TResource } from './permissions';
 import { StatelessUser } from './user.schema';
@@ -14,17 +13,28 @@ import { StatelessUser } from './user.schema';
 export interface PolicyHandlerContext {
   request: Request;
   user: StatelessUser;
+  moduleRef: ModuleRef;
 }
 
-interface IPolicyHandler {
-  handle(context: PolicyHandlerContext): boolean;
+export interface PublicPolicyHandlerContext
+  extends Omit<PolicyHandlerContext, 'user'> {
+  user?: PolicyHandlerContext['user'];
 }
 
-type PolicyHandlerCallback = (context: PolicyHandlerContext) => boolean;
+interface IPolicyHandler<TContext> {
+  handle(context: TContext): boolean | Promise<boolean>;
+}
 
-export type PolicyHandler = IPolicyHandler | PolicyHandlerCallback;
+type PolicyHandlerCallback<TContext> = (
+  context: TContext,
+) => boolean | Promise<boolean>;
+
+export type PolicyHandler<TContext> =
+  | IPolicyHandler<TContext>
+  | PolicyHandlerCallback<TContext>;
 
 export const CHECK_POLICIES_KEY = 'check_policy';
+export const CHECK_PUBLIC_POLICIES_KEY = 'check_public_policy';
 /**
  * A decorator that runs a set of policy handlers.
  *
@@ -36,8 +46,13 @@ export const CHECK_POLICIES_KEY = 'check_policy';
  * @param handlers - The policy handlers to run.
  * @returns A decorator that sets the CHECK_POLICIES_KEY metadata.
  */
-export const CheckPolicies = (...handlers: PolicyHandler[]) =>
-  SetMetadata(CHECK_POLICIES_KEY, handlers);
+export const CheckPolicies = (
+  ...handlers: PolicyHandler<PolicyHandlerContext>[]
+) => SetMetadata(CHECK_POLICIES_KEY, handlers);
+
+export const CheckPublicPolicies = (
+  ...handlers: PolicyHandler<PublicPolicyHandlerContext>[]
+) => SetMetadata(CHECK_PUBLIC_POLICIES_KEY, handlers);
 
 export const CheckIsAuthenticated = () =>
   CheckPolicies((context) => !!context.user);
@@ -98,14 +113,23 @@ export const CheckResourcePermissions = (resource: TResource) =>
 
 @Injectable()
 export class PoliciesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    private moduleRef: ModuleRef,
+  ) {}
 
-  canActivate(
-    context: ExecutionContext,
-  ): boolean | Promise<boolean> | Observable<boolean> {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     // getAllAndOverride prefers method-level policies over class-level policies.
     const policyHandlers =
-      this.reflector.getAllAndOverride<PolicyHandler[]>(CHECK_POLICIES_KEY, [
+      this.reflector.getAllAndOverride<PolicyHandler<PolicyHandlerContext>[]>(
+        CHECK_POLICIES_KEY,
+        [context.getHandler(), context.getClass()],
+      ) || [];
+
+    const publicPolicyHandlers =
+      this.reflector.getAllAndOverride<
+        PolicyHandler<PublicPolicyHandlerContext>[]
+      >(CHECK_PUBLIC_POLICIES_KEY, [
         context.getHandler(),
         context.getClass(),
       ]) || [];
@@ -122,6 +146,21 @@ export class PoliciesGuard implements CanActivate {
       return true;
     }
 
+    if (publicPolicyHandlers.length > 0) {
+      const publicPolicyHandlerContext: PublicPolicyHandlerContext = {
+        request,
+        user,
+        moduleRef: this.moduleRef,
+      };
+
+      const result = await this.execAllPolicyHandlers(
+        publicPolicyHandlers,
+        publicPolicyHandlerContext,
+      );
+
+      return result;
+    }
+
     if (!user || policyHandlers.length === 0) {
       return false;
     }
@@ -129,20 +168,31 @@ export class PoliciesGuard implements CanActivate {
     const policyHandlerContext: PolicyHandlerContext = {
       request,
       user,
+      moduleRef: this.moduleRef,
     };
 
-    return policyHandlers.every((handler) =>
-      this.execPolicyHandler(handler, policyHandlerContext),
+    return await this.execAllPolicyHandlers(
+      policyHandlers,
+      policyHandlerContext,
     );
   }
 
-  private execPolicyHandler(
-    handler: PolicyHandler,
-    context: PolicyHandlerContext,
+  private async execPolicyHandler<TContext>(
+    handler: PolicyHandler<TContext>,
+    context: TContext,
   ) {
     if (typeof handler === 'function') {
-      return handler(context);
+      return await handler(context);
     }
-    return handler.handle(context);
+    return await handler.handle(context);
+  }
+
+  private async execAllPolicyHandlers<TContext>(
+    handlers: PolicyHandler<TContext>[],
+    context: TContext,
+  ) {
+    return await Promise.all(
+      handlers.map((handler) => this.execPolicyHandler(handler, context)),
+    ).then((results) => results.every(Boolean));
   }
 }

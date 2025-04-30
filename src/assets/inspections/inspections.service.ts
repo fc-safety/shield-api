@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { InspectionSessionStatus } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssetsService } from '../assets/assets.service';
+import { TagsService } from '../tags/tags.service';
 import { CreateInspectionDto } from './dto/create-inspection.dto';
 import { QueryInspectionDto } from './dto/query-inspection.dto';
 import { UpdateInspectionDto } from './dto/update-inspection.dto';
@@ -13,15 +14,27 @@ export class InspectionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly assetsService: AssetsService,
+    private readonly tagsService: TagsService,
   ) {}
 
   async create(
     createInspectionDto: CreateInspectionDto,
+    inspectionToken?: string,
     sessionId?: string,
     routeId?: string,
   ) {
     const prisma = await this.prisma.forUser();
     const assetId = createInspectionDto.asset.connect.id;
+
+    const tagValidationResult = await this.tagsService.validateInspectionToken(
+      inspectionToken ?? '',
+    );
+
+    if (!tagValidationResult.isValid) {
+      throw new BadRequestException(
+        tagValidationResult.reason ?? 'Invalid tag',
+      );
+    }
 
     const inspectionSession = sessionId
       ? await prisma.inspectionSession
