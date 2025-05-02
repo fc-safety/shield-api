@@ -63,6 +63,15 @@ export class InspectionsPublicService {
       },
     });
 
+    const unresolvedAlertsPromise = this.prisma.bypassRLS().alert.findMany({
+      where: {
+        asset: {
+          tag: { externalId: tagExternalId },
+        },
+        resolved: false,
+      },
+    });
+
     const inspectionsPromise = this.prisma.bypassRLS().inspection.findMany({
       where: {
         asset: {
@@ -77,12 +86,15 @@ export class InspectionsPublicService {
       },
     });
 
-    return Promise.all([assetPromise, inspectionsPromise]).then(
-      ([asset, inspections]) => ({
-        asset,
-        inspections,
-      }),
-    );
+    return Promise.all([
+      assetPromise,
+      unresolvedAlertsPromise,
+      inspectionsPromise,
+    ]).then(([asset, unresolvedAlerts, inspections]) => ({
+      asset,
+      unresolvedAlerts,
+      inspections,
+    }));
   }
 
   async validateInspectionToken(token: string) {

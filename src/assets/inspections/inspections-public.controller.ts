@@ -7,11 +7,7 @@ import { INSPECTION_TOKEN_HEADER } from './constants/headers';
 import { InspectionsPublicService } from './inspections-public.service';
 
 @Controller('inspections-public')
-@CheckPublicPolicies(async ({ user, request, moduleRef }) => {
-  if (user && user?.canRead('inspections')) {
-    return true;
-  }
-
+@CheckPublicPolicies(async ({ request, moduleRef }) => {
   const inspectionToken = firstOf(request.headers[INSPECTION_TOKEN_HEADER]);
   if (!inspectionToken) {
     return false;

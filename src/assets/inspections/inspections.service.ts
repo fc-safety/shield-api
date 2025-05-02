@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { isBefore, subDays } from 'date-fns';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { InspectionSessionStatus } from 'src/generated/prisma/client';
@@ -36,6 +37,9 @@ export class InspectionsService {
       );
     }
 
+    // If a route session ID is provided, look it up. We'll look up the corresponding
+    // route point here as well. This ensures that the session and route point are
+    // tied together.
     const inspectionSession = sessionId
       ? await prisma.inspectionSession
           .findUniqueOrThrow({
@@ -55,6 +59,8 @@ export class InspectionsService {
           .catch(as404OrThrow)
       : null;
 
+    // If the route session exists but isn't owned by the current inspector,
+    // update ownership.
     if (inspectionSession) {
       const currentUser = prisma.$currentUser();
       if (currentUser.id !== inspectionSession.lastInspectorId) {
@@ -65,6 +71,8 @@ export class InspectionsService {
       }
     }
 
+    // Get the current route point that is tied to the asset that
+    // was inspected.
     const currentRoutePoint =
       inspectionSession?.inspectionRoute.inspectionRoutePoints.find(
         (point) => point.assetId === assetId,
@@ -79,6 +87,7 @@ export class InspectionsService {
         : null) ??
       null;
 
+    // Create the inspection while also updating route point completion.
     const inspection = await prisma.inspection.create({
       data: {
         ...createInspectionDto,
@@ -136,6 +145,7 @@ export class InspectionsService {
           include: {
             inspectionSession: true,
           },
+          // A single inspection should only ever have one completed route point.
           take: 1,
         },
       },
@@ -229,8 +239,8 @@ export class InspectionsService {
   }
 
   async findActiveInspectionSessionsForAsset(assetId: string) {
-    return this.prisma.forUser().then((prisma) =>
-      prisma.inspectionSession.findMany({
+    return this.prisma.forUser().then(async (prisma) => {
+      const result = await prisma.inspectionSession.findMany({
         where: {
           inspectionRoute: {
             inspectionRoutePoints: {
@@ -239,31 +249,43 @@ export class InspectionsService {
               },
             },
           },
-          status: InspectionSessionStatus.PENDING,
-        },
-        include: {
-          lastInspector: true,
-          completedInspectionRoutePoints: {
-            include: {
-              inspectionRoutePoint: true,
-            },
-          },
-          inspectionRoute: {
-            include: {
-              inspectionRoutePoints: true,
-            },
+          status: {
+            in: [
+              InspectionSessionStatus.PENDING,
+              InspectionSessionStatus.EXPIRED,
+            ],
           },
         },
-      }),
-    );
+        select: {
+          id: true,
+        },
+      });
+
+      const sessionIds = result.map((session) => session.id);
+
+      // This should rarely be more than one session.
+      const sessions = await Promise.all(
+        sessionIds.map((id) => this.findInspectionSession(id)),
+      );
+
+      // Retrieving the individual sessions can mark the session as complete,
+      // so let's post-filter here to make sure those don't slip through.
+      return sessions.filter(
+        (session) =>
+          session.status === InspectionSessionStatus.PENDING ||
+          session.status === InspectionSessionStatus.EXPIRED,
+      );
+    });
   }
 
   async findInspectionSession(id: string) {
-    return this.prisma.forUser().then((prisma) =>
-      prisma.inspectionSession
-        .findUniqueOrThrow({
-          where: { id },
+    return this.prisma.forUser().then(async (prisma) => {
+      const handleGetSession = async (sessionId: string) =>
+        prisma.inspectionSession.findUniqueOrThrow({
+          where: { id: sessionId },
           include: {
+            client: true,
+            lastInspector: true,
             inspectionRoute: {
               include: {
                 inspectionRoutePoints: true,
@@ -275,16 +297,99 @@ export class InspectionsService {
               },
             },
           },
-        })
-        .catch(as404OrThrow),
-    );
+        });
+
+      return handleGetSession(id)
+        .catch(as404OrThrow)
+        .then(async (session) => {
+          // If session is not active, just return it.
+          if (session.status !== InspectionSessionStatus.PENDING) {
+            return session;
+          }
+
+          // If all route points have been completed, mark the session as complete and return it.
+          const completedRoutePointIds =
+            session.completedInspectionRoutePoints.map((point) => point.id);
+          if (
+            session.inspectionRoute.inspectionRoutePoints.every((point) =>
+              completedRoutePointIds.includes(point.id),
+            )
+          ) {
+            await prisma.inspectionSession.update({
+              where: { id: session.id },
+              data: { status: InspectionSessionStatus.COMPLETE },
+            });
+
+            return handleGetSession(session.id);
+          }
+
+          // If session is active and not complete, determine if it should be expired. To do this,
+          // we need to get all assets in the session's route and check if any of them have not been
+          // inspected for the required cycle.
+          const result = await prisma.asset.findMany({
+            where: {
+              inspectionCycle: {
+                not: null,
+              },
+              inspectionRoutePoints: {
+                some: {
+                  completedInspectionRoutePoints: {
+                    some: {
+                      inspectionSessionId: session.id,
+                    },
+                  },
+                },
+              },
+            },
+            select: {
+              inspectionCycle: true,
+              inspectionRoutePoints: {
+                select: {
+                  completedInspectionRoutePoints: {
+                    select: {
+                      createdOn: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          const clientDefaultInspectionCycle =
+            session.client.defaultInspectionCycle;
+
+          const shouldExpire = result.some((asset) => {
+            const inspectionCycle =
+              asset.inspectionCycle ?? clientDefaultInspectionCycle;
+            const inspectionDate = asset.inspectionRoutePoints
+              .at(0)
+              ?.completedInspectionRoutePoints.at(0)?.createdOn;
+
+            return (
+              inspectionDate &&
+              isBefore(inspectionDate, subDays(new Date(), inspectionCycle))
+            );
+          });
+
+          if (!shouldExpire) {
+            return session;
+          }
+
+          await prisma.inspectionSession.update({
+            where: { id: session.id },
+            data: { status: InspectionSessionStatus.EXPIRED },
+          });
+
+          return handleGetSession(session.id);
+        });
+    });
   }
 
-  async completeInspectionSession(id: string) {
+  async cancelInspectionSession(id: string) {
     return this.prisma.forUser().then((prisma) =>
       prisma.inspectionSession.update({
         where: { id },
-        data: { status: InspectionSessionStatus.COMPLETE },
+        data: { status: InspectionSessionStatus.CANCELLED },
       }),
     );
   }

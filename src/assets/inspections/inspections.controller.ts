@@ -53,9 +53,9 @@ export class InspectionsController {
     return this.inspectionsService.findInspectionSession(id);
   }
 
-  @Post('sessions/:id/complete')
-  completeSession(@Param('id') id: string) {
-    return this.inspectionsService.completeInspectionSession(id);
+  @Post('sessions/:id/cancel')
+  cancelSession(@Param('id') id: string) {
+    return this.inspectionsService.cancelInspectionSession(id);
   }
 
   @Get(':id')
