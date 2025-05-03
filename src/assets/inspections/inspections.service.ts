@@ -309,7 +309,9 @@ export class InspectionsService {
 
           // If all route points have been completed, mark the session as complete and return it.
           const completedRoutePointIds =
-            session.completedInspectionRoutePoints.map((point) => point.id);
+            session.completedInspectionRoutePoints.map(
+              (pointCompletion) => pointCompletion.inspectionRoutePointId,
+            );
           if (
             session.inspectionRoute.inspectionRoutePoints.every((point) =>
               completedRoutePointIds.includes(point.id),
