@@ -86,6 +86,7 @@ export const CreateAssetQuestionSchema = z.object({
       ...AssetQuestionResponseType[],
     ],
   ),
+  tone: z.string().optional(),
   assetAlertCriteria: z
     .object({
       createMany: z.object({

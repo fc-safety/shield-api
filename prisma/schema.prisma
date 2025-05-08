@@ -173,6 +173,7 @@ model AssetQuestion {
   modifiedOn         DateTime                  @updatedAt @db.Timestamptz()
   active             Boolean                   @default(true)
   type               AssetQuestionType
+  tone               String?
   required           Boolean                   @default(false)
   order              Int?
   prompt             String
