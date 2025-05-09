@@ -8,7 +8,10 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import {
+  CheckPolicies,
+  CheckResourcePermissions,
+} from 'src/auth/policies.guard';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
@@ -58,6 +61,7 @@ export class UsersController {
   }
 
   @Post(':id/assign-role')
+  @CheckPolicies(({ user }) => user.can('update', 'users'))
   assignRole(
     @Param('id') id: string,
     @Body() assignRoleDto: AssignRoleDto,
@@ -67,6 +71,7 @@ export class UsersController {
   }
 
   @Post(':id/reset-password')
+  @CheckPolicies(({ user }) => user.can('update', 'users'))
   resetPassword(
     @Param('id') id: string,
     @Body() resetPasswordDto: ResetPasswordDto,
@@ -76,6 +81,7 @@ export class UsersController {
   }
 
   @Post(':id/send-reset-password-email')
+  @CheckPolicies(({ user }) => user.can('notify', 'users'))
   sendResetPasswordEmail(
     @Param('id') id: string,
     @Query() query: SendResetPasswordQueryDto,

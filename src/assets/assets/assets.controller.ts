@@ -47,6 +47,7 @@ export class AssetsController {
     long: { limit: 100, ttl: 15 * 60 * 1000 },
   })
   @Post(':id/send-reminder-notifications')
+  @CheckPolicies(({ user }) => user.can('notify', 'users'))
   sendReminderNotifications(
     @Param('id') id: string,
     @Body() body: SendNotificationsBodyDto,
