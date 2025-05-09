@@ -14,6 +14,7 @@ export interface Role {
   notificationGroups: NotificationGroupId[];
   createdOn: string;
   updatedOn: string;
+  clientAssignable: boolean;
 }
 
 export const keycloakGroupSchema = z.object({
@@ -25,6 +26,7 @@ export const keycloakGroupSchema = z.object({
     role_created_at: z.array(z.string()).min(1),
     role_updated_at: z.array(z.string()).min(1),
     role_notification_group: z.array(z.string()).optional(),
+    role_client_assignable: z.array(z.string()).optional(),
   }),
 });
 
@@ -52,4 +54,5 @@ export const keycloakGroupAsRole = (
     ) ?? [],
   createdOn: group.attributes.role_created_at[0],
   updatedOn: group.attributes.role_updated_at[0],
+  clientAssignable: group.attributes.role_client_assignable?.[0] === 'true',
 });

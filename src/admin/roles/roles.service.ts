@@ -1,5 +1,9 @@
 import RoleRepresentation from '@keycloak/keycloak-admin-client/lib/defs/roleRepresentation';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import {
   getShieldClient,
@@ -135,6 +139,7 @@ export class RolesService {
           role_notification_group: createRoleDto.notificationGroups && [
             ...createRoleDto.notificationGroups,
           ],
+          role_client_assignable: [createRoleDto.clientAssignable.toString()],
         },
       },
     );
@@ -169,13 +174,30 @@ export class RolesService {
 
   async updateRole(roleId: string, updateRoleDto: UpdateRoleDto) {
     const roleGroup = await this.getRoleGroup(roleId);
-    const { description, notificationGroups, ...roleDefaults } = updateRoleDto;
+    const role = keycloakGroupAsRole(roleGroup, this.appClientId);
+
+    if (
+      updateRoleDto.clientAssignable &&
+      role.permissions.some((p) => p === VISIBILITY.GLOBAL)
+    ) {
+      throw new BadRequestException(
+        'Cannot allow clients to assign global visibility.',
+      );
+    }
+
+    const {
+      description,
+      notificationGroups,
+      clientAssignable,
+      ...roleDefaults
+    } = updateRoleDto;
 
     const attributes = KeycloakService.mergeAttributes(
       roleGroup.attributes,
       ['role_description', description],
       ['role_updated_at', new Date().toISOString()],
       ['role_notification_group', notificationGroups],
+      ['role_client_assignable', clientAssignable?.toString()],
     );
 
     await this.keycloak.client.groups.update(
@@ -199,6 +221,16 @@ export class RolesService {
     updatePermissionMappingDto: UpdatePermissionMappingDto,
   ) {
     const role = await this.getRole(roleId);
+
+    if (
+      role.clientAssignable &&
+      updatePermissionMappingDto.grant.some((p) => p.name === VISIBILITY.GLOBAL)
+    ) {
+      throw new BadRequestException(
+        'Global visibility cannot be granted to a client-assignable role.',
+      );
+    }
+
     if (updatePermissionMappingDto.grant.length) {
       await this.keycloak.client.groups.addClientRoleMappings({
         id: role.groupId,
