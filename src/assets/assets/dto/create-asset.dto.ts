@@ -9,7 +9,11 @@ export const CreateAssetSchema = z.object({
   location: z.string(),
   placement: z.string(),
   serialNumber: z.string(),
-  inspectionCycle: z.number().min(MINIMUM_INSPECTION_CYCLE).optional(),
+  inspectionCycle: z
+    .number()
+    .min(MINIMUM_INSPECTION_CYCLE)
+    .nullable()
+    .optional(),
   product: z.object({
     connect: z.object({
       id: z.string(),
