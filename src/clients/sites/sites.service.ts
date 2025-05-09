@@ -77,6 +77,6 @@ export class SitesService {
   async remove(id: string) {
     return this.prisma
       .forAdminOrUser()
-      .then((prisma) => prisma.client.delete({ where: { id } }));
+      .then((prisma) => prisma.site.delete({ where: { id } }));
   }
 }
