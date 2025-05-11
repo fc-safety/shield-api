@@ -61,7 +61,7 @@ export class UsersController {
   }
 
   @Post(':id/assign-role')
-  @CheckPolicies(({ user }) => user.can('update', 'users'))
+  @CheckPolicies(({ user }) => user.canUpdate('users'))
   assignRole(
     @Param('id') id: string,
     @Body() assignRoleDto: AssignRoleDto,
@@ -71,7 +71,7 @@ export class UsersController {
   }
 
   @Post(':id/reset-password')
-  @CheckPolicies(({ user }) => user.can('update', 'users'))
+  @CheckPolicies(({ user }) => user.canUpdate('users'))
   resetPassword(
     @Param('id') id: string,
     @Body() resetPasswordDto: ResetPasswordDto,

@@ -5,3 +5,7 @@ export interface ClientNotificationJobData {
 export interface SendNewProductRequestEmailJobData {
   productRequestId: string;
 }
+
+export interface SendInspectionAlertTriggeredEmailJobData {
+  alertId: string;
+}

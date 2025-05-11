@@ -30,7 +30,10 @@ import {
   QUEUE_PREFIX,
 } from '../lib/constants';
 import { SendEmailJobData } from '../lib/templates';
-import { ClientNotificationJobData } from '../lib/types';
+import {
+  ClientNotificationJobData,
+  SendInspectionAlertTriggeredEmailJobData,
+} from '../lib/types';
 import {
   INotificationGroup,
   isInspectionReminderNotificationGroup,
@@ -109,6 +112,11 @@ export class ClientNotificationsProcessor
         return await this.processClientMonthlyInspectionReports(
           job as Job<ClientNotificationJobData>,
         );
+      case NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL:
+        return await this.sendInspectionAlertTriggeredEmail(
+          job as Job<SendInspectionAlertTriggeredEmailJobData>,
+        );
+
       default:
         this.logger.warn('--> Unknown job name', { jobName: job.name });
         return {};
@@ -521,6 +529,89 @@ export class ClientNotificationsProcessor
     }
 
     return {};
+  }
+
+  private async sendInspectionAlertTriggeredEmail(
+    job: Job<SendInspectionAlertTriggeredEmailJobData>,
+  ) {
+    const { alertId } = job.data;
+
+    const alert = await this.prisma.bypassRLS().alert.findUniqueOrThrow({
+      where: { id: alertId },
+      include: {
+        site: true,
+        asset: {
+          include: {
+            product: {
+              include: {
+                productCategory: true,
+              },
+            },
+          },
+        },
+        assetQuestionResponse: {
+          include: {
+            assetQuestion: true,
+            responder: true,
+          },
+        },
+      },
+    });
+
+    // Map of role name to role.
+    const roleMap = await this.getRoleMap();
+
+    // All users for the client.
+    const clientUsers = await this.getClientUsers(alert.clientId);
+
+    // This mapping indicates which users should receive which reminder notification types.
+    const usersByNotificationGroupId = getUsersGroupedByNotificationGroupId(
+      clientUsers,
+      roleMap,
+      [NotificationGroups.inspection_alert_triggered],
+    );
+
+    const genericProps: Omit<
+      NonNullable<
+        SendEmailJobData<'inspection_alert_triggered'>['templateProps']
+      >,
+      'recipientFirstName'
+    > = {
+      siteName: alert.site.name,
+      alert: {
+        id: alert.id,
+        createdOn: alert.createdOn,
+        alertLevel: alert.alertLevel,
+        message: alert.message,
+        questionPrompt: alert.assetQuestionResponse.assetQuestion.prompt,
+        questionResponseValue: alert.assetQuestionResponse.value,
+        inspectionImageUrl: alert.inspectionImageUrl,
+      },
+      asset: {
+        id: alert.asset.id,
+        name: alert.asset.name,
+        serialNumber: alert.asset.serialNumber,
+        location: alert.asset.location,
+        placement: alert.asset.placement,
+        categoryColor: alert.asset.product.productCategory.color,
+        categoryName: alert.asset.product.productCategory.name,
+      },
+      inspectorName: `${alert.assetQuestionResponse.responder.firstName} ${alert.assetQuestionResponse.responder.lastName}`,
+      frontendUrl: this.config.get('FRONTEND_URL'),
+    };
+
+    for (const user of usersByNotificationGroupId.get(
+      'inspection_alert_triggered',
+    ) ?? []) {
+      await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
+        templateName: 'inspection_alert_triggered',
+        to: [user.email],
+        templateProps: {
+          ...genericProps,
+          recipientFirstName: user.firstName,
+        },
+      } satisfies SendEmailJobData<'inspection_alert_triggered'>);
+    }
   }
 
   // Utility methods

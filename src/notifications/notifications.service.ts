@@ -189,6 +189,15 @@ export class NotificationsService {
     );
   }
 
+  async queueInspectionAlertTriggeredEmail(alertId: string) {
+    await this.clientNotificationsQueue.add(
+      NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL,
+      {
+        alertId,
+      },
+    );
+  }
+
   async sendNewProductRequestEmail(
     productRequest: NewProductRequestTemplateProps['productRequest'],
   ) {

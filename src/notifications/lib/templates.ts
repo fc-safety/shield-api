@@ -1,4 +1,5 @@
 import React from 'react';
+import InspectionAlertTriggeredTemplateReact from '../templates/inspection_alert_triggered';
 import InspectionDueSoonAlertLevel1TemplateReact from '../templates/inspection_due_soon_alert_level_1';
 import InspectionDueSoonAlertLevel2TemplateReact from '../templates/inspection_due_soon_alert_level_2';
 import InspectionDueSoonAlertLevel3TemplateReact from '../templates/inspection_due_soon_alert_level_3';
@@ -13,7 +14,7 @@ import TeamInspectionReminderTemplateReact from '../templates/team-inspection-re
 import TestTemplateReact from '../templates/test';
 
 export const TEMPLATE_NAME_MAP = {
-  // Client notification reminder templates
+  // Automatic client notification reminder templates
   inspection_reminder: InspectionReminderTemplateReact,
   inspection_due_soon_alert_level_1: InspectionDueSoonAlertLevel1TemplateReact,
   inspection_due_soon_alert_level_2: InspectionDueSoonAlertLevel2TemplateReact,
@@ -22,7 +23,10 @@ export const TEMPLATE_NAME_MAP = {
   monthly_compliance_report: MonthlyInspectionReportTemplateReact,
   monthly_consumables_report: MonthlyConsumableReportTemplateReact,
 
-  // Other templates
+  // Other automatic client templates
+  inspection_alert_triggered: InspectionAlertTriggeredTemplateReact,
+
+  // Other general templates
   new_product_request: NewProductRequestTemplateReact,
   team_inspection_reminder: TeamInspectionReminderTemplateReact,
   manager_password_reset: ManagerPasswordResetTemplateReact,

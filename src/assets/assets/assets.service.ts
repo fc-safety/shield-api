@@ -320,9 +320,16 @@ export class AssetsService {
         ),
     );
 
-    await this.prisma.bypassRLS().alert.createMany({
+    const results = await this.prisma.bypassRLS().alert.createManyAndReturn({
       data: createInputs,
+      select: {
+        id: true,
+      },
     });
+
+    for (const result of results) {
+      this.notifications.queueInspectionAlertTriggeredEmail(result.id);
+    }
   }
 
   async handleConsumableConfigs(

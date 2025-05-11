@@ -14,5 +14,7 @@ export const CLIENT_NOTIFICATIONS_JOB_NAMES = {
 
 export const NOTIFICATIONS_JOB_NAMES = {
   SEND_NEW_PRODUCT_REQUEST_EMAIL: 'send-new-product-request-email',
+  SEND_INSPECTION_ALERT_TRIGGERED_EMAIL:
+    'send-inspection-alert-triggered-email',
   SEND_EMAIL: 'send-email',
 };
