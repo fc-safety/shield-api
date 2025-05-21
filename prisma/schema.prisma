@@ -333,8 +333,10 @@ model Address {
   street1 String
   street2 String?
   city    String
-  state   String
-  zip     String
+  state   String?
+  zip     String?
+  county  String?
+  country String?
   client  Client?
   site    Site?
 }
@@ -401,7 +403,7 @@ model Site {
   inspectionSessions      InspectionSession[]
   assetQuestionResponses  AssetQuestionResponse[]
   alerts                  Alert[]
-  client                  Client                   @relation(fields: [clientId], references: [id])
+  client                  Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId                String
   productRequestApprovals ProductRequestApproval[]
   productRequestItems     ProductRequestItem[]

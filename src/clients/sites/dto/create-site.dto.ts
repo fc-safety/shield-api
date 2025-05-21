@@ -4,6 +4,7 @@ import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export const CreateSiteSchema = z.object({
+  createdOn: z.string().datetime(),
   externalId: z.string().optional(),
   name: z.string(),
   client: z.object({

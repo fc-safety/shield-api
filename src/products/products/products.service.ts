@@ -19,12 +19,12 @@ export class ProductsService {
 
   async create(createProductDto: CreateProductDto) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) => prisma.product.create({ data: createProductDto }));
   }
 
   async findAll(queryProductDto?: QueryProductDto) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.product.findManyForPage(
         buildPrismaFindArgs<typeof prisma.product>(queryProductDto, {
           include: {
@@ -47,7 +47,7 @@ export class ProductsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.product
         .findUniqueOrThrow({
           where: { id },

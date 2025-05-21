@@ -5,6 +5,7 @@ import { MINIMUM_INSPECTION_CYCLE } from 'src/notifications/notification-types';
 import { z } from 'zod';
 
 export const CreateClientSchema = z.object({
+  createdOn: z.string().datetime(),
   externalId: z.string().optional(),
   name: z.string(),
   startedOn: z.string().datetime(),

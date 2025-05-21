@@ -1,16 +1,14 @@
 import * as csv from '@fast-csv/format';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
-import { Cache } from 'cache-manager';
 import crypto from 'crypto';
-import { add, isAfter, isBefore } from 'date-fns';
+import { add, isAfter } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
+import { AuthService, SigningKeyExpiredError } from 'src/auth/auth.service';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { SigningKey } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Readable } from 'stream';
 import { BulkGenerateSignedTagUrlDto } from './dto/bulk-generate-signed-tag-url.dto';
@@ -31,8 +29,8 @@ export class TagsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ApiConfigService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly cls: ClsService<CommonClsStore>,
+    private readonly authService: AuthService,
   ) {}
 
   async create(createTagDto: CreateTagDto) {
@@ -444,34 +442,6 @@ export class TagsService {
     };
   }
 
-  private async generateSignature(options: {
-    signatureData: string;
-    timestamp: number;
-    keyId: string;
-    ignoreExpiredKey?: boolean;
-  }) {
-    const { signatureData, timestamp, keyId, ignoreExpiredKey } = options;
-
-    const signingKey = await this.getSigningKey(keyId);
-
-    // If the key is not expired, or if the ignoreExpiredKey flag is set,
-    // we can use the key to generate the signature.
-    if (
-      !ignoreExpiredKey &&
-      signingKey.expiredOn &&
-      isBefore(signingKey.expiredOn, new Date(timestamp))
-    ) {
-      throw new BadRequestException('Signing key has expired');
-    }
-
-    const secret = signingKey.keySecret;
-
-    const data = `${signatureData}.${timestamp}`;
-    const hmac = crypto.createHmac('sha256', secret);
-    hmac.update(data);
-    return hmac.digest('base64url').slice(0, this.SIG_LENGTH);
-  }
-
   private async generateTagUrlSignature(options: {
     serialNumber: string;
     id: string;
@@ -572,32 +542,26 @@ export class TagsService {
     };
   }
 
-  private async getSigningKey(keyId: string) {
-    const cacheKey = `signing-key:${keyId}`;
-    let signingKey = await this.cache.get<SigningKey>(cacheKey);
-
-    if (signingKey) {
-      return signingKey;
-    }
-
-    signingKey = await this.prisma.signingKey.findUnique({
-      where: {
-        keyId,
-      },
-    });
-
-    if (signingKey === null) {
-      signingKey = await this.prisma.signingKey.create({
-        data: {
-          keyId,
-          keySecret: createId(),
-        },
+  private async generateSignature(options: {
+    signatureData: string;
+    timestamp: number;
+    keyId: string;
+    ignoreExpiredKey?: boolean;
+  }) {
+    try {
+      return this.authService.generateSignature({
+        signatureData: options.signatureData,
+        timestamp: options.timestamp,
+        keyId: options.keyId,
+        sigLength: this.SIG_LENGTH,
+        ignoreExpiredKey: options.ignoreExpiredKey,
       });
+    } catch (error) {
+      if (error instanceof SigningKeyExpiredError) {
+        throw new BadRequestException(error.message);
+      }
+
+      throw error;
     }
-
-    // Cache indefinitely.
-    await this.cache.set(cacheKey, signingKey);
-
-    return signingKey;
   }
 }
