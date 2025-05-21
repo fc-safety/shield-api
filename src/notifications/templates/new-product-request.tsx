@@ -63,6 +63,7 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
         homeUrl: 'https://www.example.com',
         name: 'Test Client',
         defaultInspectionCycle: 30,
+        demoMode: false,
       },
       site: {
         id: '1',
