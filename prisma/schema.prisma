@@ -354,6 +354,7 @@ model Client {
   phoneNumber             String
   homeUrl                 String?
   defaultInspectionCycle  Int                      @default(30)
+  demoMode                Boolean                  @default(false)
   sites                   Site[]
   people                  Person[]
   assets                  Asset[]

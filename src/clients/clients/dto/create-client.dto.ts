@@ -16,6 +16,7 @@ export const CreateClientSchema = z.object({
   phoneNumber: z.string(),
   homeUrl: z.string().optional(),
   defaultInspectionCycle: z.number().min(MINIMUM_INSPECTION_CYCLE).optional(),
+  demoMode: z.boolean().optional(),
 }) satisfies z.Schema<Prisma.ClientCreateInput>;
 
 export class CreateClientDto extends createZodDto(CreateClientSchema) {}
