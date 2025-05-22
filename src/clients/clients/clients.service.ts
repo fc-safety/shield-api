@@ -204,7 +204,6 @@ export class ClientsService {
         existingClient.assets.map(async (asset) => {
           const {
             name,
-            setupOn,
             active,
             productId,
             location,
@@ -222,7 +221,6 @@ export class ClientsService {
           await prisma.asset.create({
             data: {
               name,
-              setupOn,
               active,
               product: {
                 connect: {
