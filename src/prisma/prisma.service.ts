@@ -1,5 +1,10 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { ClsService } from 'nestjs-cls';
 import { TVisibility } from 'src/auth/permissions';
@@ -19,6 +24,13 @@ interface Person {
   allowedSiteIds: string; // Comma delimited
   clientId: string;
   visibility: TVisibility;
+}
+
+export class UserConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UserConfigurationError';
+  }
 }
 
 @Injectable()
@@ -41,11 +53,25 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   public async forUser() {
     const user = this.cls.get('user');
     invariant(user, 'No user in CLS');
-    const [clientId, siteId, allowedSiteIds] = await Promise.all([
-      this.getUserClientId(user),
-      this.getUserSiteId(user),
-      this.getAllowedSiteIds(user),
-    ]);
+
+    let [clientId, siteId, allowedSiteIds] = [
+      null as string | null,
+      null as string | null,
+      null as string | null,
+    ];
+
+    try {
+      [clientId, siteId, allowedSiteIds] = await Promise.all([
+        this.getUserClientId(user),
+        this.getUserSiteId(user),
+        this.getAllowedSiteIds(user),
+      ]);
+    } catch (e) {
+      if (e instanceof UserConfigurationError) {
+        throw new ForbiddenException(e.message);
+      }
+      throw e;
+    }
 
     const cacheKey = `person:idpId:${user.idpId}`;
     const createOrUpdatePerson = async () => {
@@ -153,6 +179,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         .client.findUniqueOrThrow({
           where: { externalId: user.clientId },
         })
+        .catch((e) => {
+          if (
+            e instanceof Prisma.PrismaClientKnownRequestError &&
+            e.code === 'P2025'
+          ) {
+            throw new UserConfigurationError(
+              'Unable to find a valid client account for your user. Please contact your administrator to ensure your account is properly configured.',
+            );
+          }
+          throw e;
+        })
         .then((client) => client.id),
       60 * 60 * 1000,
     ); // 1 hour
@@ -165,6 +202,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         .site.findUniqueOrThrow({
           where: { externalId: user.siteId },
         })
+        .catch((e) => {
+          if (
+            e instanceof Prisma.PrismaClientKnownRequestError &&
+            e.code === 'P2025'
+          ) {
+            throw new UserConfigurationError(
+              'Unable to find a valid site assignment your user. Please contact your administrator to ensure your account is properly configured.',
+            );
+          }
+          throw e;
+        })
         .then((site) => site.id),
       60 * 60 * 1000,
     ); // 1 hour
@@ -174,7 +222,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     return await this.getFromCacheOrDefault<string>(
       `allowedSiteIds:externalId:${user.siteId}`,
       this.bypassRLS()
-        .site.findUniqueOrThrow({
+        .site.findUnique({
           where: { externalId: user.siteId },
           // For simplicity, only including 2 levels deep (3 total).
           include: {
@@ -186,13 +234,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
           },
         })
         .then((site) =>
-          [
-            site.id,
-            site.subsites.map((s) => s.id),
-            site.subsites.flatMap((s) => s.subsites.map((s) => s.id)),
-          ]
-            .flat()
-            .join(','),
+          site
+            ? [
+                site.id,
+                site.subsites.map((s) => s.id),
+                site.subsites.flatMap((s) => s.subsites.map((s) => s.id)),
+              ]
+                .flat()
+                .join(',')
+            : '',
         ),
       60 * 60 * 1000,
     ); // 1 hour
