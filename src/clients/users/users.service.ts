@@ -6,7 +6,7 @@ import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
 import { CommonClsStore } from 'src/common/types';
-import { as404OrThrow } from 'src/common/utils';
+import { as404OrThrow, isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma } from 'src/generated/prisma/client';
 import { NotificationsService } from 'src/notifications/notifications.service';
@@ -34,7 +34,7 @@ export class UsersService {
 
   async create(
     createUserDto: CreateUserDto,
-    clientId?: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
     const client = await this.getClient(clientId, bypassRLS);
@@ -60,12 +60,12 @@ export class UsersService {
       emailVerified: true,
       attributes,
     });
-    return this.findOne(newId, clientId);
+    return this.findOne(newId, client, bypassRLS);
   }
 
   async findAll(
     queryUserDto: QueryUserDto = new QueryUserDto(),
-    clientId?: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
     const client = await this.getClient(clientId, bypassRLS);
@@ -95,14 +95,19 @@ export class UsersService {
       });
   }
 
-  async findOne(id: string, clientId?: string, bypassRLS?: boolean) {
+  async findOne(
+    id: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
+    bypassRLS?: boolean,
+  ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
     return keycloakUserAsClientUser(keycloakUser);
   }
+
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
-    clientId?: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
@@ -130,10 +135,19 @@ export class UsersService {
     );
   }
 
+  async remove(
+    id: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
+    bypassRLS?: boolean,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+    await this.keycloak.client.users.del({ id: keycloakUser.id });
+  }
+
   async assignRole(
     id: string,
     assignRoleDto: AssignRoleDto,
-    clientId?: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
@@ -174,7 +188,7 @@ export class UsersService {
   async resetPassword(
     id: string,
     resetPasswordDto: ResetPasswordDto,
-    clientId?: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
@@ -207,7 +221,7 @@ export class UsersService {
   async sendResetPasswordEmail(
     id: string,
     appClientId: string,
-    clientId?: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
@@ -260,7 +274,14 @@ export class UsersService {
     return { password };
   }
 
-  private async getClient(clientId?: string, bypassRLS?: boolean) {
+  private async getClient(
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
+    bypassRLS?: boolean,
+  ) {
+    if (!isNil(clientId) && typeof clientId !== 'string') {
+      return clientId;
+    }
+
     let thisClientId = clientId;
     let prisma: ReturnType<typeof this.prisma.extended>;
 
@@ -286,7 +307,7 @@ export class UsersService {
 
   private async getKeycloakUser(
     id: string,
-    clientId?: string,
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
     const client = await this.getClient(clientId, bypassRLS);

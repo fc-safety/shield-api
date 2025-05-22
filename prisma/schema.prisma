@@ -41,9 +41,9 @@ model Asset {
   alerts                 Alert[]
   setupQuestionResponses AssetQuestionResponse[]
   productRequests        ProductRequest[]
-  site                   Site                    @relation(fields: [siteId], references: [id])
+  site                   Site                    @relation(fields: [siteId], references: [id], onDelete: Cascade)
   siteId                 String                  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
-  client                 Client                  @relation(fields: [clientId], references: [id])
+  client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId               String                  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 }
 

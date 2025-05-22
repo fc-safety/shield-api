@@ -11,6 +11,7 @@ import {
 import { CheckResourcePermissions } from 'src/auth/policies.guard';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
+import { DuplicateDemoClientDto } from './dto/duplicate-demo-client.dto';
 import { QueryClientDto } from './dto/query-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -42,5 +43,13 @@ export class ClientsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.clientsService.remove(id);
+  }
+
+  @Post(':id/duplicate-demo')
+  duplicateDemo(
+    @Param('id') id: string,
+    @Body() duplicateDemoClientDto: DuplicateDemoClientDto,
+  ) {
+    return this.clientsService.duplicateDemo(id, duplicateDemoClientDto);
   }
 }
