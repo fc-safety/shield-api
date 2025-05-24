@@ -15,6 +15,7 @@ import {
   VISIBILITY,
   VISIBILITY_PERMISSIONS,
 } from 'src/auth/permissions';
+import { isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { NotificationGroups } from 'src/notifications/notification-types';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -131,9 +132,9 @@ export class RolesService {
         name: createRoleDto.name,
         attributes: {
           role_id: [roleId],
-          role_description: createRoleDto.description && [
-            createRoleDto.description,
-          ],
+          role_description: !isNil(createRoleDto.description)
+            ? [createRoleDto.description]
+            : undefined,
           role_created_at: [new Date().toISOString()],
           role_updated_at: [new Date().toISOString()],
           role_notification_group: createRoleDto.notificationGroups && [
