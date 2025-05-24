@@ -17,6 +17,7 @@ RUN npm i --ignore-scripts @swc/core-linux-x64-gnu
 COPY . .
 
 # Generate Prisma types for app build.
+RUN npx prisma migrate deploy
 RUN npm run db:generate
 
 # Creates a "dist" folder with the production build
