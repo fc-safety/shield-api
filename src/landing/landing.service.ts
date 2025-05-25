@@ -30,6 +30,7 @@ export class LandingService {
 
     this.notifications.queueEmail({
       to: [landingFormLeadToAddress],
+      replyTo: data.email,
       templateName: 'new_landing_form_lead',
       templateProps: {
         timestamp: new Date(),

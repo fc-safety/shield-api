@@ -142,11 +142,13 @@ export class NotificationsService {
     subject,
     to,
     templateProps,
+    replyTo,
   }: {
     templateName: T;
     subject?: string;
     to: string[];
     templateProps?: React.ComponentProps<(typeof TEMPLATE_NAME_MAP)[T]>;
+    replyTo?: string;
   }) {
     const Template = TEMPLATE_NAME_MAP[templateName];
 
@@ -171,6 +173,7 @@ export class NotificationsService {
       to,
       text,
       react: Template(props as any),
+      replyTo,
     });
   }
 
