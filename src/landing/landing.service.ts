@@ -30,6 +30,8 @@ export class LandingService {
 
     this.notifications.queueEmail({
       to: [landingFormLeadToAddress],
+      bcc: this.config.get('BCC_LEAD_FORM_SUBMISSION_EMAILS'),
+      replyTo: data.email,
       templateName: 'new_landing_form_lead',
       templateProps: {
         timestamp: new Date(),

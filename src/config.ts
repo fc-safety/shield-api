@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isNil } from './common/utils';
 
 export const configSchema = z.object({
   // GENERAL
@@ -39,6 +40,12 @@ export const configSchema = z.object({
 
   // Signing
   DEFAULT_SIGNING_KEY_ID: z.string(),
+
+  // Shield Landing
+  BCC_LEAD_FORM_SUBMISSION_EMAILS: z
+    .string()
+    .optional()
+    .transform((v) => (isNil(v) ? [] : v.split(','))),
 });
 
 export type Config = z.infer<typeof configSchema>;

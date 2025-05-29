@@ -142,11 +142,17 @@ export class NotificationsService {
     subject,
     to,
     templateProps,
+    replyTo,
+    cc,
+    bcc,
   }: {
     templateName: T;
     subject?: string;
     to: string[];
     templateProps?: React.ComponentProps<(typeof TEMPLATE_NAME_MAP)[T]>;
+    replyTo?: string;
+    cc?: string[];
+    bcc?: string[];
   }) {
     const Template = TEMPLATE_NAME_MAP[templateName];
 
@@ -169,8 +175,11 @@ export class NotificationsService {
     await this.sendEmail({
       subject: subject ?? Template.Subject,
       to,
+      cc,
+      bcc,
       text,
       react: Template(props as any),
+      replyTo,
     });
   }
 

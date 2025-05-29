@@ -87,7 +87,7 @@ export class ClientNotificationsProcessor
       .catch((e) => this.logger.warn(e));
   }
 
-  @OnWorkerEvent('failed')
+  @OnWorkerEvent('error')
   onFailed(job: Job<unknown>, error: Error) {
     this.logger.error('Processor failed', { job, error });
   }
