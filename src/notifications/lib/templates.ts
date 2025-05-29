@@ -50,4 +50,6 @@ export interface SendEmailJobData<T extends NotificationTemplateId> {
   to: string[];
   templateProps?: React.ComponentProps<(typeof TEMPLATE_NAME_MAP)[T]>;
   replyTo?: string;
+  cc?: string[];
+  bcc?: string[];
 }
