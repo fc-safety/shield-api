@@ -104,9 +104,18 @@ export class PrismaService
 
           this.peopleService
             .getPersonRepresentation()
-            .then((person) =>
-              this.emitModelEvent({ model, operation, result, person }),
-            );
+            .catch((e) =>
+              this.logger.warn(
+                e,
+                'Failed to get person representation. This usually happens when called from outside a request cycle.',
+              ),
+            )
+            .then(
+              (person) =>
+                person &&
+                this.emitModelEvent({ model, operation, result, person }),
+            )
+            .catch((e) => this.logger.warn(e, 'Failed to emit model event.'));
         },
       }),
     );
