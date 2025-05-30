@@ -1,49 +1,74 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   ForbiddenException,
-  Inject,
   Injectable,
+  Logger,
   OnModuleInit,
 } from '@nestjs/common';
-import { Cache } from 'cache-manager';
 import { ClsService } from 'nestjs-cls';
-import { TVisibility } from 'src/auth/permissions';
-import { StatelessUser } from 'src/auth/user.schema';
-import { ViewContext } from 'src/common/utils';
+import {
+  PeopleService,
+  PersonRepresentation,
+  UserConfigurationError,
+} from 'src/clients/people/people.service';
+import { isNil, ViewContext } from 'src/common/utils';
 import {
   Prisma,
   PrismaClient,
   PrismaPromise,
 } from 'src/generated/prisma/client';
+import { RedisService } from 'src/redis/redis.service';
 import { CommonClsStore } from '../common/types';
 
-interface Person {
-  id: string;
-  idpId: string | null;
-  siteId: string;
-  allowedSiteIds: string; // Comma delimited
-  clientId: string;
-  visibility: TVisibility;
-}
-
-export class UserConfigurationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'UserConfigurationError';
-  }
-}
+const DEFAULT_PRISMA_OPTIONS = {
+  log: [
+    {
+      emit: 'event',
+      level: 'query',
+    },
+    {
+      emit: 'stdout',
+      level: 'error',
+    },
+    {
+      emit: 'stdout',
+      level: 'info',
+    },
+    {
+      emit: 'stdout',
+      level: 'warn',
+    },
+  ],
+} satisfies ConstructorParameters<typeof PrismaClient>[0];
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
+export class PrismaService
+  extends PrismaClient<typeof DEFAULT_PRISMA_OPTIONS>
+  implements OnModuleInit
+{
+  private readonly logger = new Logger(PrismaService.name);
+
   constructor(
     protected readonly cls: ClsService<CommonClsStore>,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly redis: RedisService,
+    private readonly peopleService: PeopleService,
   ) {
-    super();
+    super(DEFAULT_PRISMA_OPTIONS);
   }
 
   async onModuleInit() {
     await this.$connect();
+
+    this.logger.log('PrismaService initialized');
+    this.$on('query', (e) => {
+      const { model, action } = this.parsePrismaQuery(e.query);
+
+      // this.logger.debug(`Query: ${e.query}`, {
+      //   model,
+      //   action,
+      //   params: e.params,
+      //   duration: `${e.duration}ms`,
+      // });
+    });
   }
 
   public extended() {
@@ -51,82 +76,40 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   public async forUser() {
-    const user = this.cls.get('user');
-    invariant(user, 'No user in CLS');
-
-    let [clientId, siteId, allowedSiteIds] = [
-      null as string | null,
-      null as string | null,
-      null as string | null,
-    ];
-
     try {
-      [clientId, siteId, allowedSiteIds] = await Promise.all([
-        this.getUserClientId(user),
-        this.getUserSiteId(user),
-        this.getAllowedSiteIds(user),
-      ]);
+      const person = await this.peopleService.getPersonRepresentation();
+
+      return this.extended().$extends(
+        extensions.forUser(person, {
+          onResult: ({ model, operation, result }) => {
+            this.emitModelEvent({ model, operation, result, person });
+          },
+        }),
+      );
     } catch (e) {
       if (e instanceof UserConfigurationError) {
         throw new ForbiddenException(e.message);
       }
       throw e;
     }
-
-    const cacheKey = `person:idpId:${user.idpId}`;
-    const createOrUpdatePerson = async () => {
-      const prisma = this.bypassRLS();
-
-      const existingPerson = await prisma.person.findUnique({
-        where: { idpId: user.idpId },
-      });
-
-      const data = {
-        idpId: user.idpId,
-        firstName: user.givenName ?? '',
-        lastName: user.familyName ?? '',
-        email: user.email,
-        username: user.username,
-        site: {
-          connect: {
-            id: siteId,
-          },
-        },
-        client: {
-          connect: {
-            id: clientId,
-          },
-        },
-      };
-
-      if (existingPerson) {
-        return await prisma.person.update({
-          where: { id: existingPerson.id },
-          data,
-        });
-      } else {
-        return await prisma.person.create({ data });
-      }
-    };
-
-    const person = await this.getFromCacheOrDefault<Person>(
-      cacheKey,
-      createOrUpdatePerson().then(({ id, siteId, clientId, idpId }) => ({
-        id,
-        siteId,
-        clientId,
-        idpId,
-        visibility: user.visibility,
-        allowedSiteIds,
-      })),
-      60 * 60 * 1000, // 1 hour
-    );
-
-    return this.extended().$extends(extensions.forUser(person));
   }
 
-  public bypassRLS() {
-    return this.extended().$extends(extensions.bypassRLS());
+  public bypassRLS(options: { skipPersonLog?: boolean } = {}) {
+    return this.extended().$extends(
+      extensions.bypassRLS({
+        onResult: ({ model, operation, result }) => {
+          if (options.skipPersonLog) {
+            return;
+          }
+
+          this.peopleService
+            .getPersonRepresentation()
+            .then((person) =>
+              this.emitModelEvent({ model, operation, result, person }),
+            );
+        },
+      }),
+    );
   }
 
   /**
@@ -152,105 +135,84 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     }
   }
 
-  private async getFromCacheOrDefault<
-    T extends string | number | boolean | object,
-  >(
-    cacheKey: string,
-    defaultValue: T | Promise<T> | (() => T | Promise<T>),
-    timeout?: number,
-  ) {
-    const cachedValue = await this.cache.get<T>(cacheKey);
-
-    if (cachedValue !== null) {
-      return cachedValue;
+  private emitModelEvent({
+    model,
+    operation,
+    result,
+    person,
+  }: {
+    model: string;
+    operation: string;
+    result: unknown;
+    person: PersonRepresentation;
+  }) {
+    if (!['create', 'update', 'delete'].includes(operation)) {
+      return;
     }
 
-    const valueOrPromise =
-      typeof defaultValue === 'function' ? defaultValue() : defaultValue;
-    const value: T = await valueOrPromise;
-    await this.cache.set(cacheKey, value, timeout);
-    return value;
+    const eventBody: Record<string, string> = {
+      model,
+      operation,
+    };
+
+    if (typeof result === 'object' && !isNil(result) && 'id' in result) {
+      eventBody.id = String(result.id);
+    }
+
+    const channel = `db-events:${person.clientId}:${model}:${operation}`;
+
+    this.redis.getPublisher().publish(channel, JSON.stringify(eventBody));
   }
 
-  private async getUserClientId(user: StatelessUser) {
-    return await this.getFromCacheOrDefault<string>(
-      `clientId:externalId:${user.clientId}`,
-      this.bypassRLS()
-        .client.findUniqueOrThrow({
-          where: { externalId: user.clientId },
-        })
-        .catch((e) => {
-          if (
-            e instanceof Prisma.PrismaClientKnownRequestError &&
-            e.code === 'P2025'
-          ) {
-            throw new UserConfigurationError(
-              'Unable to find a valid client account for your user. Please contact your administrator to ensure your account is properly configured.',
-            );
-          }
-          throw e;
-        })
-        .then((client) => client.id),
-      60 * 60 * 1000,
-    ); // 1 hour
-  }
+  private parsePrismaQuery(query: string): { model?: string; action?: string } {
+    // Normalize and sanitize input
+    const normalizedQuery = query.trim();
 
-  private async getUserSiteId(user: StatelessUser) {
-    return await this.getFromCacheOrDefault<string>(
-      `siteId:externalId:${user.siteId}`,
-      this.bypassRLS()
-        .site.findUniqueOrThrow({
-          where: { externalId: user.siteId },
-        })
-        .catch((e) => {
-          if (
-            e instanceof Prisma.PrismaClientKnownRequestError &&
-            e.code === 'P2025'
-          ) {
-            throw new UserConfigurationError(
-              'Unable to find a valid site assignment your user. Please contact your administrator to ensure your account is properly configured.',
-            );
-          }
-          throw e;
-        })
-        .then((site) => site.id),
-      60 * 60 * 1000,
-    ); // 1 hour
-  }
+    // Define patterns
+    const createPattern = /insert into "public"\."([^"]+)"/i;
+    const updatePattern = /update "public"\."([^"]+)"/i;
+    const deletePattern = /delete from "public"\."([^"]+)"/i;
+    const selectPattern = /select .* from "public"\."([^"]+)"/i;
 
-  private async getAllowedSiteIds(user: StatelessUser) {
-    return await this.getFromCacheOrDefault<string>(
-      `allowedSiteIds:externalId:${user.siteId}`,
-      this.bypassRLS()
-        .site.findUnique({
-          where: { externalId: user.siteId },
-          // For simplicity, only including 2 levels deep (3 total).
-          include: {
-            subsites: {
-              include: {
-                subsites: true,
-              },
-            },
-          },
-        })
-        .then((site) =>
-          site
-            ? [
-                site.id,
-                site.subsites.map((s) => s.id),
-                site.subsites.flatMap((s) => s.subsites.map((s) => s.id)),
-              ]
-                .flat()
-                .join(',')
-            : '',
-        ),
-      60 * 60 * 1000,
-    ); // 1 hour
+    // Match against known actions
+    if (createPattern.test(normalizedQuery)) {
+      const [, model] = normalizedQuery.match(createPattern)!;
+      return { model, action: 'create' };
+    }
+
+    if (updatePattern.test(normalizedQuery)) {
+      const [, model] = normalizedQuery.match(updatePattern)!;
+      return { model, action: 'update' };
+    }
+
+    if (deletePattern.test(normalizedQuery)) {
+      const [, model] = normalizedQuery.match(deletePattern)!;
+      return { model, action: 'delete' };
+    }
+
+    if (selectPattern.test(normalizedQuery)) {
+      const [, model] = normalizedQuery.match(selectPattern)!;
+      return { model, action: 'read' };
+    }
+
+    return {};
   }
 }
 
 export const extensions = {
-  bypassRLS: () => {
+  bypassRLS: (
+    options: {
+      onResult?: ({
+        model,
+        operation,
+        result,
+      }: {
+        model: string;
+        operation: string;
+        result: unknown;
+      }) => void;
+    } = {},
+  ) => {
     return Prisma.defineExtension((prisma) =>
       prisma.$extends({
         client: {
@@ -258,11 +220,16 @@ export const extensions = {
         },
         query: {
           $allModels: {
-            async $allOperations({ args, query }) {
+            async $allOperations({ args, query, model, operation }) {
               const [, result] = await prisma.$transaction([
                 prisma.$executeRaw`SELECT set_config('app.bypass_rls', 'on', TRUE)`,
                 query(args),
               ]);
+
+              if (options.onResult) {
+                options.onResult({ model, operation, result });
+              }
+
               return result;
             },
           },
@@ -271,7 +238,20 @@ export const extensions = {
     );
   },
 
-  forUser: (person: Person) => {
+  forUser: (
+    person: PersonRepresentation,
+    options: {
+      onResult?: ({
+        model,
+        operation,
+        result,
+      }: {
+        model: string;
+        operation: string;
+        result: unknown;
+      }) => void;
+    } = {},
+  ) => {
     return Prisma.defineExtension((prisma) => {
       const setContextAndExecute = async <P extends PrismaPromise<any>>(
         transactionArg: P,
@@ -305,7 +285,18 @@ export const extensions = {
                   client: { connect: { id: person.clientId } },
                 };
               }
-              return await setContextAndExecute(query(args));
+              const result = await setContextAndExecute(query(args));
+
+              // Emit event to Redis.
+              if (options.onResult) {
+                options.onResult({
+                  model,
+                  operation,
+                  result,
+                });
+              }
+
+              return result;
             },
           },
           $queryRaw: ({ args, query }) => {
@@ -360,7 +351,3 @@ export const extensions = {
     );
   },
 };
-
-function invariant<T>(condition: T, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
