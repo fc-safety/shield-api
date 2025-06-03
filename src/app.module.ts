@@ -20,6 +20,7 @@ import { ProductsModule } from './products/products.module';
 import { SettingsModule } from './settings/settings.module';
 import { RedisModule } from './redis/redis.module';
 import { EventsModule } from './events/events.module';
+import { StatsModule } from './stats/stats.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { EventsModule } from './events/events.module';
     LandingModule,
     RedisModule,
     EventsModule,
+    StatsModule,
   ],
   controllers: [],
   providers: [

@@ -35,10 +35,10 @@ export class EventsService {
 
         const channel = `db-events:${person.clientId}:${model}:${operation}`;
         return new Observable((observer) => {
-          this.logger.debug('Subscribing to channel', channel);
+          this.logger.debug(`Subscribing to channel ${channel}`);
 
           const unsubscribe = () => {
-            this.logger.log('Unsubscribing from channel', channel);
+            this.logger.debug(`Unsubscribing from channel ${channel}`);
             this.redis.getSubscriber().pUnsubscribe(channel);
           };
 
