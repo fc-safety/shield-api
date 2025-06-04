@@ -75,7 +75,7 @@ export class NotificationsProcessor
   ) {
     const { productRequestId } = job.data;
     const productRequest = await this.prisma
-      .bypassRLS()
+      .bypassRLS({ skipPersonLog: true })
       .productRequest.findUniqueOrThrow({
         where: { id: productRequestId },
         include: {

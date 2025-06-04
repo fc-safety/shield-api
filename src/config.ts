@@ -34,6 +34,7 @@ export const configSchema = z.object({
   // Redis/ValKey Store
   KV_STORE_HOST: z.string().default('localhost'),
   KV_STORE_PORT: z.coerce.number().default(6379),
+  KV_STORE_CONNECT_TIMEOUT: z.coerce.number().default(5000),
 
   // Cloudflare Turnstile
   CLOUDFLARE_TURNSTILE_SECRET_KEY_SHIELD_LANDING: z.string(),

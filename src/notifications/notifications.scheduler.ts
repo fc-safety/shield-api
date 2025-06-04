@@ -19,7 +19,7 @@ export class NotificationsScheduler {
   @Cron('0 4 * * *')
   async handleDailyInspectionReminders() {
     this.logger.debug('--> Running daily inspection reminders...');
-    const prisma = this.prisma.bypassRLS();
+    const prisma = this.prisma.bypassRLS({ skipPersonLog: true });
     const clients = await prisma.client.findMany({
       select: {
         id: true,
@@ -41,7 +41,7 @@ export class NotificationsScheduler {
   @Cron('0 5 1 * *')
   async handleMonthlyInspectionReports() {
     this.logger.debug('--> Running monthly inspection reports...');
-    const prisma = this.prisma.bypassRLS();
+    const prisma = this.prisma.bypassRLS({ skipPersonLog: true });
     const clients = await prisma.client.findMany({
       select: {
         id: true,

@@ -134,9 +134,11 @@ export class ClientNotificationsProcessor
   private async processClientInspectionReminders(
     job: Job<ClientNotificationJobData>,
   ): Promise<any> {
-    const client = await this.prisma.bypassRLS().client.findUniqueOrThrow({
-      where: { id: job.data.clientId },
-    });
+    const client = await this.prisma
+      .bypassRLS({ skipPersonLog: true })
+      .client.findUniqueOrThrow({
+        where: { id: job.data.clientId },
+      });
 
     // Map of role name to role.
     const roleMap = await this.getRoleMap();
@@ -175,14 +177,16 @@ export class ClientNotificationsProcessor
     > = new Map(INSPECTION_REMINDER_NOTIFICATION_GROUPS.map((g) => [g.id, []]));
 
     // Get all assets for the client with their latest inspection.
-    const assets = await this.prisma.bypassRLS().asset.findMany({
-      where: { clientId: job.data.clientId },
-      include: {
-        site: true,
-        inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
-        product: { include: { productCategory: true } },
-      },
-    });
+    const assets = await this.prisma
+      .bypassRLS({ skipPersonLog: true })
+      .asset.findMany({
+        where: { clientId: job.data.clientId },
+        include: {
+          site: true,
+          inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
+          product: { include: { productCategory: true } },
+        },
+      });
 
     // Group assets into buckets if they meet any of the notification group thresholds.
     for (const asset of assets) {
@@ -286,9 +290,11 @@ export class ClientNotificationsProcessor
       `--> Processing client monthly inspection reports for client ${job.data.clientId}...`,
     );
 
-    const client = await this.prisma.bypassRLS().client.findUniqueOrThrow({
-      where: { id: job.data.clientId },
-    });
+    const client = await this.prisma
+      .bypassRLS({ skipPersonLog: true })
+      .client.findUniqueOrThrow({
+        where: { id: job.data.clientId },
+      });
 
     // Map of role name to role.
     const roleMap = await this.getRoleMap();
@@ -324,23 +330,25 @@ export class ClientNotificationsProcessor
       monthlyComplianceReportUsers.length > 0
     ) {
       // Get all assets for the client with their latest inspection.
-      const assets = await this.prisma.bypassRLS().asset.findMany({
-        where: { clientId: job.data.clientId },
-        include: {
-          site: true,
-          inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
-          product: { include: { productCategory: true } },
-          _count: {
-            select: {
-              alerts: {
-                where: {
-                  resolved: false,
+      const assets = await this.prisma
+        .bypassRLS({ skipPersonLog: true })
+        .asset.findMany({
+          where: { clientId: job.data.clientId },
+          include: {
+            site: true,
+            inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
+            product: { include: { productCategory: true } },
+            _count: {
+              select: {
+                alerts: {
+                  where: {
+                    resolved: false,
+                  },
                 },
               },
             },
           },
-        },
-      });
+        });
 
       // For each user, determine visible assets and then build and send the report.
       for (const user of monthlyComplianceReportUsers) {
@@ -433,7 +441,7 @@ export class ClientNotificationsProcessor
       monthlyConsumableReportUsers.length > 0
     ) {
       const consumables = await this.prisma
-        .bypassRLS()
+        .bypassRLS({ skipPersonLog: true })
         .consumable.findMany({
           where: {
             clientId: job.data.clientId,
@@ -536,27 +544,29 @@ export class ClientNotificationsProcessor
   ) {
     const { alertId } = job.data;
 
-    const alert = await this.prisma.bypassRLS().alert.findUniqueOrThrow({
-      where: { id: alertId },
-      include: {
-        site: true,
-        asset: {
-          include: {
-            product: {
-              include: {
-                productCategory: true,
+    const alert = await this.prisma
+      .bypassRLS({ skipPersonLog: true })
+      .alert.findUniqueOrThrow({
+        where: { id: alertId },
+        include: {
+          site: true,
+          asset: {
+            include: {
+              product: {
+                include: {
+                  productCategory: true,
+                },
               },
             },
           },
-        },
-        assetQuestionResponse: {
-          include: {
-            assetQuestion: true,
-            responder: true,
+          assetQuestionResponse: {
+            include: {
+              assetQuestion: true,
+              responder: true,
+            },
           },
         },
-      },
-    });
+      });
 
     // Map of role name to role.
     const roleMap = await this.getRoleMap();
@@ -636,10 +646,12 @@ export class ClientNotificationsProcessor
    * @returns A mapping of asset visibility to a list of sites and asset IDs.
    */
   private async getAssetVisibilityMappings(clientId: string) {
-    const sites = await this.prisma.bypassRLS().site.findMany({
-      select: { id: true, externalId: true, name: true },
-      where: { clientId },
-    });
+    const sites = await this.prisma
+      .bypassRLS({ skipPersonLog: true })
+      .site.findMany({
+        select: { id: true, externalId: true, name: true },
+        where: { clientId },
+      });
 
     const assetVisibilityMappings: Record<
       Exclude<TVisibility, 'global'>,
