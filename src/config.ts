@@ -47,6 +47,9 @@ export const configSchema = z.object({
     .string()
     .optional()
     .transform((v) => (isNil(v) ? [] : v.split(','))),
+
+  // Help Scout Support
+  HELPSCOUT_BEACON_SECRET_KEY: z.string(),
 });
 
 export type Config = z.infer<typeof configSchema>;
