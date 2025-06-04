@@ -62,12 +62,12 @@ export class PrismaService
     this.$on('query', (e) => {
       const { model, action } = this.parsePrismaQuery(e.query);
 
-      // this.logger.debug(`Query: ${e.query}`, {
-      //   model,
-      //   action,
-      //   params: e.params,
-      //   duration: `${e.duration}ms`,
-      // });
+      this.logger.debug(`Query: ${e.query}`, {
+        model,
+        action,
+        params: e.params,
+        duration: `${e.duration}ms`,
+      });
     });
   }
 
