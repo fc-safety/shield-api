@@ -21,6 +21,7 @@ import { SettingsModule } from './settings/settings.module';
 import { RedisModule } from './redis/redis.module';
 import { EventsModule } from './events/events.module';
 import { StatsModule } from './stats/stats.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { StatsModule } from './stats/stats.module';
     RedisModule,
     EventsModule,
     StatsModule,
+    SupportModule,
   ],
   controllers: [],
   providers: [
