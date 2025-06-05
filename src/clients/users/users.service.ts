@@ -59,6 +59,14 @@ export class UsersService {
       email: createUserDto.email,
       emailVerified: true,
       attributes,
+      credentials: createUserDto.password
+        ? [
+            {
+              type: 'password',
+              value: createUserDto.password,
+            },
+          ]
+        : undefined,
     });
     return this.findOne(newId, client, bypassRLS);
   }

@@ -9,6 +9,7 @@ export const CreateUserSchema = z.object({
   phoneNumber: z.string().optional(),
   position: z.string().optional(),
   siteExternalId: z.string().nonempty(),
+  password: z.string().min(8).optional(),
 });
 
 export class CreateUserDto extends createZodDto(CreateUserSchema) {}

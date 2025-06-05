@@ -157,6 +157,7 @@ export class ClientsService {
       });
 
       const siteIdsMap = new Map<string, string>();
+      const siteExternalIdsMap = new Map<string, string>();
       await Promise.all(
         sites.map(async (site) => {
           const {
@@ -181,6 +182,7 @@ export class ClientsService {
             },
           });
           siteIdsMap.set(site.id, duplicateSite.id);
+          siteExternalIdsMap.set(site.externalId, duplicateSite.externalId);
         }),
       );
 
@@ -280,9 +282,10 @@ export class ClientsService {
               email: newEmail,
               firstName: user.firstName,
               lastName: user.lastName,
-              siteExternalId: user.siteExternalId,
+              siteExternalId: siteExternalIdsMap.get(user.siteExternalId),
               phoneNumber: user.phoneNumber,
               position: user.position,
+              password: options.password,
             }),
             duplicateClient,
           );
@@ -339,8 +342,6 @@ export class ClientsService {
           'Client must be in demo mode to perform this action.',
         );
       }
-
-      console.debug(query);
 
       await tx.inspection.deleteMany({
         where: {
