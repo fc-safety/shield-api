@@ -1,3 +1,4 @@
+import { LogLevel } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -12,8 +13,32 @@ declare module 'express' {
   }
 }
 
+const getLogLevels = (): LogLevel[] => {
+  const logLevel = process.env.LOG_LEVEL?.toLowerCase() ?? 'error';
+
+  const logLevels: LogLevel[] = ['fatal'];
+  if (logLevel === 'fatal') return logLevels;
+
+  logLevels.push('error');
+  if (logLevel === 'error') return logLevels;
+
+  logLevels.push('warn');
+  if (logLevel === 'warn') return logLevels;
+
+  logLevels.push('log');
+  if (logLevel === 'log' || logLevel === 'info') return logLevels;
+
+  logLevels.push('debug');
+  if (logLevel === 'debug') return logLevels;
+
+  logLevels.push('verbose');
+  return logLevels;
+};
+
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger: getLogLevels(),
+  });
 
   // As of Express 5, the default query parser is 'simple'.
   app.set('query parser', 'extended');

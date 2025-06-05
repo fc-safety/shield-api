@@ -94,6 +94,39 @@ export class PrismaService
     }
   }
 
+  public async txForUser(
+    fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
+  ) {
+    try {
+      const person = await this.peopleService.getPersonRepresentation();
+
+      return await this.collectAndEmitModelEvents(
+        async (onResult) => {
+          return this.extended()
+            .$extends(extensions.setClientContextForUser(person))
+            .$extends(extensions.logResult(onResult))
+            .$transaction(async (tx) => {
+              await Promise.all([
+                tx.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
+                tx.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
+                tx.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIds}, TRUE)`,
+                tx.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
+                tx.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
+              ]);
+
+              return await fn(tx);
+            });
+        },
+        { person },
+      );
+    } catch (e) {
+      if (e instanceof UserConfigurationError) {
+        throw new ForbiddenException(e.message);
+      }
+      throw e;
+    }
+  }
+
   public bypassRLS(options: { skipPersonLog?: boolean } = {}) {
     return this.extended().$extends(
       extensions.bypassRLS({
@@ -121,6 +154,23 @@ export class PrismaService
     );
   }
 
+  public async txBypassRLS(
+    fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
+    options: { skipPersonLog?: boolean } = {},
+  ) {
+    return this.collectAndEmitModelEvents(
+      async (onResult) => {
+        return await this.extended()
+          .$extends(extensions.logResult(onResult))
+          .$transaction(async (tx) => {
+            await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', TRUE)`;
+            return await fn(tx);
+          });
+      },
+      { skipPersonLog: options.skipPersonLog },
+    );
+  }
+
   /**
    * Bypasses RLS if user is global admin, otherwise isolates data based on user's client.
    *
@@ -135,6 +185,17 @@ export class PrismaService
     }
   }
 
+  public async txForAdminOrUser(
+    fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
+  ) {
+    const user = this.cls.get('user');
+    if (user?.isGlobalAdmin()) {
+      return await this.txBypassRLS(fn);
+    } else {
+      return await this.txForUser(fn);
+    }
+  }
+
   public async forContext(_context?: ViewContext) {
     const context = _context ?? this.cls.get('viewContext');
     if (context === 'admin') {
@@ -142,6 +203,88 @@ export class PrismaService
     } else {
       return await this.forUser();
     }
+  }
+
+  public async txForContext(
+    fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
+    _context?: ViewContext,
+  ) {
+    const context = _context ?? this.cls.get('viewContext');
+    if (context === 'admin') {
+      return await this.txForAdminOrUser(fn);
+    } else {
+      return await this.txForUser(fn);
+    }
+  }
+
+  private async collectAndEmitModelEvents(
+    callback: (
+      onResult: ({
+        model,
+        operation,
+        result,
+      }: {
+        model: string;
+        operation: string;
+        result: unknown;
+      }) => void,
+    ) => Promise<unknown>,
+    options: { skipPersonLog?: boolean; person?: PersonRepresentation } = {},
+  ) {
+    if (options.skipPersonLog) {
+      return callback(() => {});
+    }
+
+    let onResult: ({
+      model,
+      operation,
+      result,
+    }: {
+      model: string;
+      operation: string;
+      result: unknown;
+    }) => void = () => {};
+    let personRep: PersonRepresentation | null = options.person ?? null;
+    const results: { model: string; operation: string; result: unknown }[] = [];
+
+    if (!personRep) {
+      try {
+        personRep = await this.peopleService.getPersonRepresentation();
+      } catch (e) {
+        this.logger.warn(
+          e,
+          'Failed to get person representation. This usually happens when called from outside a request cycle.',
+        );
+      }
+    }
+
+    if (personRep) {
+      onResult = ({ model, operation, result }) => {
+        results.push({ model, operation, result });
+      };
+    }
+
+    const finalResult = await callback(onResult);
+
+    if (personRep && results.length > 0) {
+      for (const result of results) {
+        try {
+          this.emitModelEvent({
+            model: result.model,
+            operation: result.operation,
+            result: result.result,
+            person: personRep,
+          });
+        } catch (e) {
+          this.logger.warn(
+            e,
+            `Failed to emit model event: Model ${result.model} Operation ${result.operation}`,
+          );
+        }
+      }
+    }
+
+    return finalResult;
   }
 
   private emitModelEvent({
@@ -247,6 +390,34 @@ export const extensions = {
     );
   },
 
+  logResult: (
+    onResult: ({
+      model,
+      operation,
+      result,
+    }: {
+      model: string;
+      operation: string;
+      result: unknown;
+    }) => void,
+  ) => {
+    return Prisma.defineExtension((prisma) => {
+      return prisma.$extends({
+        query: {
+          $allModels: {
+            async $allOperations({ args, query, model, operation }) {
+              const result = await query(args);
+              if (onResult) {
+                onResult({ model, operation, result });
+              }
+              return result;
+            },
+          },
+        },
+      });
+    });
+  },
+
   forUser: (
     person: PersonRepresentation,
     options: {
@@ -322,6 +493,31 @@ export const extensions = {
           },
           $executeRawUnsafe: ({ args, query }) => {
             return setContextAndExecute(query(args));
+          },
+        },
+      });
+    });
+  },
+
+  setClientContextForUser: (person: PersonRepresentation) => {
+    return Prisma.defineExtension((prisma) => {
+      return prisma.$extends({
+        query: {
+          $allModels: {
+            async $allOperations({ args, query, model, operation }) {
+              if (
+                ['create', 'update'].includes(operation) &&
+                'data' in args &&
+                ['Manufacturer', 'ProductCategory', 'Product'].includes(model)
+              ) {
+                args.data = {
+                  ...args.data,
+                  client: { connect: { id: person.clientId } },
+                };
+              }
+
+              return query(args);
+            },
           },
         },
       });
