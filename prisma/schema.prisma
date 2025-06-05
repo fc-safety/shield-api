@@ -261,8 +261,11 @@ model Alert {
 }
 
 enum AlertLevel {
+  CRITICAL
   URGENT
+  WARNING
   INFO
+  AUDIT
 }
 
 // Product Requests

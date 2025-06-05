@@ -62,7 +62,7 @@ export class PrismaService
     this.$on('query', (e) => {
       const { model, action } = this.parsePrismaQuery(e.query);
 
-      this.logger.debug(`Query: ${e.query}`, {
+      this.logger.verbose(`Query: ${e.query}`, {
         model,
         action,
         params: e.params,

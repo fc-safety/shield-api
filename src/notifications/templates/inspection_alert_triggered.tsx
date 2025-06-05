@@ -61,9 +61,14 @@ export default function InspectionAlertTriggeredTemplateReact({
         <div
           className={cn(
             'text-sm px-2 py-1 rounded-md border w-max capitalize font-bold',
-            alert.alertLevel === AlertLevel.URGENT && 'bg-red-100 text-red-800',
-            alert.alertLevel === AlertLevel.INFO &&
+            alert.alertLevel === AlertLevel.CRITICAL &&
+              'bg-purple-800 text-purple-100',
+            alert.alertLevel === AlertLevel.URGENT && 'bg-red-800 text-red-100',
+            alert.alertLevel === AlertLevel.WARNING &&
               'bg-yellow-100 text-yellow-800',
+            alert.alertLevel === AlertLevel.INFO && 'bg-blue-100 text-blue-800',
+            alert.alertLevel === AlertLevel.AUDIT &&
+              'bg-gray-100 text-gray-800',
           )}
         >
           {alert.alertLevel.toLowerCase()}
@@ -214,7 +219,7 @@ InspectionAlertTriggeredTemplateReact.PreviewProps = {
   alert: {
     id: '1',
     createdOn: new Date(),
-    alertLevel: AlertLevel.INFO,
+    alertLevel: AlertLevel.URGENT,
     message: 'This is a test alert',
     questionPrompt: 'Is the check indicator light green?',
     questionResponseValue: 'No',
