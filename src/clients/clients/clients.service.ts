@@ -1,12 +1,16 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { RolesService } from 'src/admin/roles/roles.service';
+import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
+import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from '../users/dto/assign-role.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { QueryUserDto } from '../users/dto/query-user.dto';
 import { UsersService } from '../users/users.service';
+import { ClearDemoInspectionsQueryDto } from './dto/clear-demo-inspections-query.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { DuplicateDemoClientDto } from './dto/duplicate-demo-client.dto';
 import { QueryClientDto } from './dto/query-client.dto';
@@ -18,6 +22,7 @@ export class ClientsService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly rolesService: RolesService,
+    private readonly cls: ClsService<CommonClsStore>,
   ) {}
 
   async create(createClientDto: CreateClientDto) {
@@ -300,6 +305,52 @@ export class ClientsService {
       );
 
       return duplicateClient;
+    });
+  }
+
+  async clearInspectionsForDemoClient(query: ClearDemoInspectionsQueryDto) {
+    let uniqueWhere: Prisma.ClientWhereUniqueInput;
+
+    if (query.clientId) {
+      uniqueWhere = { id: query.clientId };
+    } else {
+      const user = this.cls.get('user');
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+      uniqueWhere = { externalId: user.clientId };
+    }
+
+    return this.prisma.txForAdminOrUser(async (tx) => {
+      const client = await tx.client
+        .findUniqueOrThrow({
+          where: {
+            ...uniqueWhere,
+          },
+          select: {
+            id: true,
+            demoMode: true,
+          },
+        })
+        .catch(as404OrThrow);
+
+      if (!client.demoMode) {
+        throw new BadRequestException(
+          'Client must be in demo mode to perform this action.',
+        );
+      }
+
+      console.debug(query);
+
+      await tx.inspection.deleteMany({
+        where: {
+          clientId: client.id,
+          createdOn: {
+            gte: query.startDate,
+            lte: query.endDate ?? undefined,
+          },
+        },
+      });
     });
   }
 }

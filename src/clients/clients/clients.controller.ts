@@ -3,13 +3,18 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
   Query,
 } from '@nestjs/common';
-import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import {
+  CheckIsAuthenticated,
+  CheckResourcePermissions,
+} from 'src/auth/policies.guard';
 import { ClientsService } from './clients.service';
+import { ClearDemoInspectionsQueryDto } from './dto/clear-demo-inspections-query.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { DuplicateDemoClientDto } from './dto/duplicate-demo-client.dto';
 import { QueryClientDto } from './dto/query-client.dto';
@@ -51,5 +56,17 @@ export class ClientsController {
     @Body() duplicateDemoClientDto: DuplicateDemoClientDto,
   ) {
     return this.clientsService.duplicateDemo(id, duplicateDemoClientDto);
+  }
+
+  // Only require authentication, since this forbids clearing inspections for non-demo clients.
+  @CheckIsAuthenticated()
+  @Post('/clear-demo-inspections')
+  @HttpCode(204)
+  async clearDemoInspections(
+    @Body() clearDemoInspectionsQueryDto: ClearDemoInspectionsQueryDto,
+  ) {
+    await this.clientsService.clearInspectionsForDemoClient(
+      clearDemoInspectionsQueryDto,
+    );
   }
 }
