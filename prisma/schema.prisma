@@ -427,9 +427,9 @@ model Person {
   inspectionSessions      InspectionSession[]
   assetQuestionResponses  AssetQuestionResponse[]
   vaultOwnerships         VaultOwnership[]
-  site                    Site                     @relation(fields: [siteId], references: [id])
+  site                    Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   siteId                  String
-  client                  Client                   @relation(fields: [clientId], references: [id])
+  client                  Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId                String
 }
 
