@@ -350,7 +350,8 @@ export class UsersService {
 
     const thisUser = this.cls.get('user');
     const isNonGlobal =
-      !thisUser || !['global', 'client-sites'].includes(thisUser.visibility);
+      !thisUser ||
+      !['super-admin', 'global', 'client-sites'].includes(thisUser.visibility);
     if (isNonGlobal) {
       filters.push({
         q: {
