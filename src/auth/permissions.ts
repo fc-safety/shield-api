@@ -57,6 +57,7 @@ const buildPermissions = <N extends string, P extends string>(
 };
 
 export const VISIBILITY_VALUES = [
+  'super-admin',
   'global',
   'client-sites',
   'site-group',

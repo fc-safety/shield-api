@@ -186,6 +186,15 @@ export class RolesService {
       );
     }
 
+    if (
+      updateRoleDto.clientAssignable &&
+      role.permissions.some((p) => p === VISIBILITY.SUPER_ADMIN)
+    ) {
+      throw new BadRequestException(
+        'Cannot allow clients to assign super admin visibility.',
+      );
+    }
+
     const {
       description,
       notificationGroups,
@@ -229,6 +238,17 @@ export class RolesService {
     ) {
       throw new BadRequestException(
         'Global visibility cannot be granted to a client-assignable role.',
+      );
+    }
+
+    if (
+      role.clientAssignable &&
+      updatePermissionMappingDto.grant.some(
+        (p) => p.name === VISIBILITY.SUPER_ADMIN,
+      )
+    ) {
+      throw new BadRequestException(
+        'Super admin visibility cannot be granted to a client-assignable role.',
       );
     }
 

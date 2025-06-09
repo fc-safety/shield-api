@@ -654,7 +654,7 @@ export class ClientNotificationsProcessor
       });
 
     const assetVisibilityMappings: Record<
-      Exclude<TVisibility, 'global'>,
+      Exclude<TVisibility, 'global' | 'super-admin'>,
       {
         siteId: string;
         siteExternalId: string;
@@ -815,7 +815,7 @@ function getUsersGroupedByNotificationGroupId(
 function getVisibleAssetIdsForUser(
   user: ClientUser,
   assetVisibilityMappings: Record<
-    Exclude<TVisibility, 'global'>,
+    Exclude<TVisibility, 'global' | 'super-admin'>,
     {
       siteId: string;
       siteExternalId: string;

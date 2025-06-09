@@ -16,7 +16,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { RolesService } from './roles.service';
 
 @Controller('roles')
-@CheckPolicies(({ user }) => user.isGlobalAdmin())
+@CheckPolicies(({ user }) => user.isSuperAdmin())
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 

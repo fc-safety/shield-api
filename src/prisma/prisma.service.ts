@@ -178,7 +178,7 @@ export class PrismaService
    */
   public async forAdminOrUser() {
     const user = this.cls.get('user');
-    if (user?.isGlobalAdmin()) {
+    if (user?.isSuperAdmin()) {
       return this.bypassRLS();
     } else {
       return await this.forUser();
@@ -189,7 +189,7 @@ export class PrismaService
     fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
   ) {
     const user = this.cls.get('user');
-    if (user?.isGlobalAdmin()) {
+    if (user?.isSuperAdmin()) {
       return await this.txBypassRLS(fn);
     } else {
       return await this.txForUser(fn);

@@ -62,8 +62,14 @@ export class StatelessUser {
     this.siteId = payload.site_id;
   }
 
+  public isSuperAdmin() {
+    return !!this.permissions?.includes(VISIBILITY.SUPER_ADMIN);
+  }
+
   public isGlobalAdmin() {
-    return !!this.permissions?.includes(VISIBILITY.GLOBAL);
+    return (
+      this.isSuperAdmin() || !!this.permissions?.includes(VISIBILITY.GLOBAL)
+    );
   }
 
   public get visibility(): TVisibility {
