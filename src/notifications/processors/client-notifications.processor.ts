@@ -670,7 +670,7 @@ export class ClientNotificationsProcessor
     };
 
     for (const visibility of VISIBILITY_VALUES) {
-      if (visibility === 'global') {
+      if (visibility === 'global' || visibility === 'super-admin') {
         continue;
       }
 
