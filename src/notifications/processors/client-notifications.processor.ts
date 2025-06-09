@@ -654,7 +654,7 @@ export class ClientNotificationsProcessor
       });
 
     const assetVisibilityMappings: Record<
-      Exclude<TVisibility, 'global'>,
+      Exclude<TVisibility, 'global' | 'super-admin'>,
       {
         siteId: string;
         siteExternalId: string;
@@ -670,7 +670,7 @@ export class ClientNotificationsProcessor
     };
 
     for (const visibility of VISIBILITY_VALUES) {
-      if (visibility === 'global') {
+      if (visibility === 'global' || visibility === 'super-admin') {
         continue;
       }
 
@@ -815,7 +815,7 @@ function getUsersGroupedByNotificationGroupId(
 function getVisibleAssetIdsForUser(
   user: ClientUser,
   assetVisibilityMappings: Record<
-    Exclude<TVisibility, 'global'>,
+    Exclude<TVisibility, 'global' | 'super-admin'>,
     {
       siteId: string;
       siteExternalId: string;

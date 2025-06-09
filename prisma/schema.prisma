@@ -233,6 +233,7 @@ model AssetAlertCriterion {
   assetQuestionId String
   rule            Json
   alertLevel      AlertLevel    @default(INFO)
+  autoResolve     Boolean       @default(false)
   alerts          Alert[]
 }
 
@@ -253,6 +254,8 @@ model Alert {
   resolved                Boolean               @default(false)
   resolvedOn              DateTime?             @db.Timestamptz()
   resolutionNote          String?
+  resolvedBy              Person?               @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedById            String?
   inspectionImageUrl      String?
   site                    Site                  @relation(fields: [siteId], references: [id])
   siteId                  String
@@ -261,8 +264,11 @@ model Alert {
 }
 
 enum AlertLevel {
+  CRITICAL
   URGENT
+  WARNING
   INFO
+  AUDIT
 }
 
 // Product Requests
@@ -427,6 +433,7 @@ model Person {
   inspectionSessions      InspectionSession[]
   assetQuestionResponses  AssetQuestionResponse[]
   vaultOwnerships         VaultOwnership[]
+  alertsResolved          Alert[]
   site                    Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   siteId                  String
   client                  Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)

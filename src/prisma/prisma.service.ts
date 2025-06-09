@@ -62,7 +62,7 @@ export class PrismaService
     this.$on('query', (e) => {
       const { model, action } = this.parsePrismaQuery(e.query);
 
-      this.logger.debug(`Query: ${e.query}`, {
+      this.logger.verbose(`Query: ${e.query}`, {
         model,
         action,
         params: e.params,
@@ -178,7 +178,7 @@ export class PrismaService
    */
   public async forAdminOrUser() {
     const user = this.cls.get('user');
-    if (user?.isGlobalAdmin()) {
+    if (user?.isSuperAdmin()) {
       return this.bypassRLS();
     } else {
       return await this.forUser();
@@ -189,7 +189,7 @@ export class PrismaService
     fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
   ) {
     const user = this.cls.get('user');
-    if (user?.isGlobalAdmin()) {
+    if (user?.isSuperAdmin()) {
       return await this.txBypassRLS(fn);
     } else {
       return await this.txForUser(fn);

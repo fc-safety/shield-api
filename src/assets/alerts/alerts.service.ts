@@ -84,6 +84,11 @@ export class AlertsService {
             ...resolveAlertDto,
             resolved: true,
             resolvedOn: new Date(),
+            resolvedBy: {
+              connect: {
+                id: prisma.$currentUser().id,
+              },
+            },
           },
         }),
       )

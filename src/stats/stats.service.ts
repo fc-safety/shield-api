@@ -4,6 +4,7 @@ import {
   endOfMonth,
   isAfter,
   isBefore,
+  startOfMonth,
   subMonths,
 } from 'date-fns';
 import { Prisma } from 'src/generated/prisma/client';
@@ -59,22 +60,27 @@ export class StatsService {
     queryComplianceHistoryDto: QueryComplianceHistoryDto,
   ) {
     const { months } = queryComplianceHistoryDto;
-    const xMonthsAgo = endOfMonth(subMonths(new Date(), months - 1));
+    const xMonthsAgo =
+      months === 1 ? new Date() : startOfMonth(subMonths(new Date(), months));
 
     return this.prisma.forUser().then(async (prisma) => {
-      const getAssetInspections = async (options: { latestOnly?: boolean }) =>
+      const getAssetInspections = async (options: {
+        latestOnlyBeforeCutoff?: boolean;
+      }) =>
         prisma.asset.findMany({
           include: {
             inspections: {
               orderBy: { createdOn: 'desc' },
-              take: options.latestOnly ? 1 : undefined,
-              where: options.latestOnly
-                ? undefined
-                : {
-                    createdOn: {
+              take: options.latestOnlyBeforeCutoff ? 1 : undefined,
+              where: {
+                createdOn: options.latestOnlyBeforeCutoff
+                  ? {
+                      lte: xMonthsAgo,
+                    }
+                  : {
                       gte: xMonthsAgo,
                     },
-                  },
+              },
               select: {
                 id: true,
                 createdOn: true,
@@ -115,12 +121,15 @@ export class StatsService {
             },
           })
           .then((client) => client?.defaultInspectionCycle ?? 30),
+        // If we're only retreiving 1 month (aka today), we only need the latest inspection.
         getAssetInspections({
-          latestOnly: true,
+          latestOnlyBeforeCutoff: true,
         }),
+        // If we're retreiving more than 1 month, we want to also get all inspections
+        // after the cutoff date (which is in the past) to build the compliance history.
         months > 1
           ? getAssetInspections({
-              latestOnly: false,
+              latestOnlyBeforeCutoff: false,
             })
           : (Promise.resolve([]) as ReturnType<typeof getAssetInspections>),
       ]);
@@ -130,22 +139,25 @@ export class StatsService {
         string,
         (typeof assetsInspectionsByDate)[number]
       >(assetsInspectionsByDate.map((a) => [a.id, a]));
-      const mergedAssetInspections = assetsLatestInspections.map((a) => {
-        const latestInspection = a.inspections.at(0);
-        const otherInspections =
-          assetInspectionsByDateMap
-            .get(a.id)
-            ?.inspections.filter(
-              (i) => !latestInspection || i.id !== latestInspection.id,
-            ) ?? [];
-        return {
-          ...a,
-          inspections: [
-            ...(latestInspection ? [latestInspection] : []),
-            ...otherInspections,
-          ],
-        };
-      });
+      const mergedAssetInspections = assetsLatestInspections.map(
+        ({ inspections, ...a }) => {
+          const latestBeforeCutoff = inspections.at(0);
+          const inspectionsAfterCutoff =
+            assetInspectionsByDateMap
+              .get(a.id)
+              ?.inspections.filter(
+                (i) => !latestBeforeCutoff || i.id !== latestBeforeCutoff.id,
+              ) ?? [];
+
+          return {
+            ...a,
+            inspections: [
+              ...inspectionsAfterCutoff,
+              ...(latestBeforeCutoff ? [latestBeforeCutoff] : []),
+            ],
+          };
+        },
+      );
 
       const complianceHistory: ComplianceStatsRecord[] = [];
       let currentHistoricDate = new Date();
