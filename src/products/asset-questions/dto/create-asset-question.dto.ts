@@ -53,6 +53,7 @@ export const CreateAssetAlertCriterionSchema = z.object({
   alertLevel: z.enum(
     Object.values(AlertLevel) as [AlertLevel, ...AlertLevel[]],
   ),
+  autoResolve: z.boolean().default(false),
 });
 
 export const CreateConsumableConfigSchema = z.object({

@@ -310,6 +310,11 @@ export class AssetsService {
             ({
               alertLevel: alertCriterion.alertLevel,
               message,
+              resolved: alertCriterion.autoResolve,
+              resolvedOn: alertCriterion.autoResolve ? new Date() : undefined,
+              resolutionNote: alertCriterion.autoResolve
+                ? 'Auto-resolved by system.'
+                : undefined,
               assetId: inspection.assetId,
               inspectionId: inspection.id,
               assetQuestionResponseId: response.id,
