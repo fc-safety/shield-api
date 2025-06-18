@@ -50,6 +50,12 @@ export const configSchema = z.object({
 
   // Help Scout Support
   HELPSCOUT_BEACON_SECRET_KEY: z.string(),
+
+  // M2M API Keys
+  M2M_API_KEYS: z
+    .string()
+    .default('')
+    .transform((v) => v.split(',').filter(Boolean)),
 });
 
 export type Config = z.infer<typeof configSchema>;

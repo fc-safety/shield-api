@@ -12,7 +12,7 @@ export const CreateClientSchema = z.object({
   address: z.object({
     create: createAddressSchema,
   }),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING']).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'LEGACY']).optional(),
   phoneNumber: z.string(),
   homeUrl: z.string().optional(),
   defaultInspectionCycle: z.number().min(MINIMUM_INSPECTION_CYCLE).optional(),

@@ -50,6 +50,7 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
         email: 'john.doe@example.com',
         username: 'john.doe',
         idpId: '1',
+        legacyUsername: null,
       },
       client: {
         id: '1',

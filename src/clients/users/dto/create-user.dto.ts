@@ -6,6 +6,7 @@ export const CreateUserSchema = z.object({
   firstName: z.string().nonempty(),
   lastName: z.string().nonempty(),
   email: z.string().email(),
+  username: z.string().optional(),
   phoneNumber: z.string().optional(),
   position: z.string().optional(),
   siteExternalId: z.string().nonempty(),

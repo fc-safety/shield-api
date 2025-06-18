@@ -38,6 +38,7 @@ export const TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: TeamInspectionReminde
         siteId: '1',
         clientId: '1',
         externalId: '1',
+        legacyTagId: null,
       },
       location: 'Location 1',
       placement: 'Placement 1',

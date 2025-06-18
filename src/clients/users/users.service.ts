@@ -120,6 +120,8 @@ export class UsersService {
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
 
+    const usernameIsEmail = keycloakUser.username === keycloakUser.email;
+
     const attributes = KeycloakService.mergeAttributes(
       keycloakUser.attributes,
       ['phone_number', updateUserDto.phoneNumber],
@@ -136,7 +138,9 @@ export class UsersService {
         enabled: updateUserDto.active ?? keycloakUser.enabled,
         firstName: updateUserDto.firstName ?? keycloakUser.firstName,
         lastName: updateUserDto.lastName ?? keycloakUser.lastName,
-        username: updateUserDto.email ?? keycloakUser.username,
+        username:
+          (usernameIsEmail ? updateUserDto.email : updateUserDto.username) ??
+          keycloakUser.username,
         email: updateUserDto.email ?? keycloakUser.email,
         attributes,
       },

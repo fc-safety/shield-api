@@ -22,6 +22,7 @@ import { RedisModule } from './redis/redis.module';
 import { EventsModule } from './events/events.module';
 import { StatsModule } from './stats/stats.module';
 import { SupportModule } from './support/support.module';
+import { M2mModule } from './m2m/m2m.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { SupportModule } from './support/support.module';
     EventsModule,
     StatsModule,
     SupportModule,
+    M2mModule,
   ],
   controllers: [],
   providers: [
