@@ -49,6 +49,7 @@ export class UsersService {
       ['user_created_at', new Date().toISOString()],
       ['user_updated_at', new Date().toISOString()],
       ['user_position', createUserDto.position],
+      ['user_legacy_id', createUserDto.legacyUserId],
     );
 
     await this.keycloak.client.users.create({
@@ -128,6 +129,7 @@ export class UsersService {
       ['site_id', updateUserDto.siteExternalId],
       ['user_updated_at', new Date().toISOString()],
       ['user_position', updateUserDto.position],
+      ['user_legacy_id', updateUserDto.legacyUserId],
     );
 
     return this.keycloak.client.users.update(

@@ -11,18 +11,19 @@ import { ClientsModule } from './clients/clients.module';
 import { configSchema } from './config';
 import { ApiConfigModule } from './config/api-config.module';
 import { ApiConfigService } from './config/api-config.service';
+import { EventsModule } from './events/events.module';
 import { HealthModule } from './health/health.module';
 import { LandingModule } from './landing/landing.module';
+import { LegacyMigrationModule } from './legacy-migration/legacy-migration.module';
+import { M2mModule } from './m2m/m2m.module';
 import { MediaModule } from './media/media.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
-import { SettingsModule } from './settings/settings.module';
 import { RedisModule } from './redis/redis.module';
-import { EventsModule } from './events/events.module';
+import { SettingsModule } from './settings/settings.module';
 import { StatsModule } from './stats/stats.module';
 import { SupportModule } from './support/support.module';
-import { M2mModule } from './m2m/m2m.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { M2mModule } from './m2m/m2m.module';
     StatsModule,
     SupportModule,
     M2mModule,
+    LegacyMigrationModule,
   ],
   controllers: [],
   providers: [

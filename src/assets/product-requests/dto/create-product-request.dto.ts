@@ -8,6 +8,7 @@ export const CreateProductRequestItemSchema = z.object({
 });
 
 export const CreateProductRequestSchema = z.object({
+  legacyRequestId: z.string().optional(),
   productRequestItems: z.object({
     createMany: z.object({
       data: z.array(CreateProductRequestItemSchema),

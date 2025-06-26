@@ -2,6 +2,7 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
 export const CreateUserSchema = z.object({
+  legacyUserId: z.string().optional(),
   active: z.boolean().optional(),
   firstName: z.string().nonempty(),
   lastName: z.string().nonempty(),

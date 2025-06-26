@@ -21,6 +21,10 @@ datasource db {
 
 model Asset {
   id                     String                  @id @default(cuid(2))
+  /**
+   * The legacy ID of the asset (maps to `assets.a_id` in the legacy database).
+   */
+  legacyAssetId          String?
   createdOn              DateTime                @default(now()) @db.Timestamptz()
   modifiedOn             DateTime                @updatedAt @db.Timestamptz()
   setupOn                DateTime?               @db.Timestamptz()
@@ -45,22 +49,30 @@ model Asset {
   siteId                 String                  @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client                 Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId               String                  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([legacyAssetId])
 }
 
 model Consumable {
-  id         String    @id @default(cuid(2))
-  createdOn  DateTime  @default(now()) @db.Timestamptz()
-  modifiedOn DateTime  @updatedAt @db.Timestamptz()
-  asset      Asset?    @relation(fields: [assetId], references: [id])
-  assetId    String?
-  product    Product   @relation(fields: [productId], references: [id])
-  productId  String
-  expiresOn  DateTime? @db.Timestamptz()
-  quantity   Int       @default(1)
-  site       Site      @relation(fields: [siteId], references: [id])
-  siteId     String    @default(dbgenerated("current_setting('app.current_site_id'::text)"))
-  client     Client    @relation(fields: [clientId], references: [id])
-  clientId   String    @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  id                String    @id @default(cuid(2))
+  /**
+   * The legacy ID of the consumable (maps to `inventory.i_id` in the legacy database).
+   */
+  legacyInventoryId String?
+  createdOn         DateTime  @default(now()) @db.Timestamptz()
+  modifiedOn        DateTime  @updatedAt @db.Timestamptz()
+  asset             Asset?    @relation(fields: [assetId], references: [id])
+  assetId           String?
+  product           Product   @relation(fields: [productId], references: [id])
+  productId         String
+  expiresOn         DateTime? @db.Timestamptz()
+  quantity          Int       @default(1)
+  site              Site      @relation(fields: [siteId], references: [id])
+  siteId            String    @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client            Client    @relation(fields: [clientId], references: [id])
+  clientId          String    @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([legacyInventoryId])
 }
 
 model Tag {
@@ -70,6 +82,9 @@ model Tag {
   modifiedOn   DateTime @updatedAt @db.Timestamptz()
   serialNumber String
   asset        Asset?
+  /**
+   * The legacy ID of the tag (maps to `tags.t_id` in the legacy database).
+   */
   legacyTagId  String?
   site         Site?    @relation(fields: [siteId], references: [id])
   siteId       String?
@@ -82,6 +97,10 @@ model Tag {
 
 model Inspection {
   id                             String                          @id @default(cuid(2))
+  /**
+   * The legacy ID of the inspection (maps to `logs.log_id` in the legacy database).
+   */
+  legacyLogId                    String?
   createdOn                      DateTime                        @default(now()) @db.Timestamptz()
   modifiedOn                     DateTime                        @updatedAt @db.Timestamptz()
   asset                          Asset                           @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -103,6 +122,8 @@ model Inspection {
   siteId                         String                          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client                         Client                          @relation(fields: [clientId], references: [id])
   clientId                       String                          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([legacyLogId])
 }
 
 enum InspectionStatus {
@@ -173,6 +194,10 @@ model CompletedInspectionRoutePoint {
 
 model AssetQuestion {
   id                 String                    @id @default(cuid(2))
+  /**
+   * The legacy ID of the asset question (maps to `questions.q_id` in the legacy database).
+   */
+  legacyQuestionId   String?
   createdOn          DateTime                  @default(now()) @db.Timestamptz()
   modifiedOn         DateTime                  @updatedAt @db.Timestamptz()
   active             Boolean                   @default(true)
@@ -192,6 +217,8 @@ model AssetQuestion {
   consumableConfigId String?
   client             Client?                   @relation(fields: [clientId], references: [id])
   clientId           String?
+
+  @@index([legacyQuestionId])
 }
 
 model AssetQuestionResponse {
@@ -243,6 +270,10 @@ model AssetAlertCriterion {
 
 model Alert {
   id                      String                @id @default(cuid(2))
+  /**
+   * The legacy ID of the alert (maps to `alerts.alert_id` in the legacy database).
+   */
+  legacyAlertId           String?
   createdOn               DateTime              @default(now()) @db.Timestamptz()
   modifiedOn              DateTime              @updatedAt @db.Timestamptz()
   alertLevel              AlertLevel            @default(INFO)
@@ -265,6 +296,8 @@ model Alert {
   siteId                  String
   client                  Client                @relation(fields: [clientId], references: [id])
   clientId                String
+
+  @@index([legacyAlertId])
 }
 
 enum AlertLevel {
@@ -279,6 +312,10 @@ enum AlertLevel {
 
 model ProductRequest {
   id                      String                   @id @default(cuid(2))
+  /**
+   * The legacy ID of the product request (maps to `request.rfp_id` in the legacy database).
+   */
+  legacyRequestId         String?
   createdOn               DateTime                 @default(now()) @db.Timestamptz()
   modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
   status                  ProductRequestStatus     @default(NEW)
@@ -292,6 +329,8 @@ model ProductRequest {
   siteId                  String                   @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client                  Client                   @relation(fields: [clientId], references: [id])
   clientId                String                   @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([legacyRequestId])
 }
 
 enum ProductRequestStatus {
@@ -320,20 +359,26 @@ model ProductRequestApproval {
 }
 
 model ProductRequestItem {
-  id               String         @id @default(cuid(2))
-  createdOn        DateTime       @default(now()) @db.Timestamptz()
-  modifiedOn       DateTime       @updatedAt @db.Timestamptz()
-  productRequest   ProductRequest @relation(fields: [productRequestId], references: [id], onDelete: Cascade)
-  productRequestId String
-  product          Product        @relation(fields: [productId], references: [id])
-  productId        String
-  quantity         Int
-  addedBy          Person         @relation(fields: [addedById], references: [id])
-  addedById        String         @default(dbgenerated("current_setting('app.current_person_id'::text)"))
-  site             Site           @relation(fields: [siteId], references: [id])
-  siteId           String         @default(dbgenerated("current_setting('app.current_site_id'::text)"))
-  client           Client         @relation(fields: [clientId], references: [id])
-  clientId         String         @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  id                  String         @id @default(cuid(2))
+  /**
+   * The legacy ID of the product request item (maps to `request_items.ri_rfp_id` in the legacy database).
+   */
+  legacyRequestItemId String?
+  createdOn           DateTime       @default(now()) @db.Timestamptz()
+  modifiedOn          DateTime       @updatedAt @db.Timestamptz()
+  productRequest      ProductRequest @relation(fields: [productRequestId], references: [id], onDelete: Cascade)
+  productRequestId    String
+  product             Product        @relation(fields: [productId], references: [id])
+  productId           String
+  quantity            Int
+  addedBy             Person         @relation(fields: [addedById], references: [id])
+  addedById           String         @default(dbgenerated("current_setting('app.current_person_id'::text)"))
+  site                Site           @relation(fields: [siteId], references: [id])
+  siteId              String         @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client              Client         @relation(fields: [clientId], references: [id])
+  clientId            String         @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([legacyRequestItemId])
 }
 
 // Clients, Sites & People
@@ -354,6 +399,10 @@ model Address {
 model Client {
   id                      String                   @id @default(cuid(2))
   externalId              String                   @unique @default(cuid(2))
+  /**
+   * The legacy ID of the client (maps to `clients.c_id` in the legacy database).
+   */
+  legacyClientId          String?
   createdOn               DateTime                 @default(now()) @db.Timestamptz()
   modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
   status                  ClientStatus             @default(PENDING)
@@ -383,6 +432,8 @@ model Client {
   manufacturers           Manufacturer[]
   products                Product[]
   vaultOwnerships         VaultOwnership[]
+
+  @@index([legacyClientId])
 }
 
 enum ClientStatus {
@@ -395,6 +446,14 @@ enum ClientStatus {
 model Site {
   id                      String                   @id @default(cuid(2))
   externalId              String                   @unique @default(cuid(2))
+  /**
+   * The legacy ID of the site (maps to `locations.loc_id` in the legacy database).
+   */
+  legacySiteId            String?
+  /**
+   * The legacy ID of the client group (maps to `groups.group_id` in the legacy database).
+   */
+  legacyGroupId           String?
   createdOn               DateTime                 @default(now()) @db.Timestamptz()
   modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
   name                    String
@@ -420,6 +479,9 @@ model Site {
   productRequestApprovals ProductRequestApproval[]
   productRequestItems     ProductRequestItem[]
   vaultOwnerships         VaultOwnership[]
+
+  @@index([legacySiteId])
+  @@index([legacyGroupId])
 }
 
 model Person {
@@ -431,6 +493,9 @@ model Person {
   email                   String
   username                String?
   idpId                   String?                  @unique
+  /**
+   * The legacy username of the person (maps to `users.u_name` in the legacy database).
+   */
   legacyUsername          String?
   productRequests         ProductRequest[]
   productRequestApprovals ProductRequestApproval[]
@@ -451,31 +516,43 @@ model Person {
 // Products
 
 model ProductCategory {
-  id             String          @id @default(cuid(2))
-  createdOn      DateTime        @default(now()) @db.Timestamptz()
-  modifiedOn     DateTime        @updatedAt @db.Timestamptz()
-  active         Boolean         @default(true)
-  name           String
-  shortName      String?
-  description    String?
-  icon           String?
-  color          String?
-  assetQuestions AssetQuestion[]
-  products       Product[]
-  client         Client?         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId       String?
+  id               String          @id @default(cuid(2))
+  /**
+   * The legacy ID of the product category (maps to `category.cat_id` in the legacy database).
+   */
+  legacyCategoryId String?
+  createdOn        DateTime        @default(now()) @db.Timestamptz()
+  modifiedOn       DateTime        @updatedAt @db.Timestamptz()
+  active           Boolean         @default(true)
+  name             String
+  shortName        String?
+  description      String?
+  icon             String?
+  color            String?
+  assetQuestions   AssetQuestion[]
+  products         Product[]
+  client           Client?         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId         String?
+
+  @@index([legacyCategoryId])
 }
 
 model Manufacturer {
-  id         String    @id @default(cuid(2))
-  createdOn  DateTime  @default(now()) @db.Timestamptz()
-  modifiedOn DateTime  @updatedAt @db.Timestamptz()
-  active     Boolean   @default(true)
-  name       String
-  homeUrl    String?
-  products   Product[]
-  client     Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId   String?
+  id                   String    @id @default(cuid(2))
+  /**
+   * The legacy ID of the manufacturer (maps to `manufacturers.mfg_id` in the legacy database).
+   */
+  legacyManufacturerId String?
+  createdOn            DateTime  @default(now()) @db.Timestamptz()
+  modifiedOn           DateTime  @updatedAt @db.Timestamptz()
+  active               Boolean   @default(true)
+  name                 String
+  homeUrl              String?
+  products             Product[]
+  client               Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId             String?
+
+  @@index([legacyManufacturerId])
 }
 
 model AnsiCategory {
@@ -492,10 +569,18 @@ model AnsiCategory {
 
 model Product {
   id                  String                     @id @default(cuid(2))
+  /**
+   * The legacy ID of the product (maps to `products.p_id` in the legacy database).
+   */
+  legacyProductId     String?
+  /**
+   * The legacy ID of the consumable product (maps to `consumables.con_id` in the legacy database).
+   */
+  legacyConsumableId  String?
   createdOn           DateTime                   @default(now()) @db.Timestamptz()
   modifiedOn          DateTime                   @updatedAt @db.Timestamptz()
   active              Boolean                    @default(true)
-  manufacturer        Manufacturer               @relation(fields: [manufacturerId], references: [id])
+  manufacturer        Manufacturer               @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
   manufacturerId      String
   type                ProductType
   name                String
@@ -503,7 +588,7 @@ model Product {
   sku                 String?
   productUrl          String?
   imageUrl            String?
-  productCategory     ProductCategory            @relation(fields: [productCategoryId], references: [id])
+  productCategory     ProductCategory            @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
   productCategoryId   String
   parentProduct       Product?                   @relation("PrimaryConsumableProduct", fields: [parentProductId], references: [id], onDelete: Cascade)
   parentProductId     String?
@@ -521,6 +606,9 @@ model Product {
   consumableConfigs   ConsumableQuestionConfig[]
   client              Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId            String?
+
+  @@index([legacyProductId])
+  @@index([legacyConsumableId])
 }
 
 enum ProductType {

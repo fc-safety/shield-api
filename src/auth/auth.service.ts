@@ -141,6 +141,77 @@ export class AuthService {
     return hmac.digest('base64url').slice(0, sigLength);
   }
 
+  public async generateCustomToken<T extends object>(
+    payload: T,
+    expiresInSeconds: number,
+  ) {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const head = this.encodeTokenPart({
+      iat: nowSeconds,
+      exp: nowSeconds + expiresInSeconds,
+    });
+    const encodedPayload = this.encodeTokenPart(payload);
+    const signature = await this.generateSignature({
+      signatureData: `${head}.${encodedPayload}`,
+      timestamp: nowSeconds,
+    });
+
+    return `${head}.${encodedPayload}.${signature}`;
+  }
+
+  public async validateCustomToken<T>(token: string): Promise<
+    | {
+        isValid: true;
+        payload: T;
+        error?: never;
+      }
+    | {
+        isValid: false;
+        error: string;
+        payload?: never;
+      }
+  > {
+    const [head, payload, signature] = token.split('.');
+    const decodedHead = this.decodeTokenPart(head) as {
+      exp: number;
+      iat: number;
+    };
+
+    if (decodedHead.exp < Date.now() / 1000) {
+      return {
+        isValid: false,
+        error: 'Token expired',
+      };
+    }
+
+    const challenge = await this.generateSignature({
+      signatureData: `${head}.${payload}`,
+      timestamp: decodedHead.iat,
+    });
+
+    if (
+      !crypto.timingSafeEqual(Buffer.from(challenge), Buffer.from(signature))
+    ) {
+      return {
+        isValid: false,
+        error: 'Invalid token',
+      };
+    }
+
+    return {
+      isValid: true,
+      payload: this.decodeTokenPart(payload) as T,
+    };
+  }
+
+  private encodeTokenPart(part: object): string {
+    return Buffer.from(JSON.stringify(part)).toString('base64url');
+  }
+
+  private decodeTokenPart(part: string): object {
+    return JSON.parse(Buffer.from(part, 'base64url').toString('utf-8'));
+  }
+
   private async getSigningKey(keyId: string) {
     const cacheKey = `signing-key:${keyId}`;
     let signingKey = await this.cache.get<SigningKey>(cacheKey);

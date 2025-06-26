@@ -56,6 +56,12 @@ export const configSchema = z.object({
     .string()
     .default('')
     .transform((v) => v.split(',').filter(Boolean)),
+
+  // Legacy Migration
+  LEGACY_DB_HOST: z.string().optional(),
+  LEGACY_DB_USER: z.string().optional(),
+  LEGACY_DB_PASSWORD: z.string().optional(),
+  LEGACY_DB_NAME: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

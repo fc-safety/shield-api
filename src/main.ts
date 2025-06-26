@@ -1,6 +1,7 @@
 import { LogLevel } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { WsAdapter } from '@nestjs/platform-ws';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { patchNestJsSwagger, ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module';
@@ -65,6 +66,8 @@ async function bootstrap() {
   const documentFactory = () =>
     SwaggerModule.createDocument(app, openApiConfig);
   SwaggerModule.setup('api-docs', app, documentFactory);
+
+  app.useWebSocketAdapter(new WsAdapter(app));
 
   await app.listen(process.env.PORT ?? 3000);
 }
