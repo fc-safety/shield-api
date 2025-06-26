@@ -5,6 +5,7 @@ import { MINIMUM_INSPECTION_CYCLE } from 'src/notifications/notification-types';
 import { z } from 'zod';
 
 export const CreateClientSchema = z.object({
+  legacyClientId: z.string().optional(),
   createdOn: z.string().datetime().optional(),
   externalId: z.string().optional(),
   name: z.string(),
@@ -12,7 +13,7 @@ export const CreateClientSchema = z.object({
   address: z.object({
     create: createAddressSchema,
   }),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING']).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'PENDING', 'LEGACY']).optional(),
   phoneNumber: z.string(),
   homeUrl: z.string().optional(),
   defaultInspectionCycle: z.number().min(MINIMUM_INSPECTION_CYCLE).optional(),

@@ -24,6 +24,7 @@ export const TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: TeamInspectionReminde
     asset: {
       name: 'Asset 1',
       id: '1',
+      legacyAssetId: null,
       createdOn: new Date(),
       modifiedOn: new Date(),
       setupOn: new Date(),
@@ -38,6 +39,7 @@ export const TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: TeamInspectionReminde
         siteId: '1',
         clientId: '1',
         externalId: '1',
+        legacyTagId: null,
       },
       location: 'Location 1',
       placement: 'Placement 1',
@@ -48,6 +50,8 @@ export const TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: TeamInspectionReminde
       site: {
         name: 'Site 1',
         id: '1',
+        legacySiteId: null,
+        legacyGroupId: null,
         createdOn: new Date(),
         modifiedOn: new Date(),
         clientId: '1',

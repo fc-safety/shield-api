@@ -32,6 +32,7 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
     frontendUrl: 'http://localhost:5173',
     productRequest: {
       id: '1',
+      legacyRequestId: null,
       createdOn: new Date(),
       modifiedOn: new Date(),
       status: ProductRequestStatus.NEW,
@@ -50,9 +51,11 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
         email: 'john.doe@example.com',
         username: 'john.doe',
         idpId: '1',
+        legacyUsername: null,
       },
       client: {
         id: '1',
+        legacyClientId: null,
         createdOn: new Date(),
         modifiedOn: new Date(),
         status: ClientStatus.ACTIVE,
@@ -67,6 +70,8 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
       },
       site: {
         id: '1',
+        legacySiteId: null,
+        legacyGroupId: null,
         createdOn: new Date(),
         modifiedOn: new Date(),
         name: 'Test Site',
@@ -80,6 +85,7 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
       productRequestItems: [
         {
           id: '1',
+          legacyRequestItemId: null,
           createdOn: new Date(),
           modifiedOn: new Date(),
           siteId: '1',
@@ -90,6 +96,8 @@ export const NEW_PRODUCT_REQUEST_TEMPLATE_TEST_PROPS: NewProductRequestTemplateP
           addedById: '1',
           product: {
             id: '1',
+            legacyProductId: null,
+            legacyConsumableId: null,
             createdOn: new Date(),
             modifiedOn: new Date(),
             name: 'Test Product',

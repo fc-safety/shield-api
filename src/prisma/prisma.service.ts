@@ -298,20 +298,48 @@ export class PrismaService
     result: unknown;
     person: PersonRepresentation;
   }) {
-    if (!['create', 'update', 'delete'].includes(operation)) {
+    if (
+      ![
+        'create',
+        'createMany',
+        'createManyAndReturn',
+        'update',
+        'updateMany',
+        'updateManyAndReturn',
+        'delete',
+        'deleteMany',
+      ].includes(operation)
+    ) {
       return;
+    }
+
+    let cleanedOperation = operation;
+    switch (operation) {
+      case 'createMany':
+      case 'createManyAndReturn':
+        cleanedOperation = 'create';
+        break;
+      case 'updateMany':
+      case 'updateManyAndReturn':
+        cleanedOperation = 'update';
+        break;
+      case 'deleteMany':
+        cleanedOperation = 'delete';
+        break;
+      default:
+        break;
     }
 
     const eventBody: Record<string, string> = {
       model,
-      operation,
+      operation: cleanedOperation,
     };
 
     if (typeof result === 'object' && !isNil(result) && 'id' in result) {
       eventBody.id = String(result.id);
     }
 
-    const channel = `db-events:${person.clientId}:${model}:${operation}`;
+    const channel = `db-events:${person.clientId}:${model}:${cleanedOperation}`;
 
     this.redis.getPublisher().publish(channel, JSON.stringify(eventBody));
   }

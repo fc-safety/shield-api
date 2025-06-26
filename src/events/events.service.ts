@@ -1,5 +1,4 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
-import crypto from 'crypto';
 import { ClsService } from 'nestjs-cls';
 import { from, Observable, switchMap } from 'rxjs';
 import { AuthService } from 'src/auth/auth.service';
@@ -71,52 +70,19 @@ export class EventsService {
 
   public async generateToken() {
     const person = await this.peopleService.getPersonRepresentation();
-
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    const head = this.encodeTokenPart({
-      iat: nowSeconds,
-      exp: nowSeconds + EXPIRES_IN_SECONDS,
-    });
-    const payload = this.encodeTokenPart(person);
-    const signature = await this.authService.generateSignature({
-      signatureData: `${head}.${payload}`,
-      timestamp: nowSeconds,
-    });
-
-    return encodeURIComponent(`${head}.${payload}.${signature}`);
+    return encodeURIComponent(
+      await this.authService.generateCustomToken(person, EXPIRES_IN_SECONDS),
+    );
   }
 
   public async validateToken(token: string) {
-    const [head, payload, signature] = token.split('.');
-    const decodedHead = this.decodeTokenPart(head) as {
-      exp: number;
-      iat: number;
-    };
+    const { isValid, error, payload } =
+      await this.authService.validateCustomToken<PersonRepresentation>(token);
 
-    if (decodedHead.exp < Date.now() / 1000) {
-      throw new ForbiddenException('Token expired');
+    if (!isValid) {
+      throw new ForbiddenException(error);
     }
 
-    const challenge = await this.authService.generateSignature({
-      signatureData: `${head}.${payload}`,
-      timestamp: decodedHead.iat,
-    });
-
-    if (
-      !crypto.timingSafeEqual(Buffer.from(challenge), Buffer.from(signature))
-    ) {
-      throw new ForbiddenException('Invalid token');
-    }
-
-    const person = this.decodeTokenPart(payload);
-    return person as PersonRepresentation;
-  }
-
-  private encodeTokenPart(part: object): string {
-    return Buffer.from(JSON.stringify(part)).toString('base64url');
-  }
-
-  private decodeTokenPart(part: string): object {
-    return JSON.parse(Buffer.from(part, 'base64url').toString('utf-8'));
+    return payload;
   }
 }

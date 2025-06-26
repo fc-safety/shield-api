@@ -49,6 +49,7 @@ export class UsersService {
       ['user_created_at', new Date().toISOString()],
       ['user_updated_at', new Date().toISOString()],
       ['user_position', createUserDto.position],
+      ['user_legacy_id', createUserDto.legacyUserId],
     );
 
     await this.keycloak.client.users.create({
@@ -120,12 +121,15 @@ export class UsersService {
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
 
+    const usernameIsEmail = keycloakUser.username === keycloakUser.email;
+
     const attributes = KeycloakService.mergeAttributes(
       keycloakUser.attributes,
       ['phone_number', updateUserDto.phoneNumber],
       ['site_id', updateUserDto.siteExternalId],
       ['user_updated_at', new Date().toISOString()],
       ['user_position', updateUserDto.position],
+      ['user_legacy_id', updateUserDto.legacyUserId],
     );
 
     return this.keycloak.client.users.update(
@@ -136,7 +140,9 @@ export class UsersService {
         enabled: updateUserDto.active ?? keycloakUser.enabled,
         firstName: updateUserDto.firstName ?? keycloakUser.firstName,
         lastName: updateUserDto.lastName ?? keycloakUser.lastName,
-        username: updateUserDto.email ?? keycloakUser.username,
+        username:
+          (usernameIsEmail ? updateUserDto.email : updateUserDto.username) ??
+          keycloakUser.username,
         email: updateUserDto.email ?? keycloakUser.email,
         attributes,
       },
