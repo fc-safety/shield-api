@@ -71,7 +71,7 @@ export const CreateConsumableConfigSchema = z.object({
 }) satisfies z.Schema<Prisma.ConsumableQuestionConfigCreateInput>;
 
 export const CreateAssetQuestionSchema = z.object({
-  legacyQuestionId: z.string().optional(),
+  legacyQuestionId: z.string().optional().nullable(),
   active: z.boolean().default(true),
   type: z.enum(
     Object.values(AssetQuestionType) as [

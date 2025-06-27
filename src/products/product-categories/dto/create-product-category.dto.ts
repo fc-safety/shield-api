@@ -3,7 +3,7 @@ import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export const CreateProductCategorySchema = z.object({
-  legacyCategoryId: z.string().optional(),
+  legacyCategoryId: z.string().optional().nullable(),
   active: z.boolean().default(true),
   name: z.string(),
   shortName: z.string().optional(),

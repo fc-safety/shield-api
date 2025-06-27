@@ -4,7 +4,7 @@ import { MINIMUM_INSPECTION_CYCLE } from 'src/notifications/notification-types';
 import { z } from 'zod';
 
 export const CreateAssetSchema = z.object({
-  legacyAssetId: z.string().optional(),
+  legacyAssetId: z.string().optional().nullable(),
   active: z.boolean().default(true),
   name: z.string(),
   location: z.string(),

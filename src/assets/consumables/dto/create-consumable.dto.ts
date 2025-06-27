@@ -3,7 +3,7 @@ import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export const CreateConsumableSchema = z.object({
-  legacyInventoryId: z.string().optional(),
+  legacyInventoryId: z.string().optional().nullable(),
   asset: z.object({
     connect: z.object({
       id: z.string(),

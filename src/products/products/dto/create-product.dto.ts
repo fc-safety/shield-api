@@ -3,8 +3,8 @@ import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export const CreateProductSchema = z.object({
-  legacyProductId: z.string().optional(),
-  legacyConsumableId: z.string().optional(),
+  legacyProductId: z.string().optional().nullable(),
+  legacyConsumableId: z.string().optional().nullable(),
   active: z.boolean().optional(),
   manufacturer: z.object({
     connect: z.object({
