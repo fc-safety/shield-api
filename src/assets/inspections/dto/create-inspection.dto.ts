@@ -4,7 +4,7 @@ import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 const CreateInspectionSchema = z.object({
-  legacyLogId: z.string().optional(),
+  legacyLogId: z.string().optional().nullable(),
   asset: z.object({
     connect: z.object({
       id: z.string(),
