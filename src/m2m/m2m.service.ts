@@ -30,9 +30,7 @@ export class M2mService {
           status: true,
         },
       });
-    }
-
-    if (legacyUsername) {
+    } else if (legacyUsername) {
       client = await this.prisma
         .bypassRLS()
         .person.findFirst({
