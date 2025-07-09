@@ -67,7 +67,7 @@ export class ProductRequestsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forUser().then((client) =>
+    return this.prisma.forContext().then((client) =>
       client.productRequest.findUnique({
         where: { id },
         include: {
