@@ -377,7 +377,7 @@ export class AssetsService {
 
   async remove(id: string) {
     return this.prisma
-      .forUser()
+      .forContext()
       .then((prisma) => prisma.asset.delete({ where: { id } }));
   }
 

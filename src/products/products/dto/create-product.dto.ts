@@ -36,7 +36,9 @@ export const CreateProductSchema = z.object({
       connect: z.object({
         id: z.string(),
       }),
+      disconnect: z.boolean(),
     })
+    .partial()
     .optional(),
   perishable: z.boolean().optional(),
   ansiMinimumRequired: z.boolean().optional(),
