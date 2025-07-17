@@ -138,7 +138,7 @@ export class NotificationsService {
   }
 
   async sendTemplateEmail<T extends NotificationTemplateId>({
-    templateName,
+    templateName: rawTemplateName,
     subject,
     to,
     templateProps,
@@ -154,6 +154,8 @@ export class NotificationsService {
     cc?: string[];
     bcc?: string[];
   }) {
+    const templateName = rawTemplateName.replace(/-/g, '_');
+
     const Template = TEMPLATE_NAME_MAP[templateName];
 
     if (!Template) {
