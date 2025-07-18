@@ -9,7 +9,9 @@ describe('ClientNotificationsProcessor', () => {
       providers: [ClientNotificationsProcessor],
     }).compile();
 
-    provider = module.get<ClientNotificationsProcessor>(ClientNotificationsProcessor);
+    provider = module.get<ClientNotificationsProcessor>(
+      ClientNotificationsProcessor,
+    );
   });
 
   it('should be defined', () => {
