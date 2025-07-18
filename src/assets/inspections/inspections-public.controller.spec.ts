@@ -9,7 +9,9 @@ describe('InspectionsPublicController', () => {
       controllers: [InspectionsPublicController],
     }).compile();
 
-    controller = module.get<InspectionsPublicController>(InspectionsPublicController);
+    controller = module.get<InspectionsPublicController>(
+      InspectionsPublicController,
+    );
   });
 
   it('should be defined', () => {

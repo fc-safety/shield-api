@@ -11,7 +11,9 @@ describe('VaultOwnershipsController', () => {
       providers: [VaultOwnershipsService],
     }).compile();
 
-    controller = module.get<VaultOwnershipsController>(VaultOwnershipsController);
+    controller = module.get<VaultOwnershipsController>(
+      VaultOwnershipsController,
+    );
   });
 
   it('should be defined', () => {
