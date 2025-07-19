@@ -6,6 +6,7 @@ import { ClsService } from 'nestjs-cls';
 import { TVisibility } from 'src/auth/permissions';
 import { StatelessUser } from 'src/auth/user.schema';
 import { CommonClsStore } from 'src/common/types';
+import { isNil } from 'src/common/utils';
 import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -214,7 +215,7 @@ export class PeopleService {
       const cacheCheckPromise = this.cache
         .get<T>(cacheKey)
         .then(async (cachedValue) => {
-          if (cachedValue !== null) {
+          if (!isNil(cachedValue)) {
             return cachedValue;
           }
 

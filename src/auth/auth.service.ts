@@ -214,7 +214,7 @@ export class AuthService {
 
   private async getSigningKey(keyId: string) {
     const cacheKey = `signing-key:${keyId}`;
-    let signingKey = await this.cache.get<SigningKey>(cacheKey);
+    let signingKey = (await this.cache.get<SigningKey>(cacheKey)) ?? null;
 
     if (signingKey) {
       return signingKey;

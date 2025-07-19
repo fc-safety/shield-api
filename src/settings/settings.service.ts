@@ -62,7 +62,7 @@ export class SettingsService {
 
     let settings: SettingsBlock<T> | null = null;
     if (cache) {
-      settings = await this.cache.get<SettingsBlock<T>>(cacheKey);
+      settings = (await this.cache.get<SettingsBlock<T>>(cacheKey)) ?? null;
     }
 
     if (settings) {

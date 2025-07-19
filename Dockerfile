@@ -1,5 +1,5 @@
 # Builder image
-FROM node:22 AS builder
+FROM node:24 AS builder
 
 ARG DATABASE_URL
 
@@ -24,7 +24,7 @@ RUN npm run db:generate
 RUN npm run build
 
 # Final image
-FROM node:22-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
