@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
+import pRetry from 'p-retry';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
@@ -273,39 +274,55 @@ export class ClientsService {
         roles.map((role) => [role.name, role.id]),
       );
 
-      await Promise.all(
-        users.map(async (user) => {
-          const newEmail = user.email.split('@')[0] + '@' + options.emailDomain;
+      const newUserIds: string[] = [];
 
-          const newUser = await this.usersService.create(
-            CreateUserDto.create({
-              email: newEmail,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              siteExternalId: siteExternalIdsMap.get(user.siteExternalId),
-              phoneNumber: user.phoneNumber,
-              position: user.position,
-              password: options.password,
+      try {
+        await Promise.all(
+          users.map(async (user) => {
+            const newEmail =
+              user.email.split('@')[0] + '@' + options.emailDomain;
+
+            const newUser = await this.usersService.create(
+              CreateUserDto.create({
+                email: newEmail,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                siteExternalId: siteExternalIdsMap.get(user.siteExternalId),
+                phoneNumber: user.phoneNumber,
+                position: user.position,
+                password: options.password,
+              }),
+              duplicateClient,
+            );
+            newUserIds.push(newUser.id);
+
+            if (!user.roleName) {
+              return;
+            }
+
+            const roleId = roleNameMap.get(user.roleName);
+            if (!roleId) {
+              return;
+            }
+
+            await this.usersService.assignRole(
+              newUser.id,
+              AssignRoleDto.create({ roleId }),
+              duplicateClient,
+            );
+          }),
+        );
+      } catch (e) {
+        await Promise.all(
+          newUserIds.map((userId) =>
+            pRetry(() => this.usersService.remove(userId, duplicateClient), {
+              retries: 3,
             }),
-            duplicateClient,
-          );
+          ),
+        );
 
-          if (!user.roleName) {
-            return;
-          }
-
-          const roleId = roleNameMap.get(user.roleName);
-          if (!roleId) {
-            return;
-          }
-
-          await this.usersService.assignRole(
-            newUser.id,
-            AssignRoleDto.create({ roleId }),
-            duplicateClient,
-          );
-        }),
-      );
+        throw e;
+      }
 
       return duplicateClient;
     });
