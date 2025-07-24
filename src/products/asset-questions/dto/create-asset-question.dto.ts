@@ -7,6 +7,7 @@ import {
   Prisma,
 } from 'src/generated/prisma/client';
 import { z } from 'zod';
+import { CreateAssetQuestionConditionSchema } from './create-asset-question-condition.dto';
 
 const RuleClauseObjectSchema = z
   .object({
@@ -89,6 +90,21 @@ export const CreateAssetQuestionSchema = z.object({
     ],
   ),
   tone: z.string().optional(),
+  parentQuestion: z
+    .object({
+      connect: z.object({
+        id: z.string(),
+      }),
+    })
+    .optional(),
+  conditions: z
+    .object({
+      createMany: z.object({
+        data: z.array(CreateAssetQuestionConditionSchema),
+      }),
+    })
+    .partial()
+    .optional(),
   assetAlertCriteria: z
     .object({
       createMany: z.object({

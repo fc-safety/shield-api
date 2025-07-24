@@ -6,8 +6,23 @@ import {
   CreateAssetQuestionSchema,
   CreateConsumableConfigSchema,
 } from './create-asset-question.dto';
+import { CreateAssetQuestionConditionSchema } from './create-asset-question-condition.dto';
 
 const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
+  conditions: z
+    .object({
+      createMany: z.object({
+        data: z.array(CreateAssetQuestionConditionSchema),
+      }),
+      updateMany: z.array(
+        z.object({
+          where: z.object({ id: z.string() }),
+          data: CreateAssetQuestionConditionSchema.partial(),
+        }),
+      ),
+      deleteMany: z.array(z.object({ id: z.string() })),
+    })
+    .partial(),
   assetAlertCriteria: z
     .object({
       createMany: z.object({

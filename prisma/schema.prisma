@@ -207,10 +207,18 @@ model AssetQuestion {
   order              Int?
   prompt             String
   valueType          AssetQuestionResponseType
+  /** @deprecated */
   productCategory    ProductCategory?          @relation(fields: [productCategoryId], references: [id])
+  /** @deprecated */
   productCategoryId  String?
+  /** @deprecated */
   product            Product?                  @relation(fields: [productId], references: [id])
+  /** @deprecated */
   productId          String?
+  parentQuestion     AssetQuestion?            @relation("AssetQuestionVariants", fields: [parentQuestionId], references: [id], onDelete: Cascade)
+  parentQuestionId   String?
+  variants           AssetQuestion[]           @relation("AssetQuestionVariants")
+  conditions         AssetQuestionCondition[]
   assetAlertCriteria AssetAlertCriterion[]
   responses          AssetQuestionResponse[]
   consumableConfig   ConsumableQuestionConfig? @relation(fields: [consumableConfigId], references: [id])
@@ -242,6 +250,7 @@ model AssetQuestionResponse {
 }
 
 enum AssetQuestionType {
+  SETUP_AND_INSPECTION
   SETUP
   INSPECTION
 }
@@ -254,6 +263,27 @@ enum AssetQuestionResponseType {
   DATE
   NUMBER
   IMAGE
+}
+
+enum AssetQuestionConditionType {
+  REGION
+  MANUFACTURER
+  PRODUCT_CATEGORY
+  PRODUCT_SUBCATEGORY
+  PRODUCT
+}
+
+model AssetQuestionCondition {
+  id              String                         @id @default(cuid(2))
+  createdOn       DateTime                       @default(now()) @db.Timestamptz()
+  modifiedOn      DateTime                       @updatedAt @db.Timestamptz()
+  assetQuestion   AssetQuestion                  @relation(fields: [assetQuestionId], references: [id], onDelete: Cascade)
+  assetQuestionId String
+  conditionType   AssetQuestionConditionType
+  value           Json
+  description     String?
+  client          Client?                        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId        String?
 }
 
 model AssetAlertCriterion {
@@ -433,6 +463,7 @@ model Client {
   products                Product[]
   vaultOwnerships         VaultOwnership[]
   ProductSubcategory      ProductSubcategory[]
+  assetQuestionConditions AssetQuestionCondition[]
 
   @@index([legacyClientId])
 }
@@ -530,6 +561,7 @@ model ProductCategory {
   description      String?
   icon             String?
   color            String?
+  /** @deprecated */
   assetQuestions   AssetQuestion[]
   products         Product[]
   subcategories    ProductSubcategory[]
@@ -621,11 +653,12 @@ model Product {
   assets               Asset[]
   consumables          Consumable[]
   productRequestItems  ProductRequestItem[]
+  /** @deprecated */
   assetQuestions       AssetQuestion[]
   consumableConfigs    ConsumableQuestionConfig[]
   client               Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId             String?
-  ProductSubcategory   ProductSubcategory?        @relation(fields: [productSubcategoryId], references: [id])
+  productSubcategory   ProductSubcategory?        @relation(fields: [productSubcategoryId], references: [id])
   productSubcategoryId String?
 
   @@index([legacyProductId])

@@ -21,7 +21,8 @@
     "email:dev": "email dev --dir src/notifications/templates",
     "db:generate": "prisma generate --sql",
     "db:generate:watch": "prisma generate --sql --watch",
-    "db:format": "prisma format"
+    "db:format": "prisma format",
+    "db:migrate:asset-questions": "ts-node prisma/migrate-asset-questions-to-conditions.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
