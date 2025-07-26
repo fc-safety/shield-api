@@ -4,7 +4,7 @@ import { normalizeState } from 'src/common/address-utils';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
-import { Prisma } from 'src/generated/prisma/client';
+import { AssetQuestionType, Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-condition.dto';
 import { CreateAssetQuestionDto } from './dto/create-asset-question.dto';
@@ -180,7 +180,7 @@ export class AssetQuestionsService {
 
   // ASSET-SPECIFIC QUESTIONS
 
-  async findByAsset(assetId: string) {
+  async findByAsset(assetId: string, type?: AssetQuestionType) {
     const prisma = await this.prisma.forAdminOrUser();
 
     // Get the asset with all relevant data
@@ -246,6 +246,22 @@ export class AssetQuestionsService {
     const questions = await prisma.assetQuestion.findMany({
       where: {
         active: true,
+        type:
+          type === undefined || type === 'SETUP_AND_INSPECTION'
+            ? undefined
+            : type === 'SETUP'
+              ? {
+                  in: [
+                    AssetQuestionType.SETUP,
+                    AssetQuestionType.SETUP_AND_INSPECTION,
+                  ],
+                }
+              : {
+                  in: [
+                    AssetQuestionType.INSPECTION,
+                    AssetQuestionType.SETUP_AND_INSPECTION,
+                  ],
+                },
         conditions: {
           every: {
             OR: orFilters,
@@ -255,7 +271,7 @@ export class AssetQuestionsService {
       include: {
         parentQuestion: true,
       },
-      orderBy: { order: 'asc', createdOn: 'asc' },
+      orderBy: [{ order: 'asc' }, { createdOn: 'asc' }],
     });
 
     return questions;

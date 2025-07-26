@@ -16,15 +16,14 @@ import { AssetQuestionsService } from './asset-questions.service';
 import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-condition.dto';
 import { CreateAssetQuestionDto } from './dto/create-asset-question.dto';
 import { QueryAssetQuestionDto } from './dto/query-asset-question.dto';
+import { QueryQuestionsByAssetDto } from './dto/query-questions-by-asset.dto';
 import { UpdateAssetQuestionConditionDto } from './dto/update-asset-question-condition.dto';
 import { UpdateAssetQuestionDto } from './dto/update-asset-question.dto';
 
 @Controller('asset-questions')
 @CheckResourcePermissions('asset-questions')
 export class AssetQuestionsController {
-  constructor(
-    private readonly assetQuestionsService: AssetQuestionsService,
-  ) {}
+  constructor(private readonly assetQuestionsService: AssetQuestionsService) {}
 
   @Post()
   create(@Body() createAssetQuestionDto: CreateAssetQuestionDto) {
@@ -97,7 +96,10 @@ export class AssetQuestionsController {
 
   @Get('by-asset/:assetId')
   @CheckPolicies(({ user }) => user.canRead('assets'))
-  findByAsset(@Param('assetId') assetId: string) {
-    return this.assetQuestionsService.findByAsset(assetId);
+  findByAsset(
+    @Param('assetId') assetId: string,
+    @Query() query: QueryQuestionsByAssetDto,
+  ) {
+    return this.assetQuestionsService.findByAsset(assetId, query.type);
   }
 }
