@@ -276,4 +276,126 @@ export class AssetQuestionsService {
 
     return questions;
   }
+
+  async migrateQuestionsToConditions() {
+    return this.prisma.txBypassRLS(async (tx) => {
+      // Get all AssetQuestions with productCategoryId
+      const questionsWithCategory = await tx.assetQuestion.findMany({
+        where: {
+          productCategoryId: { not: null },
+        },
+        include: {
+          productCategory: true,
+        },
+      });
+
+      let categoryMigrationCount = 0;
+
+      // Migrate productCategoryId to conditions
+      for (const question of questionsWithCategory) {
+        if (!question.productCategoryId || !question.productCategory) continue;
+
+        // Check if condition already exists
+        const existingCondition = await tx.assetQuestionCondition.findFirst({
+          where: {
+            assetQuestionId: question.id,
+            conditionType: 'PRODUCT_CATEGORY',
+            value: {
+              array_contains: [question.productCategoryId],
+            },
+          },
+        });
+
+        if (!existingCondition) {
+          await tx.assetQuestionCondition.create({
+            data: {
+              assetQuestionId: question.id,
+              conditionType: 'PRODUCT_CATEGORY',
+              value: [question.productCategoryId],
+              description: 'Migrated from productCategoryId field',
+              clientId: question.productCategory.clientId,
+            },
+          });
+          categoryMigrationCount++;
+        }
+      }
+
+      // Get all AssetQuestions with productId
+      const questionsWithProduct = await tx.assetQuestion.findMany({
+        where: {
+          productId: { not: null },
+        },
+        include: {
+          product: true,
+        },
+      });
+
+      let productMigrationCount = 0;
+
+      // Migrate productId to conditions
+      for (const question of questionsWithProduct) {
+        if (!question.productId || !question.product) continue;
+
+        // Check if condition already exists
+        const existingCondition = await tx.assetQuestionCondition.findFirst({
+          where: {
+            assetQuestionId: question.id,
+            conditionType: 'PRODUCT',
+            value: {
+              array_contains: [question.productId],
+            },
+          },
+        });
+
+        if (!existingCondition) {
+          await tx.assetQuestionCondition.create({
+            data: {
+              assetQuestionId: question.id,
+              conditionType: 'PRODUCT',
+              value: [question.productId],
+              description: 'Migrated from productId field',
+              clientId: question.product.clientId,
+            },
+          });
+          productMigrationCount++;
+        }
+      }
+
+      // Clear productCategoryId and productId fields
+      const categoryUpdateResult = await tx.assetQuestion.updateMany({
+        where: {
+          productCategoryId: { not: null },
+          conditions: {
+            some: {
+              conditionType: 'PRODUCT_CATEGORY',
+            },
+          },
+        },
+        data: {
+          productCategoryId: null,
+        },
+      });
+
+      const productUpdateResult = await tx.assetQuestion.updateMany({
+        where: {
+          productId: { not: null },
+          conditions: {
+            some: {
+              conditionType: 'PRODUCT',
+            },
+          },
+        },
+        data: {
+          productId: null,
+        },
+      });
+
+      return {
+        categoryConditionsCreated: categoryMigrationCount,
+        productConditionsCreated: productMigrationCount,
+        categoryFieldsCleared: categoryUpdateResult.count,
+        productFieldsCleared: productUpdateResult.count,
+      };
+    });
+  }
 }

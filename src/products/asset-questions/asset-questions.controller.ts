@@ -102,4 +102,10 @@ export class AssetQuestionsController {
   ) {
     return this.assetQuestionsService.findByAsset(assetId, query.type);
   }
+
+  @Post('migrate-to-conditions')
+  @CheckPolicies(({ user }) => user.isSuperAdmin())
+  migrateQuestionsToConditions() {
+    return this.assetQuestionsService.migrateQuestionsToConditions();
+  }
 }
