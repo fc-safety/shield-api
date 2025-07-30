@@ -140,6 +140,13 @@ export class ClientNotificationsProcessor
         where: { id: job.data.clientId },
       });
 
+    if (client.demoMode) {
+      this.logger.debug(
+        `--> Skipping inspection reminders for demo client ${job.data.clientId}...`,
+      );
+      return {};
+    }
+
     // Map of role name to role.
     const roleMap = await this.getRoleMap();
 
@@ -295,6 +302,13 @@ export class ClientNotificationsProcessor
       .client.findUniqueOrThrow({
         where: { id: job.data.clientId },
       });
+
+    if (client.demoMode) {
+      this.logger.debug(
+        `--> Skipping monthly inspection reports for demo client ${job.data.clientId}...`,
+      );
+      return {};
+    }
 
     // Map of role name to role.
     const roleMap = await this.getRoleMap();

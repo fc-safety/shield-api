@@ -4,7 +4,11 @@ import { normalizeState } from 'src/common/address-utils';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow, isNil } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
-import { AssetQuestionType, Prisma } from 'src/generated/prisma/client';
+import {
+  AssetQuestionConditionType,
+  AssetQuestionType,
+  Prisma,
+} from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-condition.dto';
 import { CreateAssetQuestionDto } from './dto/create-asset-question.dto';
@@ -209,19 +213,19 @@ export class AssetQuestionsService {
 
     const orFilters: Prisma.AssetQuestionConditionWhereInput[] = [
       {
-        conditionType: 'PRODUCT_CATEGORY',
+        conditionType: AssetQuestionConditionType.PRODUCT_CATEGORY,
         value: {
           array_contains: [asset.product.productCategoryId],
         },
       },
       {
-        conditionType: 'PRODUCT',
+        conditionType: AssetQuestionConditionType.PRODUCT,
         value: {
           array_contains: [asset.productId],
         },
       },
       {
-        conditionType: 'MANUFACTURER',
+        conditionType: AssetQuestionConditionType.MANUFACTURER,
         value: {
           array_contains: [asset.product.manufacturerId],
         },
@@ -230,7 +234,7 @@ export class AssetQuestionsService {
 
     if (asset.product.productSubcategoryId) {
       orFilters.push({
-        conditionType: 'PRODUCT_SUBCATEGORY',
+        conditionType: AssetQuestionConditionType.PRODUCT_SUBCATEGORY,
         value: {
           array_contains: [asset.product.productSubcategoryId],
         },
@@ -239,7 +243,7 @@ export class AssetQuestionsService {
 
     if (asset.site.address.state) {
       orFilters.push({
-        conditionType: 'REGION',
+        conditionType: AssetQuestionConditionType.REGION,
         value: {
           array_contains: [normalizeState(asset.site.address.state)],
         },
@@ -251,9 +255,9 @@ export class AssetQuestionsService {
         active: true,
         parentQuestionId: null,
         type:
-          type === undefined || type === 'SETUP_AND_INSPECTION'
+          type === undefined || type === AssetQuestionType.SETUP_AND_INSPECTION
             ? undefined
-            : type === 'SETUP'
+            : type === AssetQuestionType.SETUP
               ? {
                   in: [
                     AssetQuestionType.SETUP,

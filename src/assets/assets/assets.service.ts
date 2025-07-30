@@ -270,6 +270,13 @@ export class AssetsService {
         };
       };
     }>,
+    {
+      tx,
+      skipNotifications = false,
+    }: {
+      tx?: Parameters<Parameters<PrismaService['txBypassRLS']>[0]>[0];
+      skipNotifications?: boolean;
+    } = {},
   ) {
     if (!inspection || inspection.status !== 'COMPLETE') {
       return;
@@ -325,15 +332,19 @@ export class AssetsService {
         ),
     );
 
-    const results = await this.prisma.bypassRLS().alert.createManyAndReturn({
+    const results = await (
+      tx ?? this.prisma.bypassRLS()
+    ).alert.createManyAndReturn({
       data: createInputs,
       select: {
         id: true,
       },
     });
 
-    for (const result of results) {
-      this.notifications.queueInspectionAlertTriggeredEmail(result.id);
+    if (!skipNotifications) {
+      for (const result of results) {
+        this.notifications.queueInspectionAlertTriggeredEmail(result.id);
+      }
     }
   }
 
