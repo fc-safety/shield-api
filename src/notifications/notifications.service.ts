@@ -111,7 +111,7 @@ export class NotificationsService {
     const phoneNumber = this.config.get('TELNYX_PHONE_NUMBER');
     const telnyx = await this.telnyx;
 
-    telnyx.messages.send({
+    await telnyx.messages.send({
       from: phoneNumber,
       to: options.to,
       text: options.text,
