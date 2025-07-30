@@ -1,11 +1,20 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
+import pRetry from 'p-retry';
 import { RolesService } from 'src/admin/roles/roles.service';
+import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
-import { Prisma } from 'src/generated/prisma/client';
+import {
+  AssetQuestionResponseType,
+  AssetQuestionType,
+  InspectionStatus,
+  Prisma,
+} from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
 import { AssignRoleDto } from '../users/dto/assign-role.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { QueryUserDto } from '../users/dto/query-user.dto';
@@ -13,6 +22,7 @@ import { UsersService } from '../users/users.service';
 import { ClearDemoInspectionsQueryDto } from './dto/clear-demo-inspections-query.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { DuplicateDemoClientDto } from './dto/duplicate-demo-client.dto';
+import { GenerateDemoInspectionsDto } from './dto/generate-demo-inspections.dto';
 import { QueryClientDto } from './dto/query-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -23,7 +33,44 @@ export class ClientsService {
     private readonly usersService: UsersService,
     private readonly rolesService: RolesService,
     private readonly cls: ClsService<CommonClsStore>,
+    private readonly keycloakService: KeycloakService,
+    private readonly assetQuestionsService: AssetQuestionsService,
   ) {}
+
+  /**
+   * Generate realistic responses for asset questions based on their type
+   */
+  private generateQuestionResponse(
+    question: any,
+    context: { assetSerialNumber?: string; isSetup?: boolean },
+  ): any {
+    switch (question.valueType) {
+      case AssetQuestionResponseType.BINARY:
+        return Math.random() > 0.1; // 90% true
+      case AssetQuestionResponseType.INDETERMINATE_BINARY:
+        const rand = Math.random();
+        return rand < 0.8 ? true : rand < 0.95 ? false : null; // 80% true, 15% false, 5% N/A
+      case AssetQuestionResponseType.TEXT:
+        if (context.isSetup) {
+          return `Serial: ${context.assetSerialNumber || 'N/A'}`;
+        }
+        return `Inspected - ${Math.random() > 0.5 ? 'OK' : 'Minor wear noted'}`;
+      case AssetQuestionResponseType.TEXTAREA:
+        if (context.isSetup) {
+          return 'Asset installed and configured according to manufacturer specifications.';
+        }
+        const comments = [
+          'Regular inspection completed. All components functioning properly.',
+          'Inspection complete. Equipment in good working order.',
+          'Checked all safety features. No issues found.',
+          'Routine inspection performed. Asset operating within normal parameters.',
+          'Visual inspection completed. No maintenance required at this time.',
+        ];
+        return comments[Math.floor(Math.random() * comments.length)];
+      default:
+        return true;
+    }
+  }
 
   async create(createClientDto: CreateClientDto) {
     return this.prisma.txForAdminOrUser((tx) =>
@@ -273,39 +320,55 @@ export class ClientsService {
         roles.map((role) => [role.name, role.id]),
       );
 
-      await Promise.all(
-        users.map(async (user) => {
-          const newEmail = user.email.split('@')[0] + '@' + options.emailDomain;
+      const newUserIds: string[] = [];
 
-          const newUser = await this.usersService.create(
-            CreateUserDto.create({
-              email: newEmail,
-              firstName: user.firstName,
-              lastName: user.lastName,
-              siteExternalId: siteExternalIdsMap.get(user.siteExternalId),
-              phoneNumber: user.phoneNumber,
-              position: user.position,
-              password: options.password,
+      try {
+        await Promise.all(
+          users.map(async (user) => {
+            const newEmail =
+              user.email.split('@')[0] + '@' + options.emailDomain;
+
+            const newUser = await this.usersService.create(
+              CreateUserDto.create({
+                email: newEmail,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                siteExternalId: siteExternalIdsMap.get(user.siteExternalId),
+                phoneNumber: user.phoneNumber,
+                position: user.position,
+                password: options.password,
+              }),
+              duplicateClient,
+            );
+            newUserIds.push(newUser.id);
+
+            if (!user.roleName) {
+              return;
+            }
+
+            const roleId = roleNameMap.get(user.roleName);
+            if (!roleId) {
+              return;
+            }
+
+            await this.usersService.assignRole(
+              newUser.id,
+              AssignRoleDto.create({ roleId }),
+              duplicateClient,
+            );
+          }),
+        );
+      } catch (e) {
+        await Promise.all(
+          newUserIds.map((userId) =>
+            pRetry(() => this.usersService.remove(userId, duplicateClient), {
+              retries: 3,
             }),
-            duplicateClient,
-          );
+          ),
+        );
 
-          if (!user.roleName) {
-            return;
-          }
-
-          const roleId = roleNameMap.get(user.roleName);
-          if (!roleId) {
-            return;
-          }
-
-          await this.usersService.assignRole(
-            newUser.id,
-            AssignRoleDto.create({ roleId }),
-            duplicateClient,
-          );
-        }),
-      );
+        throw e;
+      }
 
       return duplicateClient;
     });
@@ -352,6 +415,298 @@ export class ClientsService {
           },
         },
       });
+    });
+  }
+
+  async generateInspectionsForDemoClient(options: GenerateDemoInspectionsDto) {
+    let uniqueWhere: Prisma.ClientWhereUniqueInput;
+
+    if (options.clientId) {
+      uniqueWhere = { id: options.clientId };
+    } else {
+      const user = this.cls.get('user');
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+      uniqueWhere = { externalId: user.clientId };
+    }
+
+    return this.prisma.txForAdminOrUser(async (tx) => {
+      const client = await tx.client
+        .findUniqueOrThrow({
+          where: uniqueWhere,
+          include: {
+            sites: {
+              include: {
+                assets: {
+                  include: {
+                    product: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+        .catch(as404OrThrow);
+
+      if (!client.demoMode) {
+        throw new BadRequestException(
+          'Client must be in demo mode to perform this action.',
+        );
+      }
+
+      // Get all Keycloak users for this client to select inspectors from
+      const keycloakUsersResponse =
+        await this.keycloakService.findUsersByAttribute({
+          filter: {
+            q: {
+              key: 'client_id',
+              op: 'eq',
+              value: client.externalId,
+            },
+          },
+          limit: 500,
+          offset: 0,
+        });
+
+      // Get or create Person records for Keycloak users first (needed for asset setup)
+      const keycloakUsers = keycloakUsersResponse.results;
+      const inspectors = await Promise.all(
+        keycloakUsers
+          .slice(0, Math.min(8, keycloakUsers.length))
+          .map(async (kcUser) => {
+            const personId = kcUser.id;
+            if (!personId) return null;
+
+            let person = await tx.person.findUnique({
+              where: { idpId: personId },
+            });
+
+            if (!person) {
+              const theirSiteId = client.sites.find(
+                (site) => site.externalId === kcUser.attributes?.site_id?.[0],
+              )?.id;
+
+              person = await tx.person.create({
+                data: {
+                  idpId: personId,
+                  firstName: kcUser.firstName || 'Inspector',
+                  lastName: kcUser.lastName || 'User',
+                  email: kcUser.email || `inspector${personId}@example.com`,
+                  siteId: theirSiteId || '',
+                  clientId: client.id,
+                },
+              });
+            }
+
+            return person;
+          }),
+      );
+
+      const validInspectors = inspectors.filter(Boolean);
+
+      if (validInspectors.length === 0) {
+        throw new BadRequestException(
+          'No valid inspectors found for this client.',
+        );
+      }
+
+      const allAssets = client.sites.flatMap((site) => site.assets);
+
+      if (allAssets.length === 0) {
+        throw new BadRequestException('No assets found for this client.');
+      }
+
+      // Ensure all assets are set up with their setup questions answered
+      const assetsToSetup = allAssets.filter((asset) => !asset.setupOn);
+      for (const asset of assetsToSetup) {
+        // Get setup questions for this asset
+        const setupQuestions = await this.assetQuestionsService.findByAsset(
+          asset.id,
+          AssetQuestionType.SETUP,
+        );
+
+        // Generate responses for setup questions
+        const setupResponses = setupQuestions.map((question) => {
+          const responseValue = this.generateQuestionResponse(question, {
+            assetSerialNumber: asset.serialNumber,
+            isSetup: true,
+          });
+
+          return {
+            assetQuestionId: question.id,
+            value: responseValue,
+            responderId: validInspectors[0]?.id || '',
+            siteId: asset.siteId,
+            clientId: client.id,
+          } satisfies Prisma.AssetQuestionResponseCreateManyAssetInput;
+        });
+
+        // Update asset setup date and create responses
+        await tx.asset.update({
+          where: { id: asset.id },
+          data: {
+            setupOn: new Date(),
+            setupQuestionResponses: { createMany: { data: setupResponses } },
+          },
+        });
+      }
+
+      // Generate inspection data with realistic patterns
+      const now = new Date();
+      const startDate = subMonths(now, options.monthsBack);
+      const inspectionsCreated: string[] = [];
+
+      // Generate realistic GPS coordinates around a central location
+      const baseLat = 40.7128; // NYC area as default
+      const baseLng = -74.006;
+
+      for (let i = 1; i <= options.monthsBack; i++) {
+        const currentDate = min([
+          subMonths(new Date(), options.monthsBack - i),
+          new Date(),
+        ]);
+
+        let baseComplianceScore = 0.5 + 0.5 * (i / options.monthsBack);
+
+        // Add some turnover dips (simulate company events)
+        const monthOfYear = currentDate.getMonth();
+        if (monthOfYear === 11 || monthOfYear === 0) {
+          // December/January holiday slowdown
+          baseComplianceScore *= 0.6;
+        } else if (monthOfYear === 6) {
+          // July summer vacation
+          baseComplianceScore *= 0.8;
+        }
+
+        // Calculate how many assets to inspect today
+        const assetsToInspectCount =
+          i === options.monthsBack
+            ? allAssets.length
+            : Math.floor(
+                allAssets.length *
+                  baseComplianceScore *
+                  (0.8 + Math.random() * 0.4),
+              );
+
+        // Randomly select assets for inspection
+        const shuffledAssets = [...allAssets].sort(() => Math.random() - 0.5);
+        const assetsToInspect = shuffledAssets.slice(0, assetsToInspectCount);
+
+        for (const asset of assetsToInspect) {
+          // Select random inspector
+          const inspector =
+            validInspectors[Math.floor(Math.random() * validInspectors.length)];
+          if (!inspector) continue;
+
+          // Generate realistic GPS coordinates (within ~50km radius)
+          const latOffset = (Math.random() - 0.5) * 0.5; // ~50km radius
+          const lngOffset = (Math.random() - 0.5) * 0.5;
+
+          // Create inspection at random time during the current month and business hours
+          const daysInMonth = endOfMonth(currentDate).getDate();
+          const randomDay = Math.min(
+            daysInMonth,
+            1 + Math.floor(Math.random() * daysInMonth),
+          );
+          const inspectionTime = min([
+            new Date(),
+            new Date(
+              currentDate.getFullYear(),
+              currentDate.getMonth(),
+              randomDay,
+              8 + Math.floor(Math.random() * 10), // 8 AM to 6 PM
+              Math.floor(Math.random() * 60),
+              Math.floor(Math.random() * 60),
+              0,
+            ),
+          ]);
+
+          try {
+            // Get inspection questions for this asset if the inspection will be complete
+            let inspectionResponses: Array<{
+              assetQuestionId: string;
+              value: any;
+              responderId: string;
+              siteId: string;
+              clientId: string;
+            }> = [];
+
+            const inspectionQuestions =
+              await this.assetQuestionsService.findByAsset(
+                asset.id,
+                AssetQuestionType.INSPECTION,
+              );
+
+            inspectionResponses = inspectionQuestions.map((question) => {
+              const responseValue = this.generateQuestionResponse(question, {
+                assetSerialNumber: asset.serialNumber,
+                isSetup: false,
+              });
+
+              return {
+                assetQuestionId: question.id,
+                value: responseValue,
+                responderId: inspector.id,
+                siteId: asset.siteId,
+                clientId: client.id,
+              };
+            });
+
+            if (isBefore(inspectionTime, asset.createdOn)) {
+              const newCreatedOn = subDays(inspectionTime, 1);
+              await tx.asset.update({
+                where: { id: asset.id },
+                data: {
+                  createdOn: newCreatedOn,
+                },
+              });
+              asset.createdOn = newCreatedOn;
+            }
+
+            const inspection = await tx.inspection.create({
+              data: {
+                assetId: asset.id,
+                inspectorId: inspector.id,
+                status: InspectionStatus.COMPLETE,
+                latitude: baseLat + latOffset,
+                longitude: baseLng + lngOffset,
+                locationAccuracy: 5 + Math.random() * 15, // 5-20m accuracy
+                createdOn: inspectionTime,
+                modifiedOn: inspectionTime,
+                comments:
+                  Math.random() > 0.7 ? 'Regular inspection completed' : null,
+                siteId: asset.siteId,
+                clientId: client.id,
+                // Create inspection responses if inspection is complete
+
+                responses: {
+                  createMany: {
+                    data: inspectionResponses,
+                  },
+                },
+              },
+            });
+
+            inspectionsCreated.push(inspection.id);
+          } catch (error) {
+            // Skip if there's a conflict (e.g., duplicate inspection)
+            console.warn(
+              `Failed to create inspection for asset ${asset.id}:`,
+              error,
+            );
+          }
+        }
+      }
+
+      return {
+        message: `Generated ${inspectionsCreated.length} demo inspections for client ${client.name}`,
+        inspectionsCount: inspectionsCreated.length,
+        assetsInvolved: allAssets.length,
+        inspectorsUsed: validInspectors.length,
+        periodCovered: `${startDate.toISOString().split('T')[0]} to ${now.toISOString().split('T')[0]}`,
+        defaultInspectionCycle: client.defaultInspectionCycle,
+      };
     });
   }
 }

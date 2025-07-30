@@ -7,6 +7,7 @@ import {
   Prisma,
 } from 'src/generated/prisma/client';
 import { z } from 'zod';
+import { CreateAssetQuestionConditionSchema } from './create-asset-question-condition.dto';
 
 const RuleClauseObjectSchema = z
   .object({
@@ -70,7 +71,7 @@ export const CreateConsumableConfigSchema = z.object({
   ),
 }) satisfies z.Schema<Prisma.ConsumableQuestionConfigCreateInput>;
 
-export const CreateAssetQuestionSchema = z.object({
+export const BaseCreateAssetQuestionSchema = z.object({
   legacyQuestionId: z.string().optional().nullable(),
   active: z.boolean().default(true),
   type: z.enum(
@@ -89,6 +90,21 @@ export const CreateAssetQuestionSchema = z.object({
     ],
   ),
   tone: z.string().optional(),
+  parentQuestion: z
+    .object({
+      connect: z.object({
+        id: z.string(),
+      }),
+    })
+    .optional(),
+  conditions: z
+    .object({
+      createMany: z.object({
+        data: z.array(CreateAssetQuestionConditionSchema),
+      }),
+    })
+    .partial()
+    .optional(),
   assetAlertCriteria: z
     .object({
       createMany: z.object({
@@ -100,6 +116,16 @@ export const CreateAssetQuestionSchema = z.object({
   consumableConfig: z
     .object({
       create: CreateConsumableConfigSchema,
+    })
+    .optional(),
+}) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
+
+export const CreateAssetQuestionSchema = BaseCreateAssetQuestionSchema.extend({
+  variants: z
+    .object({
+      createMany: z.object({
+        data: z.array(BaseCreateAssetQuestionSchema),
+      }),
     })
     .optional(),
 }) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;

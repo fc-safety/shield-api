@@ -17,6 +17,7 @@ import { ClientsService } from './clients.service';
 import { ClearDemoInspectionsQueryDto } from './dto/clear-demo-inspections-query.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { DuplicateDemoClientDto } from './dto/duplicate-demo-client.dto';
+import { GenerateDemoInspectionsDto } from './dto/generate-demo-inspections.dto';
 import { QueryClientDto } from './dto/query-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -67,6 +68,16 @@ export class ClientsController {
   ) {
     await this.clientsService.clearInspectionsForDemoClient(
       clearDemoInspectionsQueryDto,
+    );
+  }
+
+  @CheckIsAuthenticated()
+  @Post('/generate-demo-inspections')
+  async generateDemoInspections(
+    @Body() generateDemoInspectionsDto: GenerateDemoInspectionsDto,
+  ) {
+    return this.clientsService.generateInspectionsForDemoClient(
+      generateDemoInspectionsDto,
     );
   }
 }

@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AssetQuestionType" ADD VALUE 'SETUP_AND_INSPECTION';
