@@ -71,7 +71,7 @@ export const CreateConsumableConfigSchema = z.object({
   ),
 }) satisfies z.Schema<Prisma.ConsumableQuestionConfigCreateInput>;
 
-export const CreateAssetQuestionSchema = z.object({
+export const BaseCreateAssetQuestionSchema = z.object({
   legacyQuestionId: z.string().optional().nullable(),
   active: z.boolean().default(true),
   type: z.enum(
@@ -118,6 +118,14 @@ export const CreateAssetQuestionSchema = z.object({
       create: CreateConsumableConfigSchema,
     })
     .optional(),
+}) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
+
+export const CreateAssetQuestionSchema = BaseCreateAssetQuestionSchema.extend({
+  variants: z.object({
+    createMany: z.object({
+      data: z.array(BaseCreateAssetQuestionSchema),
+    }),
+  }),
 }) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
 
 export class CreateAssetQuestionDto extends createZodDto(
