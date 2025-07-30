@@ -3,6 +3,7 @@ import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import pRetry from 'p-retry';
 import { RolesService } from 'src/admin/roles/roles.service';
+import { AssetsService } from 'src/assets/assets/assets.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
@@ -35,6 +36,7 @@ export class ClientsService {
     private readonly cls: ClsService<CommonClsStore>,
     private readonly keycloakService: KeycloakService,
     private readonly assetQuestionsService: AssetQuestionsService,
+    private readonly assetsService: AssetsService,
   ) {}
 
   /**
@@ -46,10 +48,10 @@ export class ClientsService {
   ): any {
     switch (question.valueType) {
       case AssetQuestionResponseType.BINARY:
-        return Math.random() > 0.1; // 90% true
+        return Math.random() > 0.1 ? 'Yes' : 'No'; // 90% true
       case AssetQuestionResponseType.INDETERMINATE_BINARY:
         const rand = Math.random();
-        return rand < 0.8 ? true : rand < 0.95 ? false : null; // 80% true, 15% false, 5% N/A
+        return rand < 0.8 ? 'Yes' : rand < 0.95 ? 'No' : 'N/A'; // 80% true, 15% false, 5% N/A
       case AssetQuestionResponseType.TEXT:
         if (context.isSetup) {
           return `Serial: ${context.assetSerialNumber || 'N/A'}`;
@@ -68,7 +70,7 @@ export class ClientsService {
         ];
         return comments[Math.floor(Math.random() * comments.length)];
       default:
-        return true;
+        return 'Yes';
     }
   }
 
@@ -678,14 +680,28 @@ export class ClientsService {
                   Math.random() > 0.7 ? 'Regular inspection completed' : null,
                 siteId: asset.siteId,
                 clientId: client.id,
-                // Create inspection responses if inspection is complete
-
                 responses: {
                   createMany: {
                     data: inspectionResponses,
                   },
                 },
               },
+              include: {
+                responses: {
+                  include: {
+                    assetQuestion: {
+                      include: {
+                        assetAlertCriteria: true,
+                      },
+                    },
+                  },
+                },
+              },
+            });
+
+            await this.assetsService.handleAlertTriggers(inspection, {
+              tx,
+              skipNotifications: true,
             });
 
             inspectionsCreated.push(inspection.id);

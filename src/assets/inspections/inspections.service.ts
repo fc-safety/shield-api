@@ -163,7 +163,7 @@ export class InspectionsService {
   }
 
   async findAll(queryInspectionDto?: QueryInspectionDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.inspection.findManyForPage(
         buildPrismaFindArgs<typeof prisma.inspection>(queryInspectionDto, {
           include: {
@@ -186,7 +186,7 @@ export class InspectionsService {
 
   async findOne(id: string) {
     return this.prisma
-      .forUser()
+      .forContext()
       .then((prisma) =>
         prisma.inspection.findUniqueOrThrow({
           where: { id },
