@@ -49,6 +49,8 @@ export class AssetQuestionsService {
               productCategory: true,
               product: true,
               conditions: true,
+              assetAlertCriteria: true,
+              consumableConfig: true,
               _count: {
                 select: {
                   assetAlertCriteria: true,

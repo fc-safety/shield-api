@@ -121,11 +121,13 @@ export const BaseCreateAssetQuestionSchema = z.object({
 }) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
 
 export const CreateAssetQuestionSchema = BaseCreateAssetQuestionSchema.extend({
-  variants: z.object({
-    createMany: z.object({
-      data: z.array(BaseCreateAssetQuestionSchema),
-    }),
-  }),
+  variants: z
+    .object({
+      createMany: z.object({
+        data: z.array(BaseCreateAssetQuestionSchema),
+      }),
+    })
+    .optional(),
 }) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
 
 export class CreateAssetQuestionDto extends createZodDto(
