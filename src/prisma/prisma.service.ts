@@ -96,6 +96,7 @@ export class PrismaService
 
   public async txForUser(
     fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
+    options: { timeout?: number } = {},
   ) {
     try {
       const person = await this.peopleService.getPersonRepresentation();
@@ -105,17 +106,20 @@ export class PrismaService
           return this.extended()
             .$extends(extensions.setClientContextForUser(person))
             .$extends(extensions.logResult(onResult))
-            .$transaction(async (tx) => {
-              await Promise.all([
-                tx.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
-                tx.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
-                tx.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIds}, TRUE)`,
-                tx.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
-                tx.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
-              ]);
+            .$transaction(
+              async (tx) => {
+                await Promise.all([
+                  tx.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
+                  tx.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
+                  tx.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIds}, TRUE)`,
+                  tx.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
+                  tx.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
+                ]);
 
-              return await fn(tx);
-            });
+                return await fn(tx);
+              },
+              { timeout: options.timeout },
+            );
         },
         { person },
       );
@@ -156,16 +160,19 @@ export class PrismaService
 
   public async txBypassRLS(
     fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
-    options: { skipPersonLog?: boolean } = {},
+    options: { skipPersonLog?: boolean; timeout?: number } = {},
   ) {
     return this.collectAndEmitModelEvents(
       async (onResult) => {
         return await this.extended()
           .$extends(extensions.logResult(onResult))
-          .$transaction(async (tx) => {
-            await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', TRUE)`;
-            return await fn(tx);
-          });
+          .$transaction(
+            async (tx) => {
+              await tx.$executeRaw`SELECT set_config('app.bypass_rls', 'on', TRUE)`;
+              return await fn(tx);
+            },
+            { timeout: options.timeout },
+          );
       },
       { skipPersonLog: options.skipPersonLog },
     );
@@ -187,12 +194,13 @@ export class PrismaService
 
   public async txForAdminOrUser(
     fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
+    options: { timeout?: number } = {},
   ) {
     const user = this.cls.get('user');
     if (user?.isSuperAdmin()) {
-      return await this.txBypassRLS(fn);
+      return await this.txBypassRLS(fn, options);
     } else {
-      return await this.txForUser(fn);
+      return await this.txForUser(fn, options);
     }
   }
 
@@ -208,12 +216,13 @@ export class PrismaService
   public async txForContext(
     fn: Parameters<ReturnType<typeof this.extended>['$transaction']>[0],
     _context?: ViewContext,
+    options: { timeout?: number } = {},
   ) {
     const context = _context ?? this.cls.get('viewContext');
     if (context === 'admin') {
-      return await this.txForAdminOrUser(fn);
+      return await this.txForAdminOrUser(fn, options);
     } else {
-      return await this.txForUser(fn);
+      return await this.txForUser(fn, options);
     }
   }
 
