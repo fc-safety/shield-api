@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { normalizeState } from 'src/common/address-utils';
 import { CommonClsStore } from 'src/common/types';
-import { as404OrThrow } from 'src/common/utils';
+import { as404OrThrow, isNil } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { AssetQuestionType, Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -48,6 +48,7 @@ export class AssetQuestionsService {
             include: {
               productCategory: true,
               product: true,
+              conditions: true,
               _count: {
                 select: {
                   assetAlertCriteria: true,
@@ -246,6 +247,7 @@ export class AssetQuestionsService {
     const questions = await prisma.assetQuestion.findMany({
       where: {
         active: true,
+        parentQuestionId: null,
         type:
           type === undefined || type === 'SETUP_AND_INSPECTION'
             ? undefined
@@ -269,12 +271,42 @@ export class AssetQuestionsService {
         },
       },
       include: {
-        parentQuestion: true,
+        variants: {
+          include: {
+            conditions: true,
+          },
+        },
       },
       orderBy: [{ order: 'asc' }, { createdOn: 'asc' }],
     });
 
-    return questions;
+    return questions.map((q) => {
+      const { variants, ...question } = q;
+
+      if (variants.length === 0) {
+        return q;
+      }
+
+      const matchingVariant = variants
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 1))
+        .find((v) =>
+          v.conditions.every((c) =>
+            orFilters.some((f) =>
+              f.conditionType === c.conditionType &&
+              !isNil(c.value) &&
+              Array.isArray(c.value)
+                ? c.value.includes(f.value as string)
+                : c.value === f.value,
+            ),
+          ),
+        );
+
+      if (matchingVariant) {
+        return matchingVariant;
+      }
+
+      return question;
+    });
   }
 
   async migrateQuestionsToConditions() {

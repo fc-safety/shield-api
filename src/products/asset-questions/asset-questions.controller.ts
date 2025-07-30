@@ -95,7 +95,9 @@ export class AssetQuestionsController {
   // ASSET-SPECIFIC ENDPOINTS
 
   @Get('by-asset/:assetId')
-  @CheckPolicies(({ user }) => user.canRead('assets'))
+  @CheckPolicies(
+    ({ user }) => user.canRead('assets') || user.canCreate('inspections'),
+  )
   findByAsset(
     @Param('assetId') assetId: string,
     @Query() query: QueryQuestionsByAssetDto,
