@@ -2,6 +2,7 @@ import { Button, Heading, Hr } from '@react-email/components';
 import { format } from 'date-fns';
 import React from 'react';
 import { Block } from './components/block';
+import { FAIcon } from './components/fa-icon';
 import { Layout } from './components/layout';
 import { Paragraph } from './components/paragraph';
 import { buildTextTable } from './utils/text';
@@ -14,6 +15,7 @@ interface ConsumableItem {
   assetName: string;
   category: string;
   categoryColor?: string | null;
+  categoryIcon?: string | null;
   expiryDate: string;
 }
 
@@ -36,11 +38,11 @@ function MonthlyConsumableReportText({
   data,
 }: MonthlyConsumableReportProps) {
   return `
-  Monthly Consumables Report for ${clientName}
+  Monthly Supplies Report for ${clientName}
 
   Hi ${recipientFirstName},
 
-  Please review the following report of safety consumables that are
+  Please review the following report of safety supplies that are
   expiring within the next 30, 60, and 90 days.
 
   ${ExpirationText({
@@ -100,14 +102,14 @@ export default function MonthlyConsumableReportTemplateReact({
   };
 
   return (
-    <Layout preview="Safety Consumables Expiration Report - Action Required">
+    <Layout preview="Safety Supplies Expiration Report - Action Required">
       <Block>
         <Heading className="text-[16px] font-bold text-gray-800 mt-[10px] mb-[20px]">
-          Monthly Consumables Report for {clientName}
+          Monthly Supplies Report for {clientName}
         </Heading>
         <Paragraph>Hi {recipientFirstName},</Paragraph>
         <Paragraph>
-          Please review the following report of consumable supplies that are
+          Please review the following report of safety supplies that are
           expiring within the next 30, 60, and 90 days.
         </Paragraph>
       </Block>
@@ -255,9 +257,10 @@ const ExpirationBlock = ({
               </td>
               <td className="py-[6px] px-[8px] text-[13px] border border-gray-200">
                 {item.categoryColor && (
-                  <div
-                    className="size-3 rounded-sm inline-block mr-1"
-                    style={{ backgroundColor: item.categoryColor }}
+                  <FAIcon
+                    name={item.categoryIcon ?? undefined}
+                    color={item.categoryColor}
+                    className="mr-1"
                   />
                 )}
                 {item.category}
@@ -285,16 +288,18 @@ MonthlyConsumableReportTemplateReact.PreviewProps = {
         siteName: 'Main Office',
         item: 'AED Pads - Adult',
         assetName: 'AED-001-PAD',
-        category: 'Medical',
-        categoryColor: '#FF0000',
+        category: 'AED',
+        categoryColor: 'rgb(236, 72, 153)',
+        categoryIcon: 'fa-heart-pulse',
         expiryDate: '05/01/2025',
       },
       {
         siteName: 'Main Office',
         item: 'Fire Extinguisher - Kitchen',
         assetName: 'FE-K-103',
-        category: 'Fire Safety',
-        categoryColor: '#FF0000',
+        category: 'Fire Extinguisher',
+        categoryColor: 'rgb(239, 68, 68)',
+        categoryIcon: 'fa-fire-extinguisher',
         expiryDate: '05/05/2025',
       },
     ],
@@ -303,8 +308,9 @@ MonthlyConsumableReportTemplateReact.PreviewProps = {
         siteName: 'Distribution Center',
         item: 'Fire Extinguisher - Loading Dock',
         assetName: 'FE-LD-208',
-        category: 'Fire Safety',
-        categoryColor: '#FF0000',
+        category: 'Fire Extinguisher',
+        categoryColor: 'rgb(239, 68, 68)',
+        categoryIcon: 'fa-fire-extinguisher',
         expiryDate: '06/12/2025',
       },
     ],
@@ -313,14 +319,15 @@ MonthlyConsumableReportTemplateReact.PreviewProps = {
         siteName: 'Warehouse A',
         item: 'Fire Extinguisher - Office Area',
         assetName: 'FE-WA-OFC',
-        category: 'Fire Safety',
-        categoryColor: '#FF0000',
+        category: 'Fire Extinguisher',
+        categoryColor: 'rgb(239, 68, 68)',
+        categoryIcon: 'fa-fire-extinguisher',
         expiryDate: '07/01/2025',
       },
     ],
   },
 } satisfies MonthlyConsumableReportProps;
 
-MonthlyConsumableReportTemplateReact.Subject = 'Monthly Consumables Report';
+MonthlyConsumableReportTemplateReact.Subject = 'Monthly Supplies Report';
 
 MonthlyConsumableReportTemplateReact.Text = MonthlyConsumableReportText;

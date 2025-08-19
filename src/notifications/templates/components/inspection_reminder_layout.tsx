@@ -1,18 +1,22 @@
-import { Column, Row } from '@react-email/components';
+import { Column, Heading, Link, Row } from '@react-email/components';
 import { format } from 'date-fns';
 import React from 'react';
 import { cn } from '../utils/tailwind.js';
+import { getAssetsUrl } from '../utils/urls.js';
 import { Block } from './block.js';
+import { FAIcon } from './fa-icon.js';
 import { Layout } from './layout.js';
 import { Paragraph } from './paragraph.js';
 
 interface InspectionReminderLayoutProps {
   recipientFirstName: string;
   assetsDueForInspectionBySite: {
+    siteId: string;
     siteName: string;
     assetsDueForInspection: {
       assetId: string;
       assetName: string;
+      categoryId: string;
       categoryName: string;
       // TODO: Icons aren't very easy to use in emails. Normal CDNs don't work.
       categoryIcon?: string | null;
@@ -25,6 +29,7 @@ interface InspectionReminderLayoutProps {
   urgency?: 'critical' | 'urgent' | 'very_soon' | 'soon' | 'normal';
   openingMessage: string;
   closingMessage: string;
+  frontendUrl: string;
 }
 
 export function InspectionReminderTextLayout({
@@ -67,10 +72,16 @@ export function InspectionReminderLayout({
   openingMessage,
   closingMessage,
   urgency,
+  frontendUrl,
 }: InspectionReminderLayoutProps): React.ReactElement {
   return (
     <Layout>
       <Block>
+        {urgency !== undefined && urgency !== 'normal' && (
+          <Heading className="text-[16px] font-bold text-gray-800 mt-[10px] mb-[20px]">
+            Reminder: Inspections Due Soon
+          </Heading>
+        )}
         <Paragraph>Hi {recipientFirstName},</Paragraph>
         <Paragraph>{openingMessage}</Paragraph>
       </Block>
@@ -78,7 +89,16 @@ export function InspectionReminderLayout({
         <Block key={site.siteName}>
           {!singleSite && (
             <Paragraph className="text-sm font-semibold p-0 m-0 pb-2">
-              {site.siteName}
+              Site:{' '}
+              <Link
+                href={getAssetsUrl(frontendUrl, {
+                  query: {
+                    siteId: site.siteId,
+                  },
+                })}
+              >
+                {site.siteName}
+              </Link>
             </Paragraph>
           )}
           <Row className="text-sm font-semibold">
@@ -98,16 +118,28 @@ export function InspectionReminderLayout({
           {site.assetsDueForInspection.map((item) => (
             <Row key={item.assetId} className="text-sm">
               <Column align="left" className="h-8 w-1/4 bg-gray-50 px-2">
-                {item.assetName}
+                <Link href={getAssetsUrl(frontendUrl, item.assetId)}>
+                  {item.assetName}
+                </Link>
               </Column>
               <Column align="left" className="h-8 w-1/4 bg-gray-50 px-2">
                 {item.categoryColor && (
-                  <div
-                    className="size-3 rounded-sm inline-block mr-1"
-                    style={{ backgroundColor: item.categoryColor }}
+                  <FAIcon
+                    name={item.categoryIcon ?? undefined}
+                    color={item.categoryColor}
+                    className="mr-1"
                   />
                 )}
-                {item.categoryName}
+                <Link
+                  href={getAssetsUrl(frontendUrl, {
+                    query: {
+                      siteId: site.siteId,
+                      productCategoryId: item.categoryId,
+                    },
+                  })}
+                >
+                  {item.categoryName}
+                </Link>
               </Column>
               <Column align="left" className="h-8 w-1/4 bg-gray-50 px-2">
                 {item.product}

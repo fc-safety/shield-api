@@ -11,6 +11,7 @@ import React from 'react';
 import { AlertLevel, Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 import { Block } from './components/block';
+import { FAIcon } from './components/fa-icon';
 import { Layout } from './components/layout';
 import { Paragraph } from './components/paragraph';
 import { cn } from './utils/tailwind';
@@ -34,6 +35,7 @@ interface AlertAsset {
   placement: string;
   categoryColor: string | null;
   categoryName: string;
+  categoryIcon: string | null;
 }
 
 interface InspectionAlertTriggeredTemplateProps {
@@ -78,12 +80,13 @@ export default function InspectionAlertTriggeredTemplateReact({
     {
       label: 'Asset',
       value: (
-        <Section className="space-x-1">
+        <Section>
           {asset.name} – {asset.categoryName}
           {asset.categoryColor && (
-            <div
-              className="size-3 rounded-sm inline-block ml-0.5"
-              style={{ backgroundColor: asset.categoryColor }}
+            <FAIcon
+              name={asset.categoryIcon ?? undefined}
+              color={asset.categoryColor}
+              className="inline-block ml-1"
             />
           )}
         </Section>
@@ -214,28 +217,29 @@ InspectionAlertTriggeredTemplateReact.Text = ({
 InspectionAlertTriggeredTemplateReact.Subject = 'Inspection Alert Triggered';
 
 InspectionAlertTriggeredTemplateReact.PreviewProps = {
-  recipientFirstName: 'John',
-  siteName: 'Site 1',
+  recipientFirstName: 'Sarah',
+  siteName: 'Downtown Manufacturing Facility',
   alert: {
-    id: '1',
+    id: 'alert-urgent-001',
     createdOn: new Date(),
     alertLevel: AlertLevel.URGENT,
-    message: 'This is a test alert',
-    questionPrompt: 'Is the check indicator light green?',
-    questionResponseValue: 'No',
+    message: 'pressure gauge reading is below minimum threshold',
+    questionPrompt: 'Is the pressure gauge reading within normal range (12-15 PSI)?',
+    questionResponseValue: '8 PSI',
     inspectionImageUrl: null,
   },
   asset: {
-    id: '1',
-    name: 'Asset 1',
-    serialNumber: '1234567890',
-    location: 'Location 1',
-    placement: 'Placement 1',
-    categoryColor: '#FF0000',
-    categoryName: 'AED',
+    id: 'asset-fe-warehouse-001',
+    name: 'Warehouse Entry Fire Extinguisher',
+    serialNumber: 'FE-2024-WH-001',
+    location: 'Warehouse Building A',
+    placement: 'Main Entrance - East Wall',
+    categoryColor: 'rgb(239, 68, 68)',
+    categoryName: 'Fire Extinguisher',
+    categoryIcon: 'fa-fire-extinguisher',
   },
-  inspectorName: 'John Doe',
-  frontendUrl: 'https://shield.stg.fc-safety.com',
+  inspectorName: 'Mike Rodriguez',
+  frontendUrl: 'https://shield.stg.fc-safety.app',
 } satisfies InspectionAlertTriggeredTemplateProps;
 
 export interface ResponseValueImage {

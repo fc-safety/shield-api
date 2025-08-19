@@ -260,12 +260,15 @@ export class ClientNotificationsProcessor
         const props: SharedInspectionReminderTemplateProps = {
           recipientFirstName: user.firstName,
           singleSite: isSingleSiteUser(user, roleMap),
+          frontendUrl: this.config.get('FRONTEND_URL'),
           assetsDueForInspectionBySite: Object.entries(assetsBySite).map(
             ([, assets]) => ({
+              siteId: assets.at(0)?.site.id ?? 'unknown',
               siteName: assets.at(0)?.site.name ?? 'Unknown',
               assetsDueForInspection: assets.map((a) => ({
                 assetId: a.id,
                 assetName: a.name,
+                categoryId: a.product.productCategory.id,
                 categoryName: a.product.productCategory.name,
                 categoryIcon: a.product.productCategory.icon,
                 categoryColor: a.product.productCategory.color,
@@ -386,6 +389,7 @@ export class ClientNotificationsProcessor
           recipientFirstName: user.firstName,
           clientName: client.name,
           singleSite: isSingleSiteUser(user, roleMap),
+          frontendUrl: this.config.get('FRONTEND_URL'),
           reportRowsBySite: Object.entries(assetsBySite).map(
             ([, siteAssets]) => {
               const assetsByCategory = groupBy(
@@ -395,6 +399,7 @@ export class ClientNotificationsProcessor
 
               return {
                 siteName: siteAssets.at(0)?.site.name ?? 'Unknown',
+                siteId: siteAssets.at(0)?.site.id ?? 'unknown',
                 reportRows: Object.entries(assetsByCategory).map(
                   ([, categoryAssets]) => {
                     // Calculate total alerts for category.
@@ -419,6 +424,7 @@ export class ClientNotificationsProcessor
                       categoryAssets.at(0)?.product.productCategory;
 
                     return {
+                      categoryId: productCategory?.id ?? 'unknown',
                       categoryName:
                         productCategory?.shortName ??
                         productCategory?.name ??
@@ -520,6 +526,7 @@ export class ClientNotificationsProcessor
             consumable.product.productCategory.shortName ??
             consumable.product.productCategory.name,
           categoryColor: consumable.product.productCategory.color,
+          categoryIcon: consumable.product.productCategory.icon,
           expiryDate: consumable.expiresOn.toISOString(),
         });
 
@@ -619,6 +626,7 @@ export class ClientNotificationsProcessor
         placement: alert.asset.placement,
         categoryColor: alert.asset.product.productCategory.color,
         categoryName: alert.asset.product.productCategory.name,
+        categoryIcon: alert.asset.product.productCategory.icon,
       },
       inspectorName: `${alert.assetQuestionResponse.responder.firstName} ${alert.assetQuestionResponse.responder.lastName}`,
       frontendUrl: this.config.get('FRONTEND_URL'),
