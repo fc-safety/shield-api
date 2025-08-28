@@ -15,15 +15,52 @@ import {
 import { AssetQuestionsService } from './asset-questions.service';
 import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-condition.dto';
 import { CreateAssetQuestionDto } from './dto/create-asset-question.dto';
+import { CreateClientAssetQuestionCustomizationDto } from './dto/create-client-asset-question-customization.dto';
 import { QueryAssetQuestionDto } from './dto/query-asset-question.dto';
 import { QueryQuestionsByAssetDto } from './dto/query-questions-by-asset.dto';
 import { UpdateAssetQuestionConditionDto } from './dto/update-asset-question-condition.dto';
 import { UpdateAssetQuestionDto } from './dto/update-asset-question.dto';
+import { UpdateClientAssetQuestionCustomizationDto } from './dto/update-client-asset-question-customization.dto';
 
 @Controller('asset-questions')
 @CheckResourcePermissions('asset-questions')
 export class AssetQuestionsController {
   constructor(private readonly assetQuestionsService: AssetQuestionsService) {}
+
+  // CLIENT CUSTOMIZATIONS
+  @Get('customizations')
+  findCustomizations() {
+    return this.assetQuestionsService.findClientCustomizations();
+  }
+
+  @Post('customizations')
+  addCustomization(
+    @Body()
+    createClientAssetQuestionCustomizationDto: CreateClientAssetQuestionCustomizationDto,
+  ) {
+    return this.assetQuestionsService.addClientCustomization(
+      createClientAssetQuestionCustomizationDto,
+    );
+  }
+
+  @Patch('customizations/:customizationId')
+  updateCustomization(
+    @Param('customizationId') customizationId: string,
+    @Body()
+    updateClientAssetQuestionCustomizationDto: UpdateClientAssetQuestionCustomizationDto,
+  ) {
+    return this.assetQuestionsService.updateClientCustomization(
+      customizationId,
+      updateClientAssetQuestionCustomizationDto,
+    );
+  }
+
+  @Delete('customizations/:customizationId')
+  removeCustomization(@Param('customizationId') customizationId: string) {
+    return this.assetQuestionsService.removeClientCustomization(
+      customizationId,
+    );
+  }
 
   @Post()
   create(@Body() createAssetQuestionDto: CreateAssetQuestionDto) {

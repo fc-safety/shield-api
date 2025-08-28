@@ -38,6 +38,7 @@ model Asset {
   placement              String
   serialNumber           String
   inspectionCycle        Int?
+  metadata               Json?
   inspectionRoutePoints  InspectionRoutePoint[]
   inspectionRouteId      String?
   consumables            Consumable[]
@@ -193,40 +194,83 @@ model CompletedInspectionRoutePoint {
 }
 
 model AssetQuestion {
-  id                 String                    @id @default(cuid(2))
+  id                                String                             @id @default(cuid(2))
   /**
    * The legacy ID of the asset question (maps to `questions.q_id` in the legacy database).
    */
-  legacyQuestionId   String?
-  createdOn          DateTime                  @default(now()) @db.Timestamptz()
-  modifiedOn         DateTime                  @updatedAt @db.Timestamptz()
-  active             Boolean                   @default(true)
-  type               AssetQuestionType
-  tone               String?
-  required           Boolean                   @default(false)
-  order              Int?
-  prompt             String
-  valueType          AssetQuestionResponseType
-  /** @deprecated */
-  productCategory    ProductCategory?          @relation(fields: [productCategoryId], references: [id])
-  /** @deprecated */
-  productCategoryId  String?
-  /** @deprecated */
-  product            Product?                  @relation(fields: [productId], references: [id])
-  /** @deprecated */
-  productId          String?
-  parentQuestion     AssetQuestion?            @relation("AssetQuestionVariants", fields: [parentQuestionId], references: [id], onDelete: Cascade)
-  parentQuestionId   String?
-  variants           AssetQuestion[]           @relation("AssetQuestionVariants")
-  conditions         AssetQuestionCondition[]
-  assetAlertCriteria AssetAlertCriterion[]
-  responses          AssetQuestionResponse[]
-  consumableConfig   ConsumableQuestionConfig? @relation(fields: [consumableConfigId], references: [id])
-  consumableConfigId String?
-  client             Client?                   @relation(fields: [clientId], references: [id])
-  clientId           String?
+  legacyQuestionId                  String?
+  createdOn                         DateTime                           @default(now()) @db.Timestamptz()
+  modifiedOn                        DateTime                           @updatedAt @db.Timestamptz()
+  active                            Boolean                            @default(true)
+  type                              AssetQuestionType
+  tone                              String?
+  required                          Boolean                            @default(false)
+  order                             Int?
+  prompt                            String
+  valueType                         AssetQuestionResponseType
+  /**
+   * @deprecated
+   */
+  productCategory                   ProductCategory?                   @relation(fields: [productCategoryId], references: [id])
+  /**
+   * @deprecated
+   */
+  productCategoryId                 String?
+  /**
+   * @deprecated
+   */
+  product                           Product?                           @relation(fields: [productId], references: [id])
+  /**
+   * @deprecated
+   */
+  productId                         String?
+  parentQuestion                    AssetQuestion?                     @relation("AssetQuestionVariants", fields: [parentQuestionId], references: [id], onDelete: Cascade)
+  parentQuestionId                  String?
+  files                             File[]
+  variants                          AssetQuestion[]                    @relation("AssetQuestionVariants")
+  conditions                        AssetQuestionCondition[]
+  assetAlertCriteria                AssetAlertCriterion[]
+  responses                         AssetQuestionResponse[]
+  consumableConfig                  ConsumableQuestionConfig?          @relation(fields: [consumableConfigId], references: [id])
+  consumableConfigId                String?
+  setAssetMetadataConfig            SetAssetMetadataConfig?
+  clientAssetQuestionCustomizations ClientAssetQuestionCustomization[]
+  client                            Client?                            @relation(fields: [clientId], references: [id])
+  clientId                          String?
 
   @@index([legacyQuestionId])
+}
+
+model File {
+  id              String         @id @default(cuid(2))
+  createdOn       DateTime       @default(now()) @db.Timestamptz()
+  modifiedOn      DateTime       @updatedAt @db.Timestamptz()
+  name            String
+  url             String
+  assetQuestion   AssetQuestion? @relation(fields: [assetQuestionId], references: [id], onDelete: Cascade)
+  assetQuestionId String?
+}
+
+model ClientAssetQuestionCustomization {
+  id              String        @id @default(cuid(2))
+  createdOn       DateTime      @default(now()) @db.Timestamptz()
+  modifiedOn      DateTime      @updatedAt @db.Timestamptz()
+  assetQuestion   AssetQuestion @relation(fields: [assetQuestionId], references: [id], onDelete: Cascade)
+  assetQuestionId String        @unique
+  enabled         Boolean       @default(true)
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId        String        @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  site            Site?         @relation(fields: [siteId], references: [id])
+  siteId          String?
+}
+
+model SetAssetMetadataConfig {
+  id              String         @id @default(cuid(2))
+  createdOn       DateTime       @default(now()) @db.Timestamptz()
+  modifiedOn      DateTime       @updatedAt @db.Timestamptz()
+  assetQuestion   AssetQuestion? @relation(fields: [assetQuestionId], references: [id], onDelete: Cascade)
+  assetQuestionId String?        @unique
+  metadata        Json
 }
 
 model AssetQuestionResponse {
@@ -271,18 +315,19 @@ enum AssetQuestionConditionType {
   PRODUCT_CATEGORY
   PRODUCT_SUBCATEGORY
   PRODUCT
+  METADATA
 }
 
 model AssetQuestionCondition {
-  id              String                         @id @default(cuid(2))
-  createdOn       DateTime                       @default(now()) @db.Timestamptz()
-  modifiedOn      DateTime                       @updatedAt @db.Timestamptz()
-  assetQuestion   AssetQuestion                  @relation(fields: [assetQuestionId], references: [id], onDelete: Cascade)
+  id              String                     @id @default(cuid(2))
+  createdOn       DateTime                   @default(now()) @db.Timestamptz()
+  modifiedOn      DateTime                   @updatedAt @db.Timestamptz()
+  assetQuestion   AssetQuestion              @relation(fields: [assetQuestionId], references: [id], onDelete: Cascade)
   assetQuestionId String
   conditionType   AssetQuestionConditionType
   value           Json
   description     String?
-  client          Client?                        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client          Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId        String?
 }
 
@@ -427,43 +472,44 @@ model Address {
 }
 
 model Client {
-  id                      String                   @id @default(cuid(2))
-  externalId              String                   @unique @default(cuid(2))
+  id                                String                             @id @default(cuid(2))
+  externalId                        String                             @unique @default(cuid(2))
   /**
    * The legacy ID of the client (maps to `clients.c_id` in the legacy database).
    */
-  legacyClientId          String?
-  createdOn               DateTime                 @default(now()) @db.Timestamptz()
-  modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
-  status                  ClientStatus             @default(PENDING)
-  startedOn               DateTime                 @db.Timestamptz()
-  name                    String
-  address                 Address                  @relation(fields: [addressId], references: [id])
-  addressId               String                   @unique
-  phoneNumber             String
-  homeUrl                 String?
-  defaultInspectionCycle  Int                      @default(30)
-  demoMode                Boolean                  @default(false)
-  sites                   Site[]
-  people                  Person[]
-  assets                  Asset[]
-  consumables             Consumable[]
-  inspections             Inspection[]
-  inspectionRoutes        InspectionRoute[]
-  inspectionSessions      InspectionSession[]
-  tags                    Tag[]
-  assetQuestions          AssetQuestion[]
-  assetQuestionResponses  AssetQuestionResponse[]
-  alerts                  Alert[]
-  productRequests         ProductRequest[]
-  productRequestApprovals ProductRequestApproval[]
-  productRequestItems     ProductRequestItem[]
-  productCategories       ProductCategory[]
-  manufacturers           Manufacturer[]
-  products                Product[]
-  vaultOwnerships         VaultOwnership[]
-  ProductSubcategory      ProductSubcategory[]
-  assetQuestionConditions AssetQuestionCondition[]
+  legacyClientId                    String?
+  createdOn                         DateTime                           @default(now()) @db.Timestamptz()
+  modifiedOn                        DateTime                           @updatedAt @db.Timestamptz()
+  status                            ClientStatus                       @default(PENDING)
+  startedOn                         DateTime                           @db.Timestamptz()
+  name                              String
+  address                           Address                            @relation(fields: [addressId], references: [id])
+  addressId                         String                             @unique
+  phoneNumber                       String
+  homeUrl                           String?
+  defaultInspectionCycle            Int                                @default(30)
+  demoMode                          Boolean                            @default(false)
+  sites                             Site[]
+  people                            Person[]
+  assets                            Asset[]
+  consumables                       Consumable[]
+  inspections                       Inspection[]
+  inspectionRoutes                  InspectionRoute[]
+  inspectionSessions                InspectionSession[]
+  tags                              Tag[]
+  assetQuestions                    AssetQuestion[]
+  assetQuestionResponses            AssetQuestionResponse[]
+  alerts                            Alert[]
+  productRequests                   ProductRequest[]
+  productRequestApprovals           ProductRequestApproval[]
+  productRequestItems               ProductRequestItem[]
+  productCategories                 ProductCategory[]
+  manufacturers                     Manufacturer[]
+  products                          Product[]
+  vaultOwnerships                   VaultOwnership[]
+  ProductSubcategory                ProductSubcategory[]
+  assetQuestionConditions           AssetQuestionCondition[]
+  clientAssetQuestionCustomizations ClientAssetQuestionCustomization[]
 
   @@index([legacyClientId])
 }
@@ -476,41 +522,42 @@ enum ClientStatus {
 }
 
 model Site {
-  id                      String                   @id @default(cuid(2))
-  externalId              String                   @unique @default(cuid(2))
+  id                                String                             @id @default(cuid(2))
+  externalId                        String                             @unique @default(cuid(2))
   /**
    * The legacy ID of the site (maps to `locations.loc_id` in the legacy database).
    */
-  legacySiteId            String?
+  legacySiteId                      String?
   /**
    * The legacy ID of the client group (maps to `groups.group_id` in the legacy database).
    */
-  legacyGroupId           String?
-  createdOn               DateTime                 @default(now()) @db.Timestamptz()
-  modifiedOn              DateTime                 @updatedAt @db.Timestamptz()
-  name                    String
-  address                 Address                  @relation(fields: [addressId], references: [id])
-  addressId               String                   @unique
-  phoneNumber             String
-  primary                 Boolean                  @default(false)
-  parentSite              Site?                    @relation("ParentSiteSubsite", fields: [parentSiteId], references: [id], onDelete: Restrict)
-  parentSiteId            String?
-  subsites                Site[]                   @relation("ParentSiteSubsite")
-  assets                  Asset[]
-  consumables             Consumable[]
-  productRequests         ProductRequest[]
-  tags                    Tag[]
-  people                  Person[]
-  inspections             Inspection[]
-  inspectionRoutes        InspectionRoute[]
-  inspectionSessions      InspectionSession[]
-  assetQuestionResponses  AssetQuestionResponse[]
-  alerts                  Alert[]
-  client                  Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId                String
-  productRequestApprovals ProductRequestApproval[]
-  productRequestItems     ProductRequestItem[]
-  vaultOwnerships         VaultOwnership[]
+  legacyGroupId                     String?
+  createdOn                         DateTime                           @default(now()) @db.Timestamptz()
+  modifiedOn                        DateTime                           @updatedAt @db.Timestamptz()
+  name                              String
+  address                           Address                            @relation(fields: [addressId], references: [id])
+  addressId                         String                             @unique
+  phoneNumber                       String
+  primary                           Boolean                            @default(false)
+  parentSite                        Site?                              @relation("ParentSiteSubsite", fields: [parentSiteId], references: [id], onDelete: Restrict)
+  parentSiteId                      String?
+  subsites                          Site[]                             @relation("ParentSiteSubsite")
+  assets                            Asset[]
+  consumables                       Consumable[]
+  productRequests                   ProductRequest[]
+  tags                              Tag[]
+  people                            Person[]
+  inspections                       Inspection[]
+  inspectionRoutes                  InspectionRoute[]
+  inspectionSessions                InspectionSession[]
+  assetQuestionResponses            AssetQuestionResponse[]
+  alerts                            Alert[]
+  client                            Client                             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId                          String
+  productRequestApprovals           ProductRequestApproval[]
+  productRequestItems               ProductRequestItem[]
+  vaultOwnerships                   VaultOwnership[]
+  clientAssetQuestionCustomizations ClientAssetQuestionCustomization[]
 
   @@index([legacySiteId])
   @@index([legacyGroupId])
@@ -561,7 +608,9 @@ model ProductCategory {
   description      String?
   icon             String?
   color            String?
-  /** @deprecated */
+  /**
+   * @deprecated
+   */
   assetQuestions   AssetQuestion[]
   products         Product[]
   subcategories    ProductSubcategory[]
@@ -653,7 +702,9 @@ model Product {
   assets               Asset[]
   consumables          Consumable[]
   productRequestItems  ProductRequestItem[]
-  /** @deprecated */
+  /**
+   * @deprecated
+   */
   assetQuestions       AssetQuestion[]
   consumableConfigs    ConsumableQuestionConfig[]
   client               Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)

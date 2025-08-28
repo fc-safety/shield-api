@@ -10,9 +10,23 @@ export interface TeamInspectionReminderTemplateProps {
   firstName: string;
   requestorName: string;
   asset: Prisma.AssetGetPayload<{
-    include: {
-      tag: true;
-      site: true;
+    select: {
+      id: true;
+      name: true;
+      location: true;
+      placement: true;
+      site: {
+        select: {
+          id: true;
+          name: true;
+        };
+      };
+      tag: {
+        select: {
+          id: true;
+          serialNumber: true;
+        };
+      };
     };
   }>;
 }
@@ -24,44 +38,16 @@ export const TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: TeamInspectionReminde
     asset: {
       name: 'Reception Area AED Unit',
       id: 'asset-aed-reception-001',
-      legacyAssetId: null,
-      createdOn: new Date(),
-      modifiedOn: new Date(),
-      setupOn: new Date(),
-      active: true,
-      productId: 'prod-aed-zoll-frx',
-      tagId: 'tag-aed-rec-001',
       tag: {
         id: 'tag-aed-rec-001',
-        createdOn: new Date(),
-        modifiedOn: new Date(),
         serialNumber: 'AED-2024-REC-001',
-        siteId: 'site-north-office',
-        clientId: 'client-safety-solutions',
-        externalId: 'EXT-AED-001',
-        legacyTagId: null,
       },
       location: 'Main Building - First Floor',
       placement: 'Reception Area - Near Security Desk',
-      serialNumber: 'AED-2024-REC-001',
-      inspectionCycle: null,
-      inspectionRouteId: 'route-monthly-medical',
-      siteId: 'site-north-office',
       site: {
         name: 'North Regional Office',
         id: 'site-north-office',
-        legacySiteId: null,
-        legacyGroupId: null,
-        createdOn: new Date(),
-        modifiedOn: new Date(),
-        clientId: 'client-safety-solutions',
-        externalId: 'EXT-SITE-NORTH',
-        addressId: 'addr-north-office',
-        phoneNumber: '(555) 123-4567',
-        primary: true,
-        parentSiteId: null,
       },
-      clientId: 'client-safety-solutions',
     },
   };
 

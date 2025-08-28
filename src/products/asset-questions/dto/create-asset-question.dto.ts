@@ -118,6 +118,26 @@ export const BaseCreateAssetQuestionSchema = z.object({
       create: CreateConsumableConfigSchema,
     })
     .optional(),
+  setAssetMetadataConfig: z
+    .object({
+      create: z.object({
+        metadata: z.record(z.string(), z.string()),
+      }),
+    })
+    .optional(),
+  files: z
+    .object({
+      createMany: z.object({
+        data: z.array(
+          z.object({
+            name: z.string(),
+            url: z.string(),
+          }),
+        ),
+      }),
+    })
+    .partial()
+    .optional(),
 }) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
 
 export const CreateAssetQuestionSchema = BaseCreateAssetQuestionSchema.extend({

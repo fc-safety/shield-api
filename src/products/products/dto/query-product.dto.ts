@@ -2,6 +2,7 @@ import { createZodDto } from 'nestjs-zod';
 import { QueryConsumableFiltersSchema } from 'src/assets/consumables/dto/query-consumable.dto';
 import {
   buildFixedQuerySchema,
+  emptyAsObject,
   prismaBoolFilter,
   prismaDateTimeFilter,
   prismaEnumFilter,
@@ -35,6 +36,7 @@ const BaseQueryProductFiltersSchema = z
         id: prismaStringFilter(z.string()),
       })
       .partial(),
+    parentProductId: prismaStringFilter(z.string()),
     parentProduct: z
       .object({
         id: prismaStringFilter(z.string()),
@@ -49,11 +51,11 @@ const BaseQueryProductFiltersSchema = z
       .partial(),
     perishable: prismaBoolFilter(z.coerce.boolean()),
     ansiMinimumRequired: prismaBoolFilter(z.coerce.boolean()),
-    consumables: z
+    consumableProducts: z
       .object({
-        every: QueryConsumableFiltersSchema,
-        some: QueryConsumableFiltersSchema,
-        none: QueryConsumableFiltersSchema,
+        every: emptyAsObject(QueryConsumableFiltersSchema),
+        some: emptyAsObject(QueryConsumableFiltersSchema),
+        none: emptyAsObject(QueryConsumableFiltersSchema),
       })
       .partial(),
     client: z.object({
@@ -109,8 +111,37 @@ const QueryProductOrderSchema = z
   })
   .partial() satisfies z.Schema<Prisma.ProductOrderByWithRelationInput>;
 
+const QueryProductIncludeSchema = z
+  .object({
+    consumableProducts: z.union([
+      z.coerce.boolean(),
+      z.object({
+        include: z
+          .object({
+            ansiCategory: z.boolean(),
+            productCategory: z.boolean(),
+            manufacturer: z.boolean(),
+          })
+          .partial(),
+      }),
+    ]),
+    parentProduct: z.union([
+      z.coerce.boolean(),
+      z.object({
+        include: z
+          .object({
+            ansiCategory: z.boolean(),
+            productCategory: z.boolean(),
+            manufacturer: z.boolean(),
+          })
+          .partial(),
+      }),
+    ]),
+  })
+  .partial() satisfies z.Schema<Prisma.ProductInclude>;
+
 export class QueryProductDto extends createZodDto(
   QueryProductFiltersSchema.extend(
-    buildFixedQuerySchema(QueryProductOrderSchema),
+    buildFixedQuerySchema(QueryProductOrderSchema, QueryProductIncludeSchema),
   ),
 ) {}
