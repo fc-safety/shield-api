@@ -10,58 +10,44 @@ export interface TeamInspectionReminderTemplateProps {
   firstName: string;
   requestorName: string;
   asset: Prisma.AssetGetPayload<{
-    include: {
-      tag: true;
-      site: true;
+    select: {
+      id: true;
+      name: true;
+      location: true;
+      placement: true;
+      site: {
+        select: {
+          id: true;
+          name: true;
+        };
+      };
+      tag: {
+        select: {
+          id: true;
+          serialNumber: true;
+        };
+      };
     };
   }>;
 }
 
 export const TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: TeamInspectionReminderTemplateProps =
   {
-    firstName: 'Bill',
-    requestorName: 'John Doe',
+    firstName: 'Jessica',
+    requestorName: 'David Martinez',
     asset: {
-      name: 'Asset 1',
-      id: '1',
-      legacyAssetId: null,
-      createdOn: new Date(),
-      modifiedOn: new Date(),
-      setupOn: new Date(),
-      active: true,
-      productId: '1',
-      tagId: '1',
+      name: 'Reception Area AED Unit',
+      id: 'asset-aed-reception-001',
       tag: {
-        id: '1',
-        createdOn: new Date(),
-        modifiedOn: new Date(),
-        serialNumber: '1234567890',
-        siteId: '1',
-        clientId: '1',
-        externalId: '1',
-        legacyTagId: null,
+        id: 'tag-aed-rec-001',
+        serialNumber: 'AED-2024-REC-001',
       },
-      location: 'Location 1',
-      placement: 'Placement 1',
-      serialNumber: '1234567890',
-      inspectionCycle: null,
-      inspectionRouteId: '1',
-      siteId: '1',
+      location: 'Main Building - First Floor',
+      placement: 'Reception Area - Near Security Desk',
       site: {
-        name: 'Site 1',
-        id: '1',
-        legacySiteId: null,
-        legacyGroupId: null,
-        createdOn: new Date(),
-        modifiedOn: new Date(),
-        clientId: '1',
-        externalId: '1',
-        addressId: '1',
-        phoneNumber: '1234567890',
-        primary: true,
-        parentSiteId: null,
+        name: 'North Regional Office',
+        id: 'site-north-office',
       },
-      clientId: '1',
     },
   };
 

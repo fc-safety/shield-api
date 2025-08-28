@@ -9,6 +9,7 @@ export type PrismaQueryFilters<T extends { where?: any; orderBy?: any }> =
 const buildPrismaBoolFilters = <T extends z.ZodTypeAny>(zodType: T) =>
   z.object({
     equals: zodType,
+    not: zodType,
   });
 
 export const prismaBoolFilter = <TValue extends z.ZodBoolean>(
@@ -85,16 +86,19 @@ export type TPrismaOrder<T> = {
 
 export const buildFixedQuerySchema = <T>(
   orderSchema: z.Schema<Prisma.Args<T, 'findMany'>['orderBy']>,
+  includeSchema?: z.Schema<Prisma.Args<T, 'findMany'>['include']>,
 ) => ({
   order: z.union([orderSchema, z.array(orderSchema)]).optional(),
   limit: z.coerce.number().default(10),
   offset: z.coerce.number().default(0),
+  include: includeSchema ? includeSchema.optional() : z.object({}).optional(),
 });
 
 export const buildPrismaFindArgs = <T>(
   querySchema:
     | (Prisma.Args<T, 'findMany'>['where'] & {
         order?: Prisma.Args<T, 'findMany'>['orderBy'];
+        include?: Prisma.Args<T, 'findMany'>['include'];
         limit?: number;
         offset?: number;
       })
@@ -107,7 +111,7 @@ export const buildPrismaFindArgs = <T>(
     return undefined as any;
   }
 
-  const { order, limit, offset, ...where } = querySchema;
+  const { order, limit, offset, include, ...where } = querySchema;
   return {
     ...(args ?? {}),
     where: {
@@ -117,13 +121,17 @@ export const buildPrismaFindArgs = <T>(
     orderBy: order,
     take: limit,
     skip: offset,
+    include: {
+      ...(include ?? {}),
+      ...(args?.include ?? {}),
+    },
   } as any;
 };
 
-export const emptyAsObject = <T extends z.ZodTypeAny>(zodType: T) =>
+export const emptyAsObject = <T extends z.ZodTypeAny>(zodType: T): T =>
   z.preprocess((data) => {
     if (data === undefined || data === '') {
       return {};
     }
     return data;
-  }, zodType);
+  }, zodType) as unknown as T;

@@ -57,6 +57,40 @@ const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
     ),
     deleteMany: z.array(z.object({ id: z.string() })),
   }),
+  setAssetMetadataConfig: z
+    .object({
+      create: z.object({
+        metadata: z.record(z.string(), z.string()),
+      }),
+      update: z.object({
+        metadata: z.record(z.string(), z.string()),
+      }),
+      delete: z.boolean().default(false),
+    })
+    .optional(),
+  files: z
+    .object({
+      createMany: z.object({
+        data: z.array(
+          z.object({
+            name: z.string(),
+            url: z.string(),
+          }),
+        ),
+      }),
+      updateMany: z.array(
+        z.object({
+          where: z.object({ id: z.string() }),
+          data: z.object({
+            name: z.string(),
+            url: z.string(),
+          }),
+        }),
+      ),
+      deleteMany: z.array(z.object({ id: z.string() })),
+    })
+    .partial()
+    .optional(),
 }).partial() satisfies z.Schema<Prisma.AssetQuestionUpdateInput>;
 
 export class UpdateAssetQuestionDto extends createZodDto(

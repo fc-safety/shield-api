@@ -230,6 +230,7 @@ export class AssetsService {
               assetQuestion: {
                 include: {
                   consumableConfig: true,
+                  setAssetMetadataConfig: true,
                 },
               },
             },
@@ -237,6 +238,7 @@ export class AssetsService {
         },
       })
       .then(async (asset) => {
+        await this.handleUpdateMetadataFromSetupResponses(prismaClient, asset);
         await this.handleConsumableConfigs(prismaClient, asset);
         return asset;
       })
@@ -254,6 +256,29 @@ export class AssetsService {
         })
         .catch(as404OrThrow),
     );
+  }
+
+  async getMetadataKeys() {
+    const prisma = await this.prisma.forContext();
+
+    const conditionMetadataKeys = await prisma.$queryRaw<
+      Array<{ key: string }>
+    >`
+    SELECT DISTINCT split_part(jsonb_array_elements_text("value"), ':', 1) as key
+    FROM "AssetQuestionCondition"
+    WHERE "value" IS NOT NULL
+      AND "conditionType" = 'METADATA'
+    ORDER BY key
+  `.then((r) => r.map((r) => r.key));
+
+    const assetMetadataKeys = await prisma.$queryRaw<Array<{ key: string }>>`
+    SELECT DISTINCT jsonb_object_keys("metadata") as key
+    FROM "Asset"
+    WHERE "metadata" IS NOT NULL
+    ORDER BY key
+  `.then((r) => r.map((r) => r.key));
+
+    return [...new Set([...conditionMetadataKeys, ...assetMetadataKeys])];
   }
 
   async handleAlertTriggers(
@@ -315,6 +340,8 @@ export class AssetsService {
         .map(
           ({ alertCriteria: alertCriterion, result: message }) =>
             ({
+              createdOn: inspection.createdOn,
+              modifiedOn: inspection.modifiedOn,
               alertLevel: alertCriterion.alertLevel,
               message,
               resolved: alertCriterion.autoResolve,
@@ -346,6 +373,43 @@ export class AssetsService {
         this.notifications.queueInspectionAlertTriggeredEmail(result.id);
       }
     }
+  }
+
+  async handleUpdateMetadataFromSetupResponses(
+    prismaClient: Awaited<ReturnType<PrismaService['forUser']>>,
+    asset: Prisma.AssetGetPayload<{
+      include: {
+        metadata: true;
+        setupQuestionResponses: {
+          include: {
+            assetQuestion: {
+              include: {
+                setAssetMetadataConfig: true;
+              };
+            };
+          };
+        };
+      };
+    }>,
+  ) {
+    const mergedMetadata = {
+      ...(asset.metadata as Record<string, string>),
+      ...asset.setupQuestionResponses.reduce((acc, response) => {
+        if (response.assetQuestion.setAssetMetadataConfig) {
+          return {
+            ...acc,
+            ...(response.assetQuestion.setAssetMetadataConfig
+              .metadata as Record<string, string>),
+          };
+        }
+        return acc;
+      }, {}),
+    };
+
+    return await prismaClient.asset.update({
+      where: { id: asset.id },
+      data: { metadata: mergedMetadata },
+    });
   }
 
   async handleConsumableConfigs(

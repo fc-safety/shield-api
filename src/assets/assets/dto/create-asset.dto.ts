@@ -15,6 +15,7 @@ export const CreateAssetSchema = z.object({
     .min(MINIMUM_INSPECTION_CYCLE)
     .nullable()
     .optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
   product: z.object({
     connect: z.object({
       id: z.string(),

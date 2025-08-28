@@ -12,9 +12,11 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-condition.dto';
 import { CreateAssetQuestionDto } from './dto/create-asset-question.dto';
+import { CreateClientAssetQuestionCustomizationDto } from './dto/create-client-asset-question-customization.dto';
 import { QueryAssetQuestionDto } from './dto/query-asset-question.dto';
 import { UpdateAssetQuestionConditionDto } from './dto/update-asset-question-condition.dto';
 import { UpdateAssetQuestionDto } from './dto/update-asset-question.dto';
+import { UpdateClientAssetQuestionCustomizationDto } from './dto/update-client-asset-question-customization.dto';
 
 @Injectable()
 export class AssetQuestionsService {
@@ -55,11 +57,14 @@ export class AssetQuestionsService {
               conditions: true,
               assetAlertCriteria: true,
               consumableConfig: true,
+              clientAssetQuestionCustomizations: prisma.$viewContext === 'user',
+              files: true,
               _count: {
                 select: {
                   assetAlertCriteria: true,
                   conditions: true,
                   variants: true,
+                  files: true,
                 },
               },
             },
@@ -119,6 +124,44 @@ export class AssetQuestionsService {
       .forAdminOrUser()
       .then((prisma) => prisma.assetQuestion.delete({ where: { id } }))
       .catch(as404OrThrow);
+  }
+
+  // CLIENT CUSTOMIZATIONS
+
+  async findClientCustomizations() {
+    return this.prisma
+      .forUser()
+      .then((prisma) => prisma.clientAssetQuestionCustomization.findMany());
+  }
+
+  async addClientCustomization(
+    createClientAssetQuestionCustomizationDto: CreateClientAssetQuestionCustomizationDto,
+  ) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.clientAssetQuestionCustomization.create({
+        data: createClientAssetQuestionCustomizationDto,
+      }),
+    );
+  }
+
+  async updateClientCustomization(
+    id: string,
+    updateClientAssetQuestionCustomizationDto: UpdateClientAssetQuestionCustomizationDto,
+  ) {
+    return this.prisma.forUser().then((prisma) =>
+      prisma.clientAssetQuestionCustomization.update({
+        where: { id },
+        data: updateClientAssetQuestionCustomizationDto,
+      }),
+    );
+  }
+
+  async removeClientCustomization(id: string) {
+    return this.prisma
+      .forUser()
+      .then((prisma) =>
+        prisma.clientAssetQuestionCustomization.delete({ where: { id } }),
+      );
   }
 
   // VARIANTS
@@ -188,7 +231,8 @@ export class AssetQuestionsService {
   // ASSET-SPECIFIC QUESTIONS
 
   async findByAsset(assetId: string, type?: AssetQuestionType) {
-    const prisma = await this.prisma.forAdminOrUser();
+    const prisma = await this.prisma.forContext();
+    const isClientUserRequest = prisma.$viewContext === 'user';
 
     // Get the asset with all relevant data
     const asset = await prisma.asset
@@ -250,33 +294,101 @@ export class AssetQuestionsService {
       });
     }
 
+    const sqlParts: Prisma.Sql[] = [
+      Prisma.sql`
+        SELECT DISTINCT aq.id FROM "AssetQuestion" aq
+        LEFT JOIN "AssetQuestionCondition" condition ON condition."assetQuestionId" = aq."id"
+        LEFT JOIN "Client" client ON client."id" = aq."clientId"
+      `,
+    ];
+
+    const andWhereClauses: Prisma.Sql[] = [
+      Prisma.sql`aq."active" = true`,
+      Prisma.sql`aq."parentQuestionId" IS NULL`,
+    ];
+
+    if (isClientUserRequest) {
+      sqlParts.push(
+        Prisma.sql`
+              LEFT JOIN "ClientAssetQuestionCustomization" aqcustom ON aqcustom."assetQuestionId" = aq."id"
+            `,
+      );
+      andWhereClauses.push(
+        Prisma.sql`(aqcustom.id IS NULL OR aqcustom."enabled" = true)`,
+      );
+    }
+
+    const orWhereClauses: Prisma.Sql[] = [];
+
+    if (type !== undefined && type !== AssetQuestionType.SETUP_AND_INSPECTION) {
+      const types =
+        type === AssetQuestionType.SETUP
+          ? [AssetQuestionType.SETUP, AssetQuestionType.SETUP_AND_INSPECTION]
+          : [
+              AssetQuestionType.INSPECTION,
+              AssetQuestionType.SETUP_AND_INSPECTION,
+            ];
+      andWhereClauses.push(Prisma.sql`aq."type"::text = ANY(${types})`);
+    }
+
+    orWhereClauses.push(
+      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_CATEGORY} AND condition."value" @> to_jsonb(${asset.product.productCategoryId}))`,
+    );
+    orWhereClauses.push(
+      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT} AND condition."value" @> to_jsonb(${asset.productId}))`,
+    );
+    orWhereClauses.push(
+      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.MANUFACTURER} AND condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
+    );
+
+    if (asset.product.productSubcategoryId) {
+      orWhereClauses.push(
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_SUBCATEGORY} AND condition."value" @> to_jsonb(${asset.product.productSubcategoryId}))`,
+      );
+    }
+
+    if (asset.site.address.state) {
+      orWhereClauses.push(
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.REGION} AND condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}))`,
+      );
+    }
+
+    if (asset.metadata) {
+      const keyPairs = Object.entries(asset.metadata).map(
+        ([k, v]) => `${k}:${v}`,
+      );
+      if (keyPairs.length > 0) {
+        // orFilters.push({
+        //   conditionType: AssetQuestionConditionType.METADATA,
+        //   value: { array_contains: keyPairs },
+        // });
+        orWhereClauses.push(
+          Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.METADATA} AND condition."value" <@ to_jsonb(${keyPairs}))`,
+        );
+      }
+    }
+
+    // Join OR clauses and add to AND clauses
+    if (orWhereClauses.length > 0) {
+      andWhereClauses.push(
+        Prisma.sql`(${Prisma.join(orWhereClauses, ' OR ')})`,
+      );
+    }
+
+    sqlParts.push(Prisma.sql`WHERE (${Prisma.join(andWhereClauses, ' AND ')})`);
+
+    const sql = Prisma.join(sqlParts, ' ');
+
+    const matchingIds = await prisma.$queryRaw<{ id: string }[]>(sql);
+
     const questions = await prisma.assetQuestion.findMany({
       where: {
-        active: true,
-        parentQuestionId: null,
-        type:
-          type === undefined || type === AssetQuestionType.SETUP_AND_INSPECTION
-            ? undefined
-            : type === AssetQuestionType.SETUP
-              ? {
-                  in: [
-                    AssetQuestionType.SETUP,
-                    AssetQuestionType.SETUP_AND_INSPECTION,
-                  ],
-                }
-              : {
-                  in: [
-                    AssetQuestionType.INSPECTION,
-                    AssetQuestionType.SETUP_AND_INSPECTION,
-                  ],
-                },
-        conditions: {
-          every: {
-            OR: orFilters,
-          },
+        id: {
+          in: matchingIds.map((m) => m.id),
         },
       },
       include: {
+        files: true,
         variants: {
           include: {
             conditions: true,

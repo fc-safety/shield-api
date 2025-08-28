@@ -1,16 +1,21 @@
-import { Column, Heading, Row } from '@react-email/components';
+import { Column, Heading, Link, Row } from '@react-email/components';
 import React from 'react';
 import { Block } from './components/block';
+import { FAIcon } from './components/fa-icon';
 import { Layout } from './components/layout';
 import { Paragraph } from './components/paragraph';
+import { getAssetsUrl } from './utils/urls';
 
 interface MonthlyInspectionReportProps {
   recipientFirstName: string;
   singleSite?: boolean;
   clientName: string;
+  frontendUrl: string;
   reportRowsBySite: {
     siteName: string;
+    siteId: string;
     reportRows: {
+      categoryId: string;
       categoryName: string;
       // TODO: Icons aren't very easy to use in emails. Normal CDNs don't work.
       categoryIcon?: string | null;
@@ -25,51 +30,68 @@ interface MonthlyInspectionReportProps {
 const MONTHLY_INSPECTION_REPORT_PREVIEW_PROPS: MonthlyInspectionReportProps = {
   recipientFirstName: 'John',
   clientName: 'Safety Solutions',
+  frontendUrl: 'http://localhost:5173',
   reportRowsBySite: [
     {
-      siteName: 'Site 1',
+      siteName: 'Research Laboratory Building',
+      siteId: '123',
       reportRows: [
         {
-          categoryName: 'Fire Extinguishers',
+          categoryId: '1',
+          categoryName: 'Fire Extinguisher',
           categoryIcon: 'fa-fire-extinguisher',
-          categoryColor: 'rgb(253, 11, 55)',
+          categoryColor: 'rgb(239, 68, 68)',
           assetCount: 10,
           pctCompliant: 0.9,
           unresolvedAlertsCount: 1,
         },
         {
+          categoryId: '2',
           categoryName: 'AED',
           categoryIcon: 'fa-heart-pulse',
-          categoryColor: 'rgb(235, 0, 102)',
+          categoryColor: 'rgb(236, 72, 153)',
           assetCount: 15,
           pctCompliant: 0.4,
           unresolvedAlertsCount: 0,
         },
         {
-          categoryName: 'Eye Wash Station',
+          categoryId: '3',
+          categoryName: 'Eye wash station',
           categoryIcon: 'fa-eye',
-          categoryColor: 'rgb(12, 217, 170)',
+          categoryColor: 'rgb(6, 182, 212)',
           assetCount: 2,
           pctCompliant: 0.5,
           unresolvedAlertsCount: 0,
         },
+        {
+          categoryId: '4',
+          categoryName: 'First aid cabinet',
+          categoryIcon: 'fa-suitcase-medical',
+          categoryColor: 'rgb(34, 197, 94)',
+          assetCount: 5,
+          pctCompliant: 0.8,
+          unresolvedAlertsCount: 1,
+        },
       ],
     },
     {
-      siteName: 'Site 2',
+      siteName: 'Photonics Data Center',
+      siteId: '456',
       reportRows: [
         {
-          categoryName: 'Fire Extinguishers',
+          categoryId: '1',
+          categoryName: 'Fire Extinguisher',
           categoryIcon: 'fa-fire-extinguisher',
-          categoryColor: 'rgb(253, 11, 55)',
+          categoryColor: 'rgb(239, 68, 68)',
           assetCount: 10,
           pctCompliant: 0.8,
           unresolvedAlertsCount: 0,
         },
         {
+          categoryId: '2',
           categoryName: 'AED',
           categoryIcon: 'fa-heart-pulse',
-          categoryColor: 'rgb(235, 0, 102)',
+          categoryColor: 'rgb(236, 72, 153)',
           assetCount: 15,
           pctCompliant: 1,
           unresolvedAlertsCount: 3,
@@ -90,13 +112,13 @@ function MonthlyInspectionReportTemplateText({
 
   Hi ${recipientFirstName},
 
-  Please review the following report of site copmliance grouped by asset
+  Please review the following report of site compliance grouped by${singleSite ? '' : ' site and'} asset
   category.
 
   ${reportRowsBySite
     .map(
       (site) =>
-        `${singleSite ? '' : `* ${site.siteName}`}
+        `${singleSite ? '' : `* Site: ${site.siteName}`}
         Category | # Assets | % Compliant | # Unresolved Alerts
         ${site.reportRows
           .map(
@@ -118,6 +140,7 @@ export default function MonthlyInspectionReportTemplateReact({
   clientName,
   reportRowsBySite,
   singleSite,
+  frontendUrl,
 }: MonthlyInspectionReportProps): React.ReactElement {
   return (
     <Layout>
@@ -127,15 +150,24 @@ export default function MonthlyInspectionReportTemplateReact({
         </Heading>
         <Paragraph>Hi {recipientFirstName},</Paragraph>
         <Paragraph>
-          Please review the following report of site copmliance grouped by asset
-          category.
+          Please review the following report of site compliance grouped by
+          {singleSite ? '' : ' site and'} asset category.
         </Paragraph>
       </Block>
       {reportRowsBySite.map((site) => (
         <Block key={site.siteName}>
           {!singleSite && (
             <Paragraph className="text-sm font-semibold p-0 m-0 pb-2">
-              {site.siteName}
+              Site:{' '}
+              <Link
+                href={getAssetsUrl(frontendUrl, {
+                  query: {
+                    siteId: site.siteId,
+                  },
+                })}
+              >
+                {site.siteName}
+              </Link>
             </Paragraph>
           )}
           <Row className="text-sm font-semibold">
@@ -159,12 +191,22 @@ export default function MonthlyInspectionReportTemplateReact({
               <Row key={row.categoryName} className="text-sm">
                 <Column align="left" className="h-10 w-1/4 bg-gray-50 px-2">
                   {row.categoryColor && (
-                    <div
-                      className="size-3 rounded-sm inline-block mr-1"
-                      style={{ backgroundColor: row.categoryColor }}
+                    <FAIcon
+                      name={row.categoryIcon ?? undefined}
+                      color={row.categoryColor}
+                      className="mr-1"
                     />
                   )}
-                  {row.categoryName}
+                  <Link
+                    href={getAssetsUrl(frontendUrl, {
+                      query: {
+                        siteId: site.siteId,
+                        productCategoryId: row.categoryId,
+                      },
+                    })}
+                  >
+                    {row.categoryName}
+                  </Link>
                 </Column>
                 <Column align="left" className="h-10 w-1/4 bg-gray-50 px-2">
                   {row.assetCount}
@@ -195,6 +237,6 @@ MonthlyInspectionReportTemplateReact.PreviewProps = {
   ...MONTHLY_INSPECTION_REPORT_PREVIEW_PROPS,
 };
 
-MonthlyInspectionReportTemplateReact.Subject = 'Monthly Inspection Report';
+MonthlyInspectionReportTemplateReact.Subject = 'Monthly Compliance Report';
 
 MonthlyInspectionReportTemplateReact.Text = MonthlyInspectionReportTemplateText;
