@@ -8,7 +8,7 @@ import { CustomQueryFilter } from 'src/auth/keycloak/types';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow, isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { Prisma } from 'src/generated/prisma/client';
+import { Prisma, PrismaClient } from 'src/generated/prisma/client';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
@@ -297,16 +297,16 @@ export class UsersService {
     }
 
     let thisClientId = clientId;
-    let prisma: ReturnType<typeof this.prisma.extended>;
+    let prisma: PrismaClient;
 
     if (!thisClientId) {
       const prismaForUser = await this.prisma.forUser();
       thisClientId = prismaForUser.$currentUser().clientId;
-      prisma = prismaForUser;
+      prisma = prismaForUser as unknown as PrismaClient;
     } else if (bypassRLS) {
-      prisma = this.prisma.bypassRLS();
+      prisma = this.prisma.bypassRLS() as unknown as PrismaClient;
     } else {
-      prisma = await this.prisma.forContext();
+      prisma = (await this.prisma.forContext()) as unknown as PrismaClient;
     }
 
     return prisma.client

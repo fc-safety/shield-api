@@ -12,7 +12,7 @@ export class SitesService {
 
   async create(createSiteDto: CreateSiteDto) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) => prisma.site.create({ data: createSiteDto }));
   }
 
@@ -64,7 +64,7 @@ export class SitesService {
   }
 
   async update(id: string, updateSiteDto: UpdateSiteDto) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.site
         .update({
           where: { id },
@@ -76,7 +76,7 @@ export class SitesService {
 
   async remove(id: string) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) => prisma.site.delete({ where: { id } }));
   }
 }

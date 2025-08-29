@@ -26,7 +26,7 @@ export class AssetQuestionsService {
   ) {}
 
   async create(createAssetQuestionDto: CreateAssetQuestionDto) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.assetQuestion.create({
         data: createAssetQuestionDto,
         include: {
@@ -100,7 +100,7 @@ export class AssetQuestionsService {
   }
 
   async update(id: string, updateAssetQuestionDto: UpdateAssetQuestionDto) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.assetQuestion
         .update({
           where: { id },
@@ -121,7 +121,7 @@ export class AssetQuestionsService {
 
   async remove(id: string) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) => prisma.assetQuestion.delete({ where: { id } }))
       .catch(as404OrThrow);
   }
@@ -170,7 +170,7 @@ export class AssetQuestionsService {
     parentId: string,
     createAssetQuestionDto: CreateAssetQuestionDto,
   ) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.assetQuestion.create({
         data: {
           ...createAssetQuestionDto,
@@ -193,7 +193,7 @@ export class AssetQuestionsService {
     questionId: string,
     createAssetQuestionConditionDto: CreateAssetQuestionConditionDto,
   ) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.assetQuestionCondition
         .create({
           data: {
@@ -209,7 +209,7 @@ export class AssetQuestionsService {
     conditionId: string,
     updateAssetQuestionConditionDto: UpdateAssetQuestionConditionDto,
   ) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.assetQuestionCondition
         .update({
           where: { id: conditionId },
@@ -221,7 +221,7 @@ export class AssetQuestionsService {
 
   async removeCondition(conditionId: string) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) =>
         prisma.assetQuestionCondition.delete({ where: { id: conditionId } }),
       )
@@ -428,7 +428,7 @@ export class AssetQuestionsService {
   }
 
   async migrateQuestionsToConditions() {
-    return this.prisma.txBypassRLS(async (tx) => {
+    return this.prisma.bypassRLS().$transaction(async (tx) => {
       // Get all AssetQuestions with productCategoryId
       const questionsWithCategory = await tx.assetQuestion.findMany({
         where: {
