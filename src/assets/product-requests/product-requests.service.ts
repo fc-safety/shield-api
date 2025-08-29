@@ -120,7 +120,7 @@ export class ProductRequestsService {
   }
 
   async updateStatuses(data: UpdateProductRequestStatusDto) {
-    return this.prisma.forAdminOrUser().then((client) =>
+    return this.prisma.forContext().then((client) =>
       client.productRequest.updateMany({
         where: {
           id: {
@@ -139,7 +139,7 @@ export class ProductRequestsService {
   }
 
   async cancel(id: string) {
-    return this.prisma.forAdminOrUser().then((client) =>
+    return this.prisma.forContext().then((client) =>
       client.productRequest.update({
         where: {
           id,

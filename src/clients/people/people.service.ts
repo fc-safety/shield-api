@@ -62,7 +62,7 @@ export class PeopleService {
 
     const cacheKey = `person:idpId:${user.idpId}`;
     const createOrUpdatePerson = async () => {
-      const prisma = this.getPrisma().bypassRLS({ skipPersonLog: true });
+      const prisma = this.getPrisma().bypassRLS();
 
       const existingPerson = await prisma.person.findUnique({
         where: { idpId: user.idpId },
@@ -121,7 +121,7 @@ export class PeopleService {
       `clientId:externalId:${user.clientId}`,
       () =>
         this.getPrisma()
-          .bypassRLS({ skipPersonLog: true })
+          .bypassRLS()
           .client.findUniqueOrThrow({
             where: { externalId: user.clientId },
           })
@@ -149,7 +149,7 @@ export class PeopleService {
       `siteId:externalId:${user.siteId}`,
       () =>
         this.getPrisma()
-          .bypassRLS({ skipPersonLog: true })
+          .bypassRLS()
           .site.findUniqueOrThrow({
             where: { externalId: user.siteId },
           })
@@ -177,7 +177,7 @@ export class PeopleService {
       `allowedSiteIds:externalId:${user.siteId}`,
       () =>
         this.getPrisma()
-          .bypassRLS({ skipPersonLog: true })
+          .bypassRLS()
           .site.findUnique({
             where: { externalId: user.siteId },
             // For simplicity, only including 2 levels deep (3 total).

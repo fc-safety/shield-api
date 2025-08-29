@@ -204,7 +204,7 @@ export class AssetsService {
   }
 
   async update(id: string, updateAssetDto: UpdateAssetDto) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.asset
         .update({
           where: { id },
@@ -299,7 +299,11 @@ export class AssetsService {
       tx,
       skipNotifications = false,
     }: {
-      tx?: Parameters<Parameters<PrismaService['txBypassRLS']>[0]>[0];
+      tx?: Parameters<
+        Parameters<
+          Awaited<ReturnType<PrismaService['build']>>['$transaction']
+        >[0]
+      >[0];
       skipNotifications?: boolean;
     } = {},
   ) {
@@ -360,7 +364,7 @@ export class AssetsService {
     );
 
     const results = await (
-      tx ?? this.prisma.bypassRLS()
+      tx ?? (this.prisma.bypassRLS() as NonNullable<typeof tx>)
     ).alert.createManyAndReturn({
       data: createInputs,
       select: {

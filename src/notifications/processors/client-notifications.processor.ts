@@ -22,7 +22,7 @@ import { UsersService } from 'src/clients/users/users.service';
 import { groupBy } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma } from 'src/generated/prisma/client';
-import { extensions, PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import {
   CLIENT_NOTIFICATIONS_JOB_NAMES,
   NOTIFICATIONS_JOB_NAMES,
@@ -134,11 +134,9 @@ export class ClientNotificationsProcessor
   private async processClientInspectionReminders(
     job: Job<ClientNotificationJobData>,
   ): Promise<any> {
-    const client = await this.prisma
-      .bypassRLS({ skipPersonLog: true })
-      .client.findUniqueOrThrow({
-        where: { id: job.data.clientId },
-      });
+    const client = await this.prisma.bypassRLS().client.findUniqueOrThrow({
+      where: { id: job.data.clientId },
+    });
 
     if (client.demoMode) {
       this.logger.debug(
@@ -184,16 +182,14 @@ export class ClientNotificationsProcessor
     > = new Map(INSPECTION_REMINDER_NOTIFICATION_GROUPS.map((g) => [g.id, []]));
 
     // Get all assets for the client with their latest inspection.
-    const assets = await this.prisma
-      .bypassRLS({ skipPersonLog: true })
-      .asset.findMany({
-        where: { clientId: job.data.clientId },
-        include: {
-          site: true,
-          inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
-          product: { include: { productCategory: true } },
-        },
-      });
+    const assets = await this.prisma.bypassRLS().asset.findMany({
+      where: { clientId: job.data.clientId },
+      include: {
+        site: true,
+        inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
+        product: { include: { productCategory: true } },
+      },
+    });
 
     // Group assets into buckets if they meet any of the notification group thresholds.
     for (const asset of assets) {
@@ -300,11 +296,9 @@ export class ClientNotificationsProcessor
       `--> Processing client monthly inspection reports for client ${job.data.clientId}...`,
     );
 
-    const client = await this.prisma
-      .bypassRLS({ skipPersonLog: true })
-      .client.findUniqueOrThrow({
-        where: { id: job.data.clientId },
-      });
+    const client = await this.prisma.bypassRLS().client.findUniqueOrThrow({
+      where: { id: job.data.clientId },
+    });
 
     if (client.demoMode) {
       this.logger.debug(
@@ -347,25 +341,23 @@ export class ClientNotificationsProcessor
       monthlyComplianceReportUsers.length > 0
     ) {
       // Get all assets for the client with their latest inspection.
-      const assets = await this.prisma
-        .bypassRLS({ skipPersonLog: true })
-        .asset.findMany({
-          where: { clientId: job.data.clientId },
-          include: {
-            site: true,
-            inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
-            product: { include: { productCategory: true } },
-            _count: {
-              select: {
-                alerts: {
-                  where: {
-                    resolved: false,
-                  },
+      const assets = await this.prisma.bypassRLS().asset.findMany({
+        where: { clientId: job.data.clientId },
+        include: {
+          site: true,
+          inspections: { orderBy: { createdOn: 'desc' }, take: 1 },
+          product: { include: { productCategory: true } },
+          _count: {
+            select: {
+              alerts: {
+                where: {
+                  resolved: false,
                 },
               },
             },
           },
-        });
+        },
+      });
 
       // For each user, determine visible assets and then build and send the report.
       for (const user of monthlyComplianceReportUsers) {
@@ -461,7 +453,7 @@ export class ClientNotificationsProcessor
       monthlyConsumableReportUsers.length > 0
     ) {
       const consumables = await this.prisma
-        .bypassRLS({ skipPersonLog: true })
+        .bypassRLS()
         .consumable.findMany({
           where: {
             clientId: job.data.clientId,
@@ -565,29 +557,27 @@ export class ClientNotificationsProcessor
   ) {
     const { alertId } = job.data;
 
-    const alert = await this.prisma
-      .bypassRLS({ skipPersonLog: true })
-      .alert.findUniqueOrThrow({
-        where: { id: alertId },
-        include: {
-          site: true,
-          asset: {
-            include: {
-              product: {
-                include: {
-                  productCategory: true,
-                },
+    const alert = await this.prisma.bypassRLS().alert.findUniqueOrThrow({
+      where: { id: alertId },
+      include: {
+        site: true,
+        asset: {
+          include: {
+            product: {
+              include: {
+                productCategory: true,
               },
             },
           },
-          assetQuestionResponse: {
-            include: {
-              assetQuestion: true,
-              responder: true,
-            },
+        },
+        assetQuestionResponse: {
+          include: {
+            assetQuestion: true,
+            responder: true,
           },
         },
-      });
+      },
+    });
 
     // Map of role name to role.
     const roleMap = await this.getRoleMap();
@@ -668,12 +658,10 @@ export class ClientNotificationsProcessor
    * @returns A mapping of asset visibility to a list of sites and asset IDs.
    */
   private async getAssetVisibilityMappings(clientId: string) {
-    const sites = await this.prisma
-      .bypassRLS({ skipPersonLog: true })
-      .site.findMany({
-        select: { id: true, externalId: true, name: true },
-        where: { clientId },
-      });
+    const sites = await this.prisma.bypassRLS().site.findMany({
+      select: { id: true, externalId: true, name: true },
+      where: { clientId },
+    });
 
     const assetVisibilityMappings: Record<
       Exclude<TVisibility, 'global' | 'super-admin'>,
@@ -697,18 +685,18 @@ export class ClientNotificationsProcessor
       }
 
       for (const site of sites) {
-        const assetIds = await this.prisma
-          .$extends(
-            extensions.forUser({
-              id: '1',
-              idpId: '1',
-              siteId: site.id,
-              allowedSiteIds: site.id, // This accepts a comma-delimited list of site IDs.
-              clientId: clientId,
-              visibility,
-            }),
-          )
-          .asset.findMany({
+        const usersPrismaClient = await this.prisma.build({
+          person: {
+            id: '1',
+            idpId: '1',
+            siteId: site.id,
+            allowedSiteIds: site.id, // This accepts a comma-delimited list of site IDs.
+            clientId: clientId,
+            visibility,
+          },
+        });
+        const assetIds = await usersPrismaClient.asset
+          .findMany({
             select: {
               id: true,
             },

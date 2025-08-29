@@ -77,29 +77,28 @@ export class ClientsService {
   }
 
   async create(createClientDto: CreateClientDto) {
-    return this.prisma.txForAdminOrUser((tx) =>
-      tx.client.create({ data: createClientDto }),
-    );
+    return this.prisma
+      .build()
+      .then((prisma) => prisma.client.create({ data: createClientDto }));
   }
 
   async findAll(queryClientDto: QueryClientDto) {
-    return this.prisma.txForContext((tx) =>
-      tx.client.findManyForPage(
-        buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
-          include: {
-            address: true,
-            _count: {
-              select: { sites: true },
-            },
+    const prisma = await this.prisma.build();
+    return prisma.client.findManyForPage(
+      buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
+        include: {
+          address: true,
+          _count: {
+            select: { sites: true },
           },
-        }),
-      ),
+        },
+      }),
     );
   }
 
   async findOne(id: string) {
-    return this.prisma.txForContext((tx) =>
-      tx.client
+    return this.prisma.build().then((prisma) =>
+      prisma.client
         .findUniqueOrThrow({
           where: { id },
           include: {
@@ -117,7 +116,8 @@ export class ClientsService {
   }
 
   async update(id: string, updateClientDto: UpdateClientDto) {
-    return this.prisma.txForAdminOrUser((tx) =>
+    const prisma = await this.prisma.build();
+    return prisma.$transaction(async (tx) =>
       tx.client
         .update({
           where: { id },
@@ -128,7 +128,8 @@ export class ClientsService {
   }
 
   async remove(id: string) {
-    return this.prisma.txForAdminOrUser(async (tx) => {
+    const prisma = await this.prisma.build();
+    return prisma.$transaction(async (tx) => {
       const client = await tx.client.findUniqueOrThrow({
         where: { id },
         include: { sites: true },
@@ -153,7 +154,8 @@ export class ClientsService {
   }
 
   async duplicateDemo(id: string, options: DuplicateDemoClientDto) {
-    return this.prisma.txForAdminOrUser(async (tx) => {
+    const prisma = await this.prisma.build();
+    return prisma.$transaction(async (tx) => {
       const existingClient = await tx.client
         .findUniqueOrThrow({
           where: { id },
@@ -391,7 +393,9 @@ export class ClientsService {
       uniqueWhere = { externalId: user.clientId };
     }
 
-    return this.prisma.txForAdminOrUser(async (tx) => {
+    const prisma = await this.prisma.build();
+
+    return prisma.$transaction(async (tx) => {
       const client = await tx.client
         .findUniqueOrThrow({
           where: {
@@ -435,7 +439,9 @@ export class ClientsService {
       uniqueWhere = { externalId: user.clientId };
     }
 
-    return this.prisma.txForAdminOrUser(
+    const prisma = await this.prisma.build();
+
+    return prisma.$transaction(
       async (tx) => {
         const client = await tx.client
           .findUniqueOrThrow({

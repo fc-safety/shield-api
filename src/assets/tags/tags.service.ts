@@ -35,7 +35,7 @@ export class TagsService {
 
   async create(createTagDto: CreateTagDto) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) => prisma.tag.create({ data: createTagDto }));
   }
 
@@ -194,7 +194,7 @@ export class TagsService {
 
     // If acting as a global admin, simply upsert registration data.
     if (actingAsGlobalAdmin && newClient !== undefined) {
-      const prisma = this.prisma.bypassRLS();
+      const prisma = await this.prisma.build({ context: 'admin' });
       return prisma.tag.upsert({
         where: { externalId: tagExternalId },
         update: {
@@ -261,7 +261,7 @@ export class TagsService {
   }
 
   async update(id: string, updateTagDto: UpdateTagDto) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.tag
         .update({
           where: { id },
@@ -273,7 +273,7 @@ export class TagsService {
 
   async remove(id: string) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) => prisma.tag.delete({ where: { id } }));
   }
 

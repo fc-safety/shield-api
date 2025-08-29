@@ -91,7 +91,7 @@ export class ProductsService {
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.product
         .update({
           where: { id },
@@ -103,14 +103,14 @@ export class ProductsService {
 
   async remove(id: string) {
     return this.prisma
-      .forAdminOrUser()
+      .forContext()
       .then((prisma) => prisma.product.delete({ where: { id } }));
   }
 
   // QUESTIONS
 
   async addQuestion(id: string, input: CreateAssetQuestionDto) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.assetQuestion
         .create({
           data: { ...input, product: { connect: { id } } },
@@ -124,7 +124,7 @@ export class ProductsService {
     questionId: string,
     input: UpdateAssetQuestionDto,
   ) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.assetQuestion
         .update({
           where: { id: questionId },
@@ -135,7 +135,7 @@ export class ProductsService {
   }
 
   async deleteQuestion(questionId: string) {
-    return this.prisma.forAdminOrUser().then((prisma) =>
+    return this.prisma.forContext().then((prisma) =>
       prisma.assetQuestion
         .delete({
           where: { id: questionId },
