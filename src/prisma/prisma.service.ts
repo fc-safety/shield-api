@@ -40,6 +40,10 @@ const DEFAULT_PRISMA_OPTIONS = {
   ],
 } satisfies ConstructorParameters<typeof PrismaClient>[0];
 
+export type PrismaTxClient = Parameters<
+  Parameters<Awaited<ReturnType<PrismaService['build']>>['$transaction']>[0]
+>[0];
+
 @Injectable()
 export class PrismaService
   extends PrismaClient<typeof DEFAULT_PRISMA_OPTIONS>
@@ -331,16 +335,31 @@ export class PrismaService
 
       return extendedPrisma.$extends({
         client: {
-          $transaction: async (
-            ...args: Parameters<typeof extendedPrisma.$transaction>
-          ) => {
-            const [fn, ...rest] = args;
-            return await extendedPrisma.$transaction(
+          /**
+           * Wraps $transaction to ensure RLS context is set up before executing the transaction.
+           * The return type is correctly inferred from the return type of the provided function.
+           * @param fn - The transactional function to execute.
+           * @param rest - Additional arguments for $transaction.
+           */
+          $transaction: <T>(
+            fn: (
+              tx: Parameters<
+                Parameters<typeof extendedPrisma.$transaction>[0]
+              >[0],
+            ) => Promise<T> | T,
+            ...rest: Parameters<typeof extendedPrisma.$transaction> extends [
+              any,
+              ...infer R,
+            ]
+              ? R
+              : never
+          ): Promise<T> => {
+            return extendedPrisma.$transaction(
               async (tx) => {
                 await Promise.all(
                   buildRLSContextStatements(tx, shouldBypassRLS, person),
                 );
-                return await fn(tx);
+                return fn(tx);
               },
               ...rest,
             );

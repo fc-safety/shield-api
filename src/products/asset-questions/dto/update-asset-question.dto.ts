@@ -1,4 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
+import { CreateRegulatoryCodeSchema } from 'src/common/schema';
 import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 import { CreateAssetQuestionConditionSchema } from './create-asset-question-condition.dto';
@@ -7,6 +8,7 @@ import {
   CreateAssetAlertCriterionSchema,
   CreateAssetQuestionSchema,
   CreateConsumableConfigSchema,
+  CreateSetAssetMetadataConfigSchema,
 } from './create-asset-question.dto';
 
 const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
@@ -59,22 +61,18 @@ const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
   }),
   setAssetMetadataConfig: z
     .object({
-      create: z.object({
-        metadata: z.record(z.string(), z.string()),
-      }),
-      update: z.object({
-        metadata: z.record(z.string(), z.string()),
-      }),
+      create: CreateSetAssetMetadataConfigSchema,
+      update: CreateSetAssetMetadataConfigSchema,
       delete: z.boolean().default(false),
     })
-    .optional(),
+    .partial(),
   files: z
     .object({
       createMany: z.object({
         data: z.array(
           z.object({
             name: z.string(),
-            url: z.string(),
+            url: z.string().url(),
           }),
         ),
       }),
@@ -83,14 +81,25 @@ const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
           where: z.object({ id: z.string() }),
           data: z.object({
             name: z.string(),
-            url: z.string(),
+            url: z.string().url(),
           }),
         }),
       ),
       deleteMany: z.array(z.object({ id: z.string() })),
     })
-    .partial()
-    .optional(),
+    .partial(),
+  regulatoryCodes: z
+    .object({
+      create: z.array(CreateRegulatoryCodeSchema),
+      update: z.array(
+        z.object({
+          where: z.object({ id: z.string() }),
+          data: CreateRegulatoryCodeSchema.partial(),
+        }),
+      ),
+      delete: z.array(z.object({ id: z.string() })),
+    })
+    .partial(),
 }).partial() satisfies z.Schema<Prisma.AssetQuestionUpdateInput>;
 
 export class UpdateAssetQuestionDto extends createZodDto(

@@ -44,7 +44,11 @@ export class TagsService {
       prisma.tag.findManyForPage(
         buildPrismaFindArgs<typeof prisma.tag>(queryTagDto, {
           include: {
-            asset: true,
+            asset: {
+              include: {
+                product: true,
+              },
+            },
             client: true,
             site: true,
           },

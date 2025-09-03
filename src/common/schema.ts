@@ -29,3 +29,20 @@ export const orderAddressSchema = z
     zip: PrismaOrderEmum,
   })
   .partial() satisfies z.Schema<Prisma.AddressOrderByWithRelationInput>;
+
+export const CreateRegulatoryCodeSchema = z.object({
+  active: z.boolean().default(true),
+  codeIdentifier: z.string(),
+  title: z.string(),
+  section: z.string().optional(),
+  governingBody: z.string(),
+  jurisdiction: z.string().optional(),
+  description: z.string().optional(),
+  requirements: z.string().optional(),
+  sourceUrl: z.string().url().optional(),
+  documentVersion: z.string().optional(),
+  effectiveDate: z.string().datetime().optional(),
+  supersededDate: z.string().datetime().optional(),
+  inspectionFrequency: z.string().optional(),
+  complianceNotes: z.string().optional(),
+}) satisfies z.Schema<Prisma.RegulatoryCodeCreateInput>;

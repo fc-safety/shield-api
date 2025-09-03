@@ -1,4 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
+import { CreateRegulatoryCodeSchema } from 'src/common/schema';
 import {
   AlertLevel,
   AssetQuestionResponseType,
@@ -71,6 +72,24 @@ export const CreateConsumableConfigSchema = z.object({
   ),
 }) satisfies z.Schema<Prisma.ConsumableQuestionConfigCreateInput>;
 
+export const CreateSetAssetMetadataConfigSchema = z.object({
+  metadata: z.array(
+    z
+      .object({
+        key: z.string().nonempty(),
+        type: z.enum(['DYNAMIC', 'STATIC']),
+        value: z.string().optional(),
+      })
+      .refine(
+        (data) =>
+          data.type === 'STATIC' ? !!data.value && data.value !== '' : true,
+        {
+          message: 'Value is required for setting static metadata',
+        },
+      ),
+  ),
+}) satisfies z.Schema<Prisma.SetAssetMetadataConfigCreateInput>;
+
 export const BaseCreateAssetQuestionSchema = z.object({
   legacyQuestionId: z.string().optional().nullable(),
   active: z.boolean().default(true),
@@ -89,6 +108,15 @@ export const BaseCreateAssetQuestionSchema = z.object({
       ...AssetQuestionResponseType[],
     ],
   ),
+  selectOptions: z
+    .array(
+      z.object({
+        value: z.string(),
+        order: z.number().optional(),
+        label: z.string().optional(),
+      }),
+    )
+    .optional(),
   tone: z.string().optional(),
   parentQuestion: z
     .object({
@@ -120,9 +148,7 @@ export const BaseCreateAssetQuestionSchema = z.object({
     .optional(),
   setAssetMetadataConfig: z
     .object({
-      create: z.object({
-        metadata: z.record(z.string(), z.string()),
-      }),
+      create: CreateSetAssetMetadataConfigSchema,
     })
     .optional(),
   files: z
@@ -131,10 +157,16 @@ export const BaseCreateAssetQuestionSchema = z.object({
         data: z.array(
           z.object({
             name: z.string(),
-            url: z.string(),
+            url: z.string().url(),
           }),
         ),
       }),
+    })
+    .partial()
+    .optional(),
+  regulatoryCodes: z
+    .object({
+      create: z.array(CreateRegulatoryCodeSchema),
     })
     .partial()
     .optional(),
