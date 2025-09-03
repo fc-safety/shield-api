@@ -18,7 +18,7 @@ import TeamInspectionReminderTemplateReact, {
   TeamInspectionReminderTemplateProps,
   TeamInspectionReminderTemplateSms,
 } from 'src/notifications/templates/team-inspection-reminder';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
 import {
   CreateAssetAlertCriterionRuleSchema,
   CreateSetAssetMetadataConfigSchema,
@@ -222,36 +222,38 @@ export class AssetsService {
   async setup(id: string, setupAssetDto: SetupAssetDto) {
     const prismaClient = await this.prisma.forUser();
 
-    const updatedAsset = await prismaClient.asset
-      .update({
-        where: { id, setupOn: null },
-        data: {
-          ...setupAssetDto,
-          setupOn: new Date(),
-        },
-        include: {
-          setupQuestionResponses: {
+    const updatedAsset = await prismaClient
+      .$transaction((tx) =>
+        tx.asset
+          .update({
+            where: { id, setupOn: null },
+            data: {
+              ...setupAssetDto,
+              setupOn: new Date(),
+            },
             include: {
-              assetQuestion: {
+              setupQuestionResponses: {
                 include: {
-                  consumableConfig: true,
-                  setAssetMetadataConfig: true,
+                  assetQuestion: {
+                    include: {
+                      consumableConfig: true,
+                      setAssetMetadataConfig: true,
+                    },
+                  },
                 },
               },
             },
-          },
-        },
-      })
-      .then(async (asset) => {
-        await this.handleUpdateMetadataFromSetupResponses(prismaClient, asset);
-        await this.handleConsumableConfigs(prismaClient, asset);
-        await this.handleSetMetdataFromConfigs(
-          prismaClient,
-          asset,
-          asset.setupQuestionResponses,
-        );
-        return asset;
-      })
+          })
+          .then(async (asset) => {
+            await this.handleConsumableConfigs(tx, asset);
+            await this.handleSetMetadataFromConfigs(
+              tx,
+              asset,
+              asset.setupQuestionResponses,
+            );
+            return asset;
+          }),
+      )
       .catch(as404OrThrow);
 
     return updatedAsset;
@@ -315,6 +317,7 @@ export class AssetsService {
   }
 
   async handleAlertTriggers(
+    tx: PrismaTxClient,
     inspection: Prisma.InspectionGetPayload<{
       include: {
         responses: {
@@ -329,14 +332,8 @@ export class AssetsService {
       };
     }>,
     {
-      tx,
       skipNotifications = false,
     }: {
-      tx?: Parameters<
-        Parameters<
-          Awaited<ReturnType<PrismaService['build']>>['$transaction']
-        >[0]
-      >[0];
       skipNotifications?: boolean;
     } = {},
   ) {
@@ -396,9 +393,7 @@ export class AssetsService {
         ),
     );
 
-    const results = await (
-      tx ?? (this.prisma.bypassRLS() as NonNullable<typeof tx>)
-    ).alert.createManyAndReturn({
+    const results = await tx.alert.createManyAndReturn({
       data: createInputs,
       select: {
         id: true,
@@ -412,45 +407,8 @@ export class AssetsService {
     }
   }
 
-  async handleUpdateMetadataFromSetupResponses(
-    prismaClient: Awaited<ReturnType<PrismaService['forUser']>>,
-    asset: Prisma.AssetGetPayload<{
-      include: {
-        metadata: true;
-        setupQuestionResponses: {
-          include: {
-            assetQuestion: {
-              include: {
-                setAssetMetadataConfig: true;
-              };
-            };
-          };
-        };
-      };
-    }>,
-  ) {
-    const mergedMetadata = {
-      ...(asset.metadata as Record<string, string>),
-      ...asset.setupQuestionResponses.reduce((acc, response) => {
-        if (response.assetQuestion.setAssetMetadataConfig) {
-          return {
-            ...acc,
-            ...(response.assetQuestion.setAssetMetadataConfig
-              .metadata as Record<string, string>),
-          };
-        }
-        return acc;
-      }, {}),
-    };
-
-    return await prismaClient.asset.update({
-      where: { id: asset.id },
-      data: { metadata: mergedMetadata },
-    });
-  }
-
   async handleConsumableConfigs(
-    prismaClient: Awaited<ReturnType<PrismaService['forUser']>>,
+    tx: PrismaTxClient,
     asset: Prisma.AssetGetPayload<{
       include: {
         setupQuestionResponses: {
@@ -479,7 +437,7 @@ export class AssetsService {
         )
         .map((response) =>
           this.consumablesService.handleConsumableConfig(
-            prismaClient,
+            tx,
             response,
             asset.id,
           ),
@@ -487,8 +445,8 @@ export class AssetsService {
     );
   }
 
-  async handleSetMetdataFromConfigs(
-    prismaClient: Awaited<ReturnType<PrismaService['forUser']>>,
+  async handleSetMetadataFromConfigs(
+    tx: PrismaTxClient,
     asset: Prisma.AssetGetPayload<{}>,
     responses: Prisma.AssetQuestionResponseGetPayload<{
       include: {
@@ -540,7 +498,7 @@ export class AssetsService {
       ...newMetadata,
     };
 
-    await prismaClient.asset.update({
+    await tx.asset.update({
       where: { id: asset.id },
       data: { metadata: mergedMetadata },
     });

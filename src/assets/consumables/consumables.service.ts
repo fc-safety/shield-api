@@ -8,7 +8,7 @@ import type {
   Prisma,
 } from 'src/generated/prisma/client';
 import { ConsumableMappingType } from 'src/generated/prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
 import { CreateConsumableDto } from './dto/create-consumable.dto';
 import { QueryConsumableDto } from './dto/query-consumable.dto';
 import { UpdateConsumableDto } from './dto/update-consumable.dto';
@@ -74,7 +74,7 @@ export class ConsumablesService {
   }
 
   async handleConsumableConfig(
-    tx: Awaited<ReturnType<PrismaService['forUser']>>,
+    tx: PrismaTxClient,
     response: AssetQuestionResponse & {
       assetQuestion: AssetQuestion & {
         consumableConfig?: ConsumableQuestionConfig & {

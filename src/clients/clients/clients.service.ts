@@ -710,8 +710,7 @@ export class ClientsService {
                 },
               });
 
-              await this.assetsService.handleAlertTriggers(inspection, {
-                tx,
+              await this.assetsService.handleAlertTriggers(tx, inspection, {
                 skipNotifications: true,
               });
 

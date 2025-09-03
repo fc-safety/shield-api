@@ -88,76 +88,80 @@ export class InspectionsService {
       null;
 
     // Create the inspection while also updating route point completion.
-    const inspection = await prisma.inspection.create({
-      data: {
-        ...createInspectionDto,
-        completedInspectionRoutePoints: currentRoutePoint
-          ? {
-              create: {
-                inspectionRoutePoint: {
-                  connect: {
-                    id: currentRoutePoint.id,
+    const inspection = await prisma.$transaction(async (tx) => {
+      const inspection = await tx.inspection.create({
+        data: {
+          ...createInspectionDto,
+          completedInspectionRoutePoints: currentRoutePoint
+            ? {
+                create: {
+                  inspectionRoutePoint: {
+                    connect: {
+                      id: currentRoutePoint.id,
+                    },
                   },
-                },
-                inspectionSession: sessionId
-                  ? {
-                      connect: {
-                        id: sessionId,
-                      },
-                    }
-                  : {
-                      create: {
-                        inspectionRoute: {
-                          connect: {
-                            id: currentRoutePoint.inspectionRouteId,
+                  inspectionSession: sessionId
+                    ? {
+                        connect: {
+                          id: sessionId,
+                        },
+                      }
+                    : {
+                        create: {
+                          inspectionRoute: {
+                            connect: {
+                              id: currentRoutePoint.inspectionRouteId,
+                            },
                           },
                         },
                       },
-                    },
-              },
-            }
-          : undefined,
-      },
-      include: {
-        responses: {
-          include: {
-            assetQuestion: {
-              include: {
-                assetAlertCriteria: true,
-                setAssetMetadataConfig: true,
+                },
+              }
+            : undefined,
+        },
+        include: {
+          responses: {
+            include: {
+              assetQuestion: {
+                include: {
+                  assetAlertCriteria: true,
+                  setAssetMetadataConfig: true,
+                },
               },
             },
           },
-        },
-        asset: {
-          include: {
-            setupQuestionResponses: {
-              include: {
-                assetQuestion: {
-                  include: {
-                    consumableConfig: true,
+          asset: {
+            include: {
+              setupQuestionResponses: {
+                include: {
+                  assetQuestion: {
+                    include: {
+                      consumableConfig: true,
+                    },
                   },
                 },
               },
             },
           },
-        },
-        completedInspectionRoutePoints: {
-          include: {
-            inspectionSession: true,
+          completedInspectionRoutePoints: {
+            include: {
+              inspectionSession: true,
+            },
+            // A single inspection should only ever have one completed route point.
+            take: 1,
           },
-          // A single inspection should only ever have one completed route point.
-          take: 1,
         },
-      },
-    });
+      });
 
-    await this.assetsService.handleAlertTriggers(inspection);
-    await this.assetsService.handleSetMetdataFromConfigs(
-      prisma,
-      inspection.asset,
-      inspection.responses,
-    );
+      await this.assetsService.handleAlertTriggers(tx, inspection);
+      await this.assetsService.handleSetMetadataFromConfigs(
+        tx,
+        inspection.asset,
+        inspection.responses,
+      );
+
+      return inspection;
+    });
 
     return {
       inspection,
