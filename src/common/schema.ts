@@ -39,7 +39,7 @@ export const CreateRegulatoryCodeSchema = z.object({
   jurisdiction: z.string().optional(),
   description: z.string().optional(),
   requirements: z.string().optional(),
-  sourceUrl: z.string().optional(),
+  sourceUrl: z.string().url().optional(),
   documentVersion: z.string().optional(),
   effectiveDate: z.string().datetime().optional(),
   supersededDate: z.string().datetime().optional(),

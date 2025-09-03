@@ -72,7 +72,7 @@ const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
         data: z.array(
           z.object({
             name: z.string(),
-            url: z.string(),
+            url: z.string().url(),
           }),
         ),
       }),
@@ -81,7 +81,7 @@ const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
           where: z.object({ id: z.string() }),
           data: z.object({
             name: z.string(),
-            url: z.string(),
+            url: z.string().url(),
           }),
         }),
       ),

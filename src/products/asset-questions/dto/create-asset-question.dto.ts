@@ -157,7 +157,7 @@ export const BaseCreateAssetQuestionSchema = z.object({
         data: z.array(
           z.object({
             name: z.string(),
-            url: z.string(),
+            url: z.string().url(),
           }),
         ),
       }),
