@@ -164,9 +164,12 @@ export const BaseCreateAssetQuestionSchema = z.object({
     })
     .partial()
     .optional(),
-  regulatoryCodes: z.object({
-    create: z.array(CreateRegulatoryCodeSchema),
-  }),
+  regulatoryCodes: z
+    .object({
+      create: z.array(CreateRegulatoryCodeSchema),
+    })
+    .partial()
+    .optional(),
 }) satisfies z.Schema<Prisma.AssetQuestionCreateInput>;
 
 export const CreateAssetQuestionSchema = BaseCreateAssetQuestionSchema.extend({
