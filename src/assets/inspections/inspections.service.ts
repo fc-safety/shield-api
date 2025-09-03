@@ -124,6 +124,7 @@ export class InspectionsService {
             assetQuestion: {
               include: {
                 assetAlertCriteria: true,
+                setAssetMetadataConfig: true,
               },
             },
           },
@@ -152,7 +153,11 @@ export class InspectionsService {
     });
 
     await this.assetsService.handleAlertTriggers(inspection);
-    await this.assetsService.handleConsumableConfigs(prisma, inspection.asset);
+    await this.assetsService.handleSetMetdataFromConfigs(
+      prisma,
+      inspection.asset,
+      inspection.responses,
+    );
 
     return {
       inspection,

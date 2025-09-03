@@ -52,6 +52,8 @@ model Asset {
   clientId               String                  @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 
   @@index([legacyAssetId])
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 model Consumable {
@@ -74,6 +76,9 @@ model Consumable {
   clientId          String    @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 
   @@index([legacyInventoryId])
+  @@index([clientId])
+  @@index([clientId, siteId])
+
 }
 
 model Tag {
@@ -94,6 +99,8 @@ model Tag {
 
   @@index([serialNumber])
   @@index([legacyTagId])
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 model Inspection {
@@ -125,6 +132,8 @@ model Inspection {
   clientId                       String                          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 
   @@index([legacyLogId])
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 enum InspectionStatus {
@@ -144,6 +153,9 @@ model InspectionRoute {
   client                Client                 @relation(fields: [clientId], references: [id])
   clientId              String                 @default(dbgenerated("current_setting('app.current_client_id'::text)"))
   inspectionSessions    InspectionSession[]
+
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 model InspectionRoutePoint {
@@ -172,6 +184,9 @@ model InspectionSession {
   siteId                         String                          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client                         Client                          @relation(fields: [clientId], references: [id])
   clientId                       String                          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 enum InspectionSessionStatus {
@@ -208,6 +223,7 @@ model AssetQuestion {
   order                             Int?
   prompt                            String
   valueType                         AssetQuestionResponseType
+  selectOptions                     Json?
   /**
    * @deprecated
    */
@@ -226,6 +242,7 @@ model AssetQuestion {
   productId                         String?
   parentQuestion                    AssetQuestion?                     @relation("AssetQuestionVariants", fields: [parentQuestionId], references: [id], onDelete: Cascade)
   parentQuestionId                  String?
+  regulatoryCodes                   RegulatoryCode[]
   files                             File[]
   variants                          AssetQuestion[]                    @relation("AssetQuestionVariants")
   conditions                        AssetQuestionCondition[]
@@ -262,6 +279,8 @@ model ClientAssetQuestionCustomization {
   clientId        String        @default(dbgenerated("current_setting('app.current_client_id'::text)"))
   site            Site?         @relation(fields: [siteId], references: [id])
   siteId          String?
+
+  @@index([clientId])
 }
 
 model SetAssetMetadataConfig {
@@ -291,6 +310,9 @@ model AssetQuestionResponse {
   siteId          String        @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client          Client        @relation(fields: [clientId], references: [id])
   clientId        String        @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 enum AssetQuestionType {
@@ -306,6 +328,7 @@ enum AssetQuestionResponseType {
   TEXTAREA
   DATE
   NUMBER
+  SELECT
   IMAGE
 }
 
@@ -313,7 +336,6 @@ enum AssetQuestionConditionType {
   REGION
   MANUFACTURER
   PRODUCT_CATEGORY
-  PRODUCT_SUBCATEGORY
   PRODUCT
   METADATA
 }
@@ -341,6 +363,43 @@ model AssetAlertCriterion {
   alertLevel      AlertLevel    @default(INFO)
   autoResolve     Boolean       @default(false)
   alerts          Alert[]
+}
+
+model RegulatoryCode {
+  id         String   @id @default(cuid(2))
+  createdOn  DateTime @default(now()) @db.Timestamptz()
+  modifiedOn DateTime @updatedAt @db.Timestamptz()
+  active     Boolean  @default(true) // For soft deletion/archiving old codes
+
+  // Code identification
+  codeIdentifier String // e.g., "NFPA 10", "OSHA 1910.151", "ANSI Z358.1"
+  title          String // e.g., "Standard for Portable Fire Extinguishers"
+  section        String? // Specific section if applicable, e.g., "Section 4.1.2"
+
+  // Governing body information
+  governingBody String // e.g., "NFPA", "OSHA", "ANSI", "Local Fire Department"
+  jurisdiction  String? // e.g., "Federal", "California", "City of San Francisco"
+
+  // Code details
+  description  String? // Brief description of what this code covers
+  requirements String? // Specific requirements text
+
+  // Reference information
+  sourceUrl       String? // URL to the official code document
+  documentVersion String? // Version of the code document
+  effectiveDate   DateTime? // When this version became effective
+  supersededDate  DateTime? // When this version was superseded (if applicable)
+
+  // Compliance details
+  inspectionFrequency String? // e.g., "Monthly", "Annually", "As needed"
+  complianceNotes     String? // Additional compliance guidance
+
+  // Relations
+  assetQuestions AssetQuestion[]
+
+  @@unique([codeIdentifier, section]) // Prevent duplicate code sections
+  @@index([governingBody])
+  @@index([active])
 }
 
 model Alert {
@@ -373,6 +432,8 @@ model Alert {
   clientId                String
 
   @@index([legacyAlertId])
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 enum AlertLevel {
@@ -406,6 +467,8 @@ model ProductRequest {
   clientId                String                   @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 
   @@index([legacyRequestId])
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 enum ProductRequestStatus {
@@ -431,6 +494,9 @@ model ProductRequestApproval {
   siteId           String         @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client           Client         @relation(fields: [clientId], references: [id])
   clientId         String         @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 model ProductRequestItem {
@@ -454,6 +520,8 @@ model ProductRequestItem {
   clientId            String         @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 
   @@index([legacyRequestItemId])
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 // Clients, Sites & People
@@ -507,7 +575,6 @@ model Client {
   manufacturers                     Manufacturer[]
   products                          Product[]
   vaultOwnerships                   VaultOwnership[]
-  ProductSubcategory                ProductSubcategory[]
   assetQuestionConditions           AssetQuestionCondition[]
   clientAssetQuestionCustomizations ClientAssetQuestionCustomization[]
 
@@ -561,6 +628,7 @@ model Site {
 
   @@index([legacySiteId])
   @@index([legacyGroupId])
+  @@index([clientId])
 }
 
 model Person {
@@ -590,6 +658,8 @@ model Person {
   clientId                String
 
   @@index([legacyUsername])
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 // Products
@@ -613,28 +683,10 @@ model ProductCategory {
    */
   assetQuestions   AssetQuestion[]
   products         Product[]
-  subcategories    ProductSubcategory[]
   client           Client?              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId         String?
 
   @@index([legacyCategoryId])
-}
-
-model ProductSubcategory {
-  id                String          @id @default(cuid(2))
-  createdOn         DateTime        @default(now()) @db.Timestamptz()
-  modifiedOn        DateTime        @updatedAt @db.Timestamptz()
-  active            Boolean         @default(true)
-  name              String
-  shortName         String?
-  description       String?
-  icon              String?
-  color             String?
-  productCategory   ProductCategory @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
-  productCategoryId String
-  products          Product[]
-  client            Client?         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId          String?
 }
 
 model Manufacturer {
@@ -709,8 +761,6 @@ model Product {
   consumableConfigs    ConsumableQuestionConfig[]
   client               Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId             String?
-  productSubcategory   ProductSubcategory?        @relation(fields: [productSubcategoryId], references: [id])
-  productSubcategoryId String?
 
   @@index([legacyProductId])
   @@index([legacyConsumableId])
@@ -756,6 +806,9 @@ model VaultOwnership {
   siteId     String          @default(dbgenerated("current_setting('app.current_site_id'::text)"))
   client     Client          @relation(fields: [clientId], references: [id])
   clientId   String          @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+
+  @@index([clientId])
+  @@index([clientId, siteId])
 }
 
 enum VaultAccessType {

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { normalizeState } from 'src/common/address-utils';
+import { US_STATES } from 'src/common/geography/geography.constants';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow, isNil } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
@@ -58,7 +59,9 @@ export class AssetQuestionsService {
               assetAlertCriteria: true,
               consumableConfig: true,
               clientAssetQuestionCustomizations: prisma.$viewContext === 'user',
+              setAssetMetadataConfig: true,
               files: true,
+              regulatoryCodes: true,
               _count: {
                 select: {
                   assetAlertCriteria: true,
@@ -84,10 +87,14 @@ export class AssetQuestionsService {
               include: {
                 conditions: true,
                 assetAlertCriteria: true,
+                regulatoryCodes: true,
               },
             },
             conditions: true,
             assetAlertCriteria: true,
+            setAssetMetadataConfig: true,
+            files: true,
+            regulatoryCodes: true,
             consumableConfig: {
               include: {
                 consumableProduct: true,
@@ -243,7 +250,6 @@ export class AssetQuestionsService {
             include: {
               manufacturer: true,
               productCategory: true,
-              productSubcategory: true,
             },
           },
           site: {
@@ -275,15 +281,6 @@ export class AssetQuestionsService {
         },
       },
     ];
-
-    if (asset.product.productSubcategoryId) {
-      orFilters.push({
-        conditionType: AssetQuestionConditionType.PRODUCT_SUBCATEGORY,
-        value: {
-          array_contains: [asset.product.productSubcategoryId],
-        },
-      });
-    }
 
     if (asset.site.address.state) {
       orFilters.push({
@@ -341,12 +338,6 @@ export class AssetQuestionsService {
       Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.MANUFACTURER} AND condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
     );
 
-    if (asset.product.productSubcategoryId) {
-      orWhereClauses.push(
-        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_SUBCATEGORY} AND condition."value" @> to_jsonb(${asset.product.productSubcategoryId}))`,
-      );
-    }
-
     if (asset.site.address.state) {
       orWhereClauses.push(
         Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.REGION} AND condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}))`,
@@ -389,6 +380,7 @@ export class AssetQuestionsService {
       },
       include: {
         files: true,
+        regulatoryCodes: true,
         variants: {
           include: {
             conditions: true,
@@ -547,5 +539,27 @@ export class AssetQuestionsService {
         productFieldsCleared: productUpdateResult.count,
       };
     });
+  }
+
+  async getStateOptions() {
+    const prisma = await this.prisma.build();
+    const addressStates = await prisma.$queryRaw<{ state: string }[]>`
+      SELECT DISTINCT a.state
+      FROM "Client" c
+      LEFT JOIN "Site" s ON s."clientId" = c."id"
+      LEFT JOIN "Address" a ON a."id" = s."addressId" OR a."id" = c."addressId"
+      WHERE a.state IS NOT NULL;
+    `.then((r) => r.map((r) => r.state));
+
+    const statesMap = new Map(addressStates.map((s) => [s, s]));
+
+    US_STATES.forEach((s) => {
+      statesMap.set(s.code, s.name);
+    });
+
+    return Array.from(statesMap.entries()).map(([code, name]) => ({
+      code,
+      name,
+    }));
   }
 }

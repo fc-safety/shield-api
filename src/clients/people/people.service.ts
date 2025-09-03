@@ -123,6 +123,7 @@ export class PeopleService {
         this.getPrisma()
           .bypassRLS()
           .client.findUniqueOrThrow({
+            select: { id: true },
             where: { externalId: user.clientId },
           })
           .catch((e) => {
@@ -136,7 +137,7 @@ export class PeopleService {
             }
             throw e;
           })
-          .then((client) => client.id),
+          .then(({ id }) => id),
       60 * 60 * 1000,
     ); // 1 hour
   }
@@ -151,6 +152,7 @@ export class PeopleService {
         this.getPrisma()
           .bypassRLS()
           .site.findUniqueOrThrow({
+            select: { id: true },
             where: { externalId: user.siteId },
           })
           .catch((e) => {
@@ -164,7 +166,7 @@ export class PeopleService {
             }
             throw e;
           })
-          .then((site) => site.id),
+          .then(({ id }) => id),
       60 * 60 * 1000,
     ); // 1 hour
   }
@@ -179,15 +181,14 @@ export class PeopleService {
         this.getPrisma()
           .bypassRLS()
           .site.findUnique({
-            where: { externalId: user.siteId },
-            // For simplicity, only including 2 levels deep (3 total).
-            include: {
+            select: {
+              id: true,
+              // For simplicity, only including 2 levels deep (3 total).
               subsites: {
-                include: {
-                  subsites: true,
-                },
+                select: { id: true, subsites: { select: { id: true } } },
               },
             },
+            where: { externalId: user.siteId },
           })
           .then((site) =>
             site

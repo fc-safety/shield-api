@@ -27,6 +27,11 @@ import { UpdateClientAssetQuestionCustomizationDto } from './dto/update-client-a
 export class AssetQuestionsController {
   constructor(private readonly assetQuestionsService: AssetQuestionsService) {}
 
+  @Get('region-options/states')
+  getStateOptions() {
+    return this.assetQuestionsService.getStateOptions();
+  }
+
   // CLIENT CUSTOMIZATIONS
   @Get('customizations')
   findCustomizations() {

@@ -19,8 +19,13 @@ import TeamInspectionReminderTemplateReact, {
   TeamInspectionReminderTemplateSms,
 } from 'src/notifications/templates/team-inspection-reminder';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateAssetAlertCriterionRuleSchema } from 'src/products/asset-questions/dto/create-asset-question.dto';
+import {
+  CreateAssetAlertCriterionRuleSchema,
+  CreateSetAssetMetadataConfigSchema,
+} from 'src/products/asset-questions/dto/create-asset-question.dto';
+import z from 'zod';
 import { ConsumablesService } from '../consumables/consumables.service';
+import { CreateAssetSchema } from './dto/create-asset.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
 import { SetupAssetDto } from './dto/setup-asset.dto';
 import { UpdateAssetDto } from './dto/update-asset.dto';
@@ -240,6 +245,11 @@ export class AssetsService {
       .then(async (asset) => {
         await this.handleUpdateMetadataFromSetupResponses(prismaClient, asset);
         await this.handleConsumableConfigs(prismaClient, asset);
+        await this.handleSetMetdataFromConfigs(
+          prismaClient,
+          asset,
+          asset.setupQuestionResponses,
+        );
         return asset;
       })
       .catch(as404OrThrow);
@@ -261,7 +271,7 @@ export class AssetsService {
   async getMetadataKeys() {
     const prisma = await this.prisma.forContext();
 
-    const conditionMetadataKeys = await prisma.$queryRaw<
+    const conditionMetadataKeysPromise = prisma.$queryRaw<
       Array<{ key: string }>
     >`
     SELECT DISTINCT split_part(jsonb_array_elements_text("value"), ':', 1) as key
@@ -271,14 +281,37 @@ export class AssetsService {
     ORDER BY key
   `.then((r) => r.map((r) => r.key));
 
-    const assetMetadataKeys = await prisma.$queryRaw<Array<{ key: string }>>`
+    const setAssetMetadataKeysPromise = prisma.$queryRaw<
+      Array<{ key: string }>
+    >`
+    SELECT DISTINCT elem->>'key' as key
+    FROM "SetAssetMetadataConfig",
+        jsonb_array_elements(metadata) as elem
+    WHERE elem->>'key' IS NOT NULL
+      AND elem->>'key' != '';
+  `.then((r) => r.map((r) => r.key));
+
+    const assetMetadataKeysPromise = prisma.$queryRaw<Array<{ key: string }>>`
     SELECT DISTINCT jsonb_object_keys("metadata") as key
     FROM "Asset"
     WHERE "metadata" IS NOT NULL
     ORDER BY key
   `.then((r) => r.map((r) => r.key));
 
-    return [...new Set([...conditionMetadataKeys, ...assetMetadataKeys])];
+    const [conditionMetadataKeys, setAssetMetadataKeys, assetMetadataKeys] =
+      await Promise.all([
+        conditionMetadataKeysPromise,
+        setAssetMetadataKeysPromise,
+        assetMetadataKeysPromise,
+      ]);
+
+    return [
+      ...new Set([
+        ...conditionMetadataKeys,
+        ...setAssetMetadataKeys,
+        ...assetMetadataKeys,
+      ]),
+    ];
   }
 
   async handleAlertTriggers(
@@ -452,6 +485,65 @@ export class AssetsService {
           ),
         ),
     );
+  }
+
+  async handleSetMetdataFromConfigs(
+    prismaClient: Awaited<ReturnType<PrismaService['forUser']>>,
+    asset: Prisma.AssetGetPayload<{}>,
+    responses: Prisma.AssetQuestionResponseGetPayload<{
+      include: {
+        assetQuestion: {
+          include: {
+            setAssetMetadataConfig: true;
+          };
+        };
+      };
+    }>[],
+  ) {
+    const existingMetadata =
+      CreateAssetSchema.shape.metadata.safeParse(asset.metadata).data ?? {};
+
+    const newMetadata = Object.fromEntries(
+      responses
+        .filter(
+          (
+            response,
+          ): response is typeof response & {
+            assetQuestion: Exclude<
+              typeof response.assetQuestion,
+              'metadata'
+            > & {
+              setAssetMetadataConfig: z.infer<
+                typeof CreateSetAssetMetadataConfigSchema
+              >;
+            };
+          } =>
+            response.assetQuestion.setAssetMetadataConfig !== null &&
+            CreateSetAssetMetadataConfigSchema.safeParse(
+              response.assetQuestion.setAssetMetadataConfig,
+            ).success,
+        )
+        .flatMap((response) => {
+          const metadataConfigs =
+            response.assetQuestion.setAssetMetadataConfig.metadata;
+          return metadataConfigs.map((config) => {
+            return [
+              config.key,
+              config.type === 'STATIC' ? config.value : response.value,
+            ];
+          });
+        }),
+    );
+
+    const mergedMetadata = {
+      ...existingMetadata,
+      ...newMetadata,
+    };
+
+    await prismaClient.asset.update({
+      where: { id: asset.id },
+      data: { metadata: mergedMetadata },
+    });
   }
 
   async remove(id: string) {
