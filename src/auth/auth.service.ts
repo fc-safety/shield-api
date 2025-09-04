@@ -30,13 +30,21 @@ export class SigningKeyExpiredError extends Error {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly DEFAULT_SIG_LENGTH = 16;
+  private readonly getSecret: ReturnType<typeof expressJwtSecret>;
 
   constructor(
     private jwtService: JwtService,
     private config: ApiConfigService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    this.getSecret = expressJwtSecret({
+      cache: true,
+      rateLimit: true,
+      jwksRequestsPerMinute: 5,
+      jwksUri: this.config.get('AUTH_JWKS_URI'),
+    });
+  }
 
   async validateJwtToken(
     token: string | undefined | null,
@@ -58,16 +66,9 @@ export class AuthService {
         complete: true,
       });
       const secret = await new Promise<string>((resolve, reject) => {
-        const getSecret = expressJwtSecret({
-          cache: true,
-          rateLimit: true,
-          jwksRequestsPerMinute: 5,
-          jwksUri: this.config.get('AUTH_JWKS_URI'),
-        });
-
         // First arg ("req") does not actually get used and thus does not need
         // to be anything specific.
-        return getSecret({}, jwt.header, jwt.payload, (e, key) => {
+        return this.getSecret({}, jwt.header, jwt.payload, (e, key) => {
           if (e) {
             reject(e);
           } else if (!key) {
