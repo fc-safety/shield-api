@@ -144,8 +144,9 @@ export class PrismaService
     }
 
     const channel = `db-events:${person.clientId}:${model}:${cleanedOperation}`;
+    const payload = JSON.stringify(eventBody);
 
-    this.redis.getPublisher().publish(channel, JSON.stringify(eventBody));
+    this.redis.getPublisher().publish(channel, payload);
   }
 
   private parsePrismaQuery(query: string): { model?: string; action?: string } {
@@ -184,25 +185,45 @@ export class PrismaService
 
   private buildBypassRLSExtension() {
     return Prisma.defineExtension((prisma) => {
-      const setRLSContextAndExecute = async <P extends PrismaPromise<any>>(
-        transactionArg: P,
+      // Build base extension that all subsequent extensions will build upon.
+      const extendedPrisma = prisma.$extends({
+        client: {
+          $viewContext: 'admin',
+        },
+        model: {
+          $allModels: {
+            findManyForPage: findManyForPageExtensionFn,
+          },
+        },
+      });
+
+      // Define helper function to set RLS context and execute a query.
+      const setRLSContextAndExecute = async <
+        A extends Prisma.Args<any, any>,
+        P extends PrismaPromise<any>,
+      >(
+        query: (args: A) => P,
+        args: A,
       ) => {
-        const rlsContextStatements = buildRLSContextStatements(prisma, true);
-        const statementResults = await prisma.$transaction([
+        const rlsContextStatements = buildRLSContextStatements(
+          extendedPrisma,
+          true,
+        );
+        const statementResults = await extendedPrisma.$transaction([
           ...rlsContextStatements,
-          transactionArg,
+          query(args),
         ]);
         return statementResults[statementResults.length - 1];
       };
 
-      return prisma.$extends({
+      // Extend transactions and query methods to set RLS context before executing the query.
+      return extendedPrisma.$extends({
         client: {
-          $viewContext: 'admin',
           $transaction: async (
-            ...args: Parameters<typeof prisma.$transaction>
+            ...args: Parameters<typeof extendedPrisma.$transaction>
           ) => {
             const [fn, ...rest] = args;
-            return await prisma.$transaction(
+            return await extendedPrisma.$transaction(
               async (tx) => {
                 await Promise.all(buildRLSContextStatements(tx, true));
                 return await fn(tx);
@@ -211,31 +232,26 @@ export class PrismaService
             );
           },
         },
-        model: {
-          $allModels: {
-            findManyForPage: findManyForPageExtensionFn,
-          },
-        },
         query: {
           $allModels: {
-            async $allOperations({ args, query, operation, model }) {
-              return setRLSContextAndExecute(query(args));
+            async $allOperations({ args, query }) {
+              return setRLSContextAndExecute(query, args);
             },
           },
           $queryRaw: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
+            return setRLSContextAndExecute(query, args);
           },
           $queryRawTyped: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
+            return setRLSContextAndExecute(query, args);
           },
           $queryRawUnsafe: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
+            return setRLSContextAndExecute(query, args);
           },
           $executeRaw: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
+            return setRLSContextAndExecute(query, args);
           },
           $executeRawUnsafe: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
+            return setRLSContextAndExecute(query, args);
           },
         },
       });
@@ -265,21 +281,7 @@ export class PrismaService
     const thisPrismaService = this;
 
     return Prisma.defineExtension((prisma) => {
-      const setRLSContextAndExecute = async <P extends PrismaPromise<any>>(
-        transactionArg: P,
-      ) => {
-        const rlsContextStatements = buildRLSContextStatements(
-          prisma,
-          shouldBypassRLS,
-          person,
-        );
-        const statementResults = await prisma.$transaction([
-          ...rlsContextStatements,
-          transactionArg,
-        ]);
-        return statementResults[statementResults.length - 1];
-      };
-
+      // Build base extension that all subsequent extensions will build upon.
       const extendedPrisma = prisma.$extends({
         client: {
           $currentUser: () => person,
@@ -302,7 +304,7 @@ export class PrismaService
                 );
               }
 
-              const result = await setRLSContextAndExecute(query(args));
+              const result = await query(args);
 
               // Emit event to Redis.
               thisPrismaService.emitModelEvent({
@@ -315,24 +317,31 @@ export class PrismaService
               return result;
             },
           },
-          $queryRaw: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
-          },
-          $queryRawTyped: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
-          },
-          $queryRawUnsafe: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
-          },
-          $executeRaw: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
-          },
-          $executeRawUnsafe: ({ args, query }) => {
-            return setRLSContextAndExecute(query(args));
-          },
         },
       });
 
+      // Define helper function to set RLS context and execute a query.
+      const setRLSContextAndExecute = async <
+        A extends Prisma.Args<any, any>,
+        P extends PrismaPromise<any>,
+      >(
+        query: (args: A) => P,
+        args: A,
+      ) => {
+        const rlsContextStatements = buildRLSContextStatements(
+          extendedPrisma,
+          shouldBypassRLS,
+          person,
+        );
+
+        const statementResults = await extendedPrisma.$transaction([
+          ...rlsContextStatements,
+          query(args),
+        ]);
+        return statementResults[statementResults.length - 1];
+      };
+
+      // Extend transactions and query methods to set RLS context before executing the query.
       return extendedPrisma.$extends({
         client: {
           /**
@@ -363,6 +372,28 @@ export class PrismaService
               },
               ...rest,
             );
+          },
+        },
+        query: {
+          $allModels: {
+            $allOperations({ args, query }) {
+              return setRLSContextAndExecute(query, args);
+            },
+          },
+          $queryRaw: ({ args, query }) => {
+            return setRLSContextAndExecute(query, args);
+          },
+          $queryRawTyped: ({ args, query }) => {
+            return setRLSContextAndExecute(query, args);
+          },
+          $queryRawUnsafe: ({ args, query }) => {
+            return setRLSContextAndExecute(query, args);
+          },
+          $executeRaw: ({ args, query }) => {
+            return setRLSContextAndExecute(query, args);
+          },
+          $executeRawUnsafe: ({ args, query }) => {
+            return setRLSContextAndExecute(query, args);
           },
         },
       });
