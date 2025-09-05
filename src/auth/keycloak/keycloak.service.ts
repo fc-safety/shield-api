@@ -5,6 +5,7 @@ import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRep
 import { RequestArgs } from '@keycloak/keycloak-admin-client/lib/resources/agent';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import JSON5 from 'json5';
+import pRetry from 'p-retry';
 import { isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { describePermission, VALID_PERMISSIONS } from '../permissions';
@@ -108,11 +109,20 @@ export const keycloakAdminClientFactory = async (config: ApiConfigService) => {
   });
 
   const doRefreshAuth = async () =>
-    refreshAuth(keycloakClient, {
-      adminRealm: config.get('KEYCLOAK_ADMIN_CLIENT_ADMIN_REALM'),
-      defaultRealm: config.get('KEYCLOAK_ADMIN_CLIENT_DEFAULT_REALM'),
-      clientId: config.get('KEYCLOAK_ADMIN_CLIENT_CLIENT_ID'),
-      clientSecret: config.get('KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET'),
+    pRetry(
+      async () =>
+        refreshAuth(keycloakClient, {
+          adminRealm: config.get('KEYCLOAK_ADMIN_CLIENT_ADMIN_REALM'),
+          defaultRealm: config.get('KEYCLOAK_ADMIN_CLIENT_DEFAULT_REALM'),
+          clientId: config.get('KEYCLOAK_ADMIN_CLIENT_CLIENT_ID'),
+          clientSecret: config.get('KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET'),
+        }),
+      { retries: 1 },
+    ).catch((e) => {
+      logger.error(
+        'Keycloak admin client failed to (re)establish authentication.',
+        e,
+      );
     });
 
   await doRefreshAuth();
