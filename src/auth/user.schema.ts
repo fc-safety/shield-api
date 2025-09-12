@@ -100,7 +100,13 @@ export class StatelessUser {
   }
 
   public can<A extends TAction>(action: A, resource: ActionableResource<A>) {
-    return this.hasPermission(getResourcePermission(action, resource));
+    const hasExact = this.hasPermission(
+      getResourcePermission(action, resource),
+    );
+    if (['create', 'update', 'read', 'delete'].includes(action)) {
+      return hasExact || this.canManage(resource);
+    }
+    return hasExact;
   }
 
   public canManage(resource: ActionableResource<'manage'>) {

@@ -26,6 +26,9 @@ export class RolesController {
   }
 
   @Get()
+  @CheckPolicies(
+    ({ user }) => user.can('create', 'users') || user.can('update', 'users'),
+  )
   async getRoles() {
     return this.rolesService.getRoles();
   }
@@ -41,6 +44,10 @@ export class RolesController {
   }
 
   @Get(':id')
+  @Get()
+  @CheckPolicies(
+    ({ user }) => user.can('create', 'users') || user.can('update', 'users'),
+  )
   async getRole(@Param('id') id: string) {
     return this.rolesService.getRole(id);
   }
