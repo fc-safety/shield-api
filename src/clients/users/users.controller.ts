@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
   Patch,
@@ -62,12 +64,13 @@ export class UsersController {
 
   @Post(':id/assign-role')
   @CheckPolicies(({ user }) => user.canUpdate('users'))
-  assignRole(
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async assignRole(
     @Param('id') id: string,
     @Body() assignRoleDto: AssignRoleDto,
     @Query('clientId') clientId?: string,
   ) {
-    return this.usersService.assignRole(id, assignRoleDto, clientId);
+    await this.usersService.assignRole(id, assignRoleDto, clientId);
   }
 
   @Post(':id/reset-password')

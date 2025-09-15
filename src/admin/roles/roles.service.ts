@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
+import { ClsService } from 'nestjs-cls';
 import {
   getShieldClient,
   KeycloakService,
@@ -39,6 +40,7 @@ export class RolesService {
   constructor(
     private readonly keycloak: KeycloakService,
     private readonly config: ApiConfigService,
+    private readonly cls: ClsService,
   ) {
     this.appClientId = this.config.get('AUTH_AUDIENCE');
     this.appClientUuid = getShieldClient(
@@ -285,6 +287,7 @@ export class RolesService {
   }
 
   public async getRoleGroup(roleId: string) {
+    const user = this.cls.get('user');
     const group = (
       await this.keycloak.client.groups.find({
         q: `role_id:${roleId}`,
@@ -292,15 +295,29 @@ export class RolesService {
         populateHierarchy: false,
       })
     ).at(0);
-    if (!group || !validateKeycloakGroup(group))
+    if (
+      !group ||
+      !validateKeycloakGroup(group) ||
+      !(
+        group.attributes.role_client_assignable?.[0] === 'true' ||
+        user?.isSuperAdmin()
+      )
+    )
       throw new NotFoundException(`Role ${roleId} not found`);
     return group;
   }
 
   public async getRoleGroups() {
+    const user = this.cls.get('user');
     const groups = await this.keycloak.client.groups.listSubGroups({
       parentId: await this.parentRolesGroupId,
     });
-    return groups.filter(validateKeycloakGroup);
+    return groups
+      .filter(validateKeycloakGroup)
+      .filter(
+        (g) =>
+          g.attributes.role_client_assignable?.[0] === 'true' ||
+          !!user?.isSuperAdmin(),
+      );
   }
 }

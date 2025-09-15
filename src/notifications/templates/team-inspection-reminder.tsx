@@ -27,6 +27,11 @@ export interface TeamInspectionReminderTemplateProps {
           serialNumber: true;
         };
       };
+      product: {
+        select: {
+          name: true;
+        };
+      };
     };
   }>;
 }
@@ -48,6 +53,9 @@ export const TEAM_INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: TeamInspectionReminde
         name: 'North Regional Office',
         id: 'site-north-office',
       },
+      product: {
+        name: 'AED',
+      },
     },
   };
 
@@ -56,7 +64,7 @@ export function TeamInspectionReminderTemplateSms(
 ): string {
   return `[FC Safety Shield] ${props.requestorName} requested we remind you that the following asset may be due soon for inspection:
   ---
-  ${props.asset.name} ${props.asset.tag ? `(${props.asset.tag.serialNumber})` : ''}
+  ${props.asset.name || props.asset.product.name} ${props.asset.tag ? `(${props.asset.tag.serialNumber})` : ''}
   ${props.asset.site.name} - ${props.asset.location}, ${props.asset.placement}`.replace(
     /(\s*\n\s*)+/g,
     '\n',
@@ -71,7 +79,8 @@ function TeamInspectionReminderTemplateText(
 
   ${props.requestorName} has requested that we remind you that the following asset may be due soon for inspection:
 
-  Name: ${props.asset.name}
+  Name: ${props.asset.name || '-'}
+  Product: ${props.asset.product.name || '-'}
   Site: ${props.asset.site.name}
   Location: ${props.asset.location}
   Placement: ${props.asset.placement}
@@ -97,8 +106,12 @@ export default function TeamInspectionReminderTemplateReact(
         {[
           {
             name: 'Name',
-            value: props.asset.name,
+            value: props.asset.name || '-',
             bold: true,
+          },
+          {
+            name: 'Product',
+            value: props.asset.product.name,
           },
           {
             name: 'Site',

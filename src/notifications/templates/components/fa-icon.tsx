@@ -1,3 +1,4 @@
+import React from 'react';
 import { cn } from '../utils/tailwind';
 
 export function FAIcon({
@@ -8,7 +9,7 @@ export function FAIcon({
   name?: string;
   color: string;
   className?: string;
-}) {
+}): React.ReactElement {
   if (!name) {
     return (
       <div

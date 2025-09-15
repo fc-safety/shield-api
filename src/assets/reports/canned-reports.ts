@@ -81,8 +81,8 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
 type InspectionRow = getRecentInspections.Result;
 const AllInspectionsCannedReport: CannedReport<InspectionRow> = {
   id: 'recent-inspections',
-  name: 'Recent Inspections',
-  description: 'Results from recent asset inspections.',
+  name: 'Inspections Audit',
+  description: 'Audit of most recent asset inspections.',
   type: 'CANNED',
   columns: [
     {
