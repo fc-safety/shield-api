@@ -173,6 +173,10 @@ export class TagsService {
       throw new BadRequestException('Tag is not registered to your client.');
     }
 
+    if (tag.siteId === null) {
+      return tag;
+    }
+
     // If the tag is registered to a site, the user must belong to that
     // site.
     if (userPerson.siteId !== tag.siteId) {

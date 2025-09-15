@@ -223,6 +223,8 @@ model AssetQuestion {
   order                             Int?
   prompt                            String
   valueType                         AssetQuestionResponseType
+  helpText                          String?
+  placeholder                       String?
   selectOptions                     Json?
   /**
    * @deprecated

@@ -117,6 +117,8 @@ export const BaseCreateAssetQuestionSchema = z.object({
       }),
     )
     .optional(),
+  helpText: z.string().optional(),
+  placeholder: z.string().optional(),
   tone: z.string().optional(),
   parentQuestion: z
     .object({
