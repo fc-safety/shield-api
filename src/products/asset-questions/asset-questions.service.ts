@@ -392,6 +392,7 @@ export class AssetQuestionsService {
             conditions: true,
           },
         },
+        client: true,
       },
       orderBy: [{ order: 'asc' }, { createdOn: 'asc' }],
     });
