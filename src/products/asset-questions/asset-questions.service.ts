@@ -327,18 +327,18 @@ export class AssetQuestionsService {
     }
 
     andWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_CATEGORY} AND condition."value" @> to_jsonb(${asset.product.productCategoryId}))`,
+      Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.PRODUCT_CATEGORY} OR condition."value" @> to_jsonb(${asset.product.productCategoryId}))`,
     );
     andWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT} AND condition."value" @> to_jsonb(${asset.productId}))`,
+      Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.PRODUCT} OR condition."value" @> to_jsonb(${asset.productId}))`,
     );
     andWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.MANUFACTURER} AND condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
+      Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.MANUFACTURER} OR condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
     );
 
     if (asset.site.address.state) {
       andWhereClauses.push(
-        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.REGION} AND condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}))`,
+        Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.REGION} OR condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}))`,
       );
     }
 
@@ -352,7 +352,7 @@ export class AssetQuestionsService {
         //   value: { array_contains: keyPairs },
         // });
         andWhereClauses.push(
-          Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.METADATA} AND condition."value" <@ to_jsonb(${keyPairs}))`,
+          Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.METADATA} OR condition."value" <@ to_jsonb(${keyPairs}))`,
         );
       }
     }
