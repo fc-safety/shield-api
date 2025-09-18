@@ -315,6 +315,8 @@ export class AssetQuestionsService {
       );
     }
 
+    const orWhereClauses: Prisma.Sql[] = [];
+
     if (type !== undefined && type !== AssetQuestionType.SETUP_AND_INSPECTION) {
       const types =
         type === AssetQuestionType.SETUP
@@ -326,19 +328,19 @@ export class AssetQuestionsService {
       andWhereClauses.push(Prisma.sql`aq."type"::text = ANY(${types})`);
     }
 
-    andWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.PRODUCT_CATEGORY} OR condition."value" @> to_jsonb(${asset.product.productCategoryId}))`,
+    orWhereClauses.push(
+      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_CATEGORY} AND condition."value" @> to_jsonb(${asset.product.productCategoryId}))`,
     );
-    andWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.PRODUCT} OR condition."value" @> to_jsonb(${asset.productId}))`,
+    orWhereClauses.push(
+      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT} AND condition."value" @> to_jsonb(${asset.productId}))`,
     );
-    andWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.MANUFACTURER} OR condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
+    orWhereClauses.push(
+      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.MANUFACTURER} AND condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
     );
 
     if (asset.site.address.state) {
-      andWhereClauses.push(
-        Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.REGION} OR condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}))`,
+      orWhereClauses.push(
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.REGION} AND condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}))`,
       );
     }
 
@@ -351,13 +353,26 @@ export class AssetQuestionsService {
         //   conditionType: AssetQuestionConditionType.METADATA,
         //   value: { array_contains: keyPairs },
         // });
-        andWhereClauses.push(
-          Prisma.sql`(condition."conditionType"::text != ${AssetQuestionConditionType.METADATA} OR condition."value" <@ to_jsonb(${keyPairs}))`,
+        orWhereClauses.push(
+          Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.METADATA} AND condition."value" <@ to_jsonb(${keyPairs}))`,
         );
       }
     }
 
+    // Join OR clauses and add to AND clauses
+    if (orWhereClauses.length > 0) {
+      andWhereClauses.push(
+        Prisma.sql`(${Prisma.join(orWhereClauses, ' OR ')})`,
+      );
+    }
+
     sqlParts.push(Prisma.sql`WHERE (${Prisma.join(andWhereClauses, ' AND ')})`);
+
+    sqlParts.push(Prisma.sql`GROUP BY aq."id"`);
+
+    sqlParts.push(Prisma.sql`HAVING COUNT(*) = (
+      SELECT COUNT(*) FROM "AssetQuestionCondition" WHERE "assetQuestionId" = aq."id"
+    )`);
 
     const sql = Prisma.join(sqlParts, ' ');
 
