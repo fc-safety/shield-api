@@ -8,6 +8,7 @@ export const ImagesValueSchema = z.object({
 
 export const CreateAssetQuestionResponseSchema = z.object({
   value: z.union([z.string(), z.number().safe(), ImagesValueSchema]),
+  originalPrompt: z.string(),
   assetQuestionId: z.string().nonempty(),
 });
 

@@ -547,6 +547,7 @@ export class ClientsService {
             return {
               assetQuestionId: question.id,
               value: responseValue,
+              originalPrompt: question.prompt,
               responderId: validInspectors[0]?.id || '',
               siteId: asset.siteId,
               clientId: client.id,
@@ -640,6 +641,7 @@ export class ClientsService {
               let inspectionResponses: Array<{
                 assetQuestionId: string;
                 value: any;
+                originalPrompt: string;
                 responderId: string;
                 siteId: string;
                 clientId: string;
@@ -660,6 +662,7 @@ export class ClientsService {
                 return {
                   assetQuestionId: question.id,
                   value: responseValue,
+                  originalPrompt: question.prompt,
                   responderId: inspector.id,
                   siteId: asset.siteId,
                   clientId: client.id,
