@@ -25,8 +25,8 @@ export class InspectionsService {
     routeId?: string,
   ) {
     const prisma = await this.prisma.forUser();
-    const assetId = createInspectionDto.asset.connect.id;
 
+    // IMPORTANT: Validate the inspection token before doing anything else.
     const tagValidationResult = await this.tagsService.validateInspectionToken(
       inspectionToken ?? '',
     );
@@ -37,10 +37,12 @@ export class InspectionsService {
       );
     }
 
+    const assetId = createInspectionDto.asset.connect.id;
+
     // If a route session ID is provided, look it up. We'll look up the corresponding
     // route point here as well. This ensures that the session and route point are
     // tied together.
-    const inspectionSession = sessionId
+    const inspectionSessionPromise = sessionId
       ? await prisma.inspectionSession
           .findUniqueOrThrow({
             where: { id: sessionId },
@@ -57,7 +59,19 @@ export class InspectionsService {
             },
           })
           .catch(as404OrThrow)
-      : null;
+      : Promise.resolve(null);
+
+    const [inspectionSession, asset] = await Promise.all([
+      inspectionSessionPromise,
+      prisma.asset
+        .findUniqueOrThrow({
+          where: { id: assetId },
+          select: {
+            siteId: true,
+          },
+        })
+        .catch(as404OrThrow),
+    ]);
 
     // If the route session exists but isn't owned by the current inspector,
     // update ownership.
@@ -92,6 +106,13 @@ export class InspectionsService {
       const inspection = await tx.inspection.create({
         data: {
           ...createInspectionDto,
+          // IMPORTANT: Make sure the inspection is recorded under the site of the asset,
+          // not necessarily the site of the inspector (which is the database default).
+          site: {
+            connect: {
+              id: asset.siteId,
+            },
+          },
           completedInspectionRoutePoints: currentRoutePoint
             ? {
                 create: {
