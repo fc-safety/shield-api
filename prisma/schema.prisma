@@ -375,7 +375,7 @@ model RegulatoryCode {
 
   // Code identification
   codeIdentifier String // e.g., "NFPA 10", "OSHA 1910.151", "ANSI Z358.1"
-  title          String // e.g., "Standard for Portable Fire Extinguishers"
+  title          String? // e.g., "Standard for Portable Fire Extinguishers"
   section        String? // Specific section if applicable, e.g., "Section 4.1.2"
 
   // Governing body information
