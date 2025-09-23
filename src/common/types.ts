@@ -4,8 +4,9 @@ import { ViewContext } from './utils';
 
 export interface CommonClsStore extends ClsStore {
   user?: StatelessUser;
-  viewContext: ViewContext;
+  viewContext?: ViewContext;
   useragent?: string;
   ipv4?: string;
   ipv6?: string;
+  mode?: 'cron' | 'request';
 }

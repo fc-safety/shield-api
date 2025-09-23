@@ -238,7 +238,7 @@ export class AssetQuestionsService {
   // ASSET-SPECIFIC QUESTIONS
 
   async findByAsset(assetId: string, type?: AssetQuestionType) {
-    const prisma = await this.prisma.forContext();
+    const prisma = await this.prisma.build();
     const isClientUserRequest = prisma.$viewContext === 'user';
 
     // Get the asset with all relevant data

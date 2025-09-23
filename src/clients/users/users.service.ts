@@ -301,7 +301,7 @@ export class UsersService {
 
     if (!thisClientId) {
       const prismaForUser = await this.prisma.forUser();
-      thisClientId = prismaForUser.$currentUser().clientId;
+      thisClientId = prismaForUser.$currentUser()?.clientId;
       prisma = prismaForUser as unknown as PrismaClient;
     } else if (bypassRLS) {
       prisma = this.prisma.bypassRLS() as unknown as PrismaClient;

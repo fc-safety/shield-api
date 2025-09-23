@@ -32,8 +32,23 @@ const QueryAssetOrderSchema = z
   })
   .partial() satisfies z.Schema<Prisma.InspectionOrderByWithRelationInput>;
 
+const QueryInspectionIncludeSchema = z
+  .object({
+    asset: z.union([
+      z.object({
+        include: z
+          .object({
+            tag: z.coerce.boolean(),
+          })
+          .partial(),
+      }),
+      z.coerce.boolean(),
+    ]),
+  })
+  .partial() satisfies z.Schema<Prisma.InspectionInclude>;
+
 export class QueryInspectionDto extends createZodDto(
   QueryInspectionFiltersSchema.extend(
-    buildFixedQuerySchema(QueryAssetOrderSchema),
+    buildFixedQuerySchema(QueryAssetOrderSchema, QueryInspectionIncludeSchema),
   ),
 ) {}

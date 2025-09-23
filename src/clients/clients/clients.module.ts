@@ -5,6 +5,7 @@ import { KeycloakModule } from 'src/auth/keycloak/keycloak.module';
 import { AssetQuestionsModule } from 'src/products/asset-questions/asset-questions.module';
 import { UsersModule } from '../users/users.module';
 import { ClientsController } from './clients.controller';
+import { ClientsScheduler } from './clients.scheduler';
 import { ClientsService } from './clients.service';
 
 @Module({
@@ -16,6 +17,6 @@ import { ClientsService } from './clients.service';
     AssetsModule,
   ],
   controllers: [ClientsController],
-  providers: [ClientsService],
+  providers: [ClientsService, ClientsScheduler],
 })
 export class ClientsModule {}
