@@ -8,6 +8,7 @@ import { AppModule } from './app.module';
 import { StatelessUser } from './auth/user.schema';
 import { PrismaErrorsFilter } from './common/prisma-errors.filter';
 import { ApiConfigService } from './config/api-config.service';
+
 declare module 'express' {
   export interface Request {
     user?: StatelessUser;

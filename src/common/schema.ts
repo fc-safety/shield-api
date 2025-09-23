@@ -33,7 +33,7 @@ export const orderAddressSchema = z
 export const CreateRegulatoryCodeSchema = z.object({
   active: z.boolean().default(true),
   codeIdentifier: z.string(),
-  title: z.string(),
+  title: z.string().optional(),
   section: z.string().optional(),
   governingBody: z.string(),
   jurisdiction: z.string().optional(),

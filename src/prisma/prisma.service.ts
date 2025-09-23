@@ -100,7 +100,7 @@ export class PrismaService
     model: string;
     operation: string;
     result: unknown;
-    person: PersonRepresentation;
+    person: Pick<PersonRepresentation, 'clientId'>;
   }) {
     if (
       ![
@@ -262,12 +262,13 @@ export class PrismaService
     const user = this.cls.get('user');
     const context = options.context ?? this.cls.get('viewContext');
     const isSuperAdmin = !!user?.isSuperAdmin();
-    const shouldBypassRLS = isSuperAdmin && context === 'admin';
+    const cronMode = this.cls.get('mode') === 'cron';
+    const shouldBypassRLS = cronMode || (isSuperAdmin && context === 'admin');
 
-    let person: PersonRepresentation;
+    let person: PersonRepresentation | undefined;
     if (options.person) {
       person = options.person;
-    } else {
+    } else if (!cronMode) {
       try {
         person = await this.peopleService.getPersonRepresentation();
       } catch (e) {
@@ -295,7 +296,7 @@ export class PrismaService
         query: {
           $allModels: {
             async $allOperations({ args, query, operation, model }) {
-              if (!shouldBypassRLS) {
+              if (!shouldBypassRLS && person) {
                 setModelClientOwnershipForPerson(
                   args,
                   model,
@@ -307,12 +308,14 @@ export class PrismaService
               const result = await query(args);
 
               // Emit event to Redis.
-              thisPrismaService.emitModelEvent({
-                model,
-                operation,
-                result,
-                person,
-              });
+              if (person) {
+                thisPrismaService.emitModelEvent({
+                  model,
+                  operation,
+                  result,
+                  person,
+                });
+              }
 
               return result;
             },
@@ -457,7 +460,7 @@ function setModelClientOwnershipForPerson<T>(
   args: Prisma.Args<T, 'create' | 'update'>,
   model: string,
   operation: string,
-  person: PersonRepresentation,
+  person: Pick<PersonRepresentation, 'clientId'>,
 ) {
   if (
     ['create', 'update'].includes(operation) &&

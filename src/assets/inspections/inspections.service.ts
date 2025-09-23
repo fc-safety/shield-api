@@ -77,7 +77,7 @@ export class InspectionsService {
     // update ownership.
     if (inspectionSession) {
       const currentUser = prisma.$currentUser();
-      if (currentUser.id !== inspectionSession.lastInspectorId) {
+      if (currentUser && currentUser.id !== inspectionSession.lastInspectorId) {
         await prisma.inspectionSession.update({
           where: { id: inspectionSession.id },
           data: { lastInspectorId: currentUser.id },

@@ -16,6 +16,11 @@ import { PoliciesGuard } from './policies.guard';
     ClsModule.forRoot({
       middleware: {
         mount: true,
+        setup: (cls, req) => {
+          if (req) {
+            cls.set('mode', 'request');
+          }
+        },
       },
     }),
     KeycloakModule,

@@ -1,3 +1,4 @@
+import merge from 'deepmerge';
 import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
@@ -121,10 +122,7 @@ export const buildPrismaFindArgs = <T>(
     orderBy: order,
     take: limit,
     skip: offset,
-    include: {
-      ...(include ?? {}),
-      ...(args?.include ?? {}),
-    },
+    include: merge(include ?? {}, args?.include ?? {}),
   } as any;
 };
 

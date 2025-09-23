@@ -59,7 +59,7 @@ export class StatsService {
   async getComplianceHistoryByMonth(
     queryComplianceHistoryDto: QueryComplianceHistoryDto,
   ) {
-    const { months } = queryComplianceHistoryDto;
+    const { months, siteId } = queryComplianceHistoryDto;
     const xMonthsAgo =
       months === 1 ? new Date() : startOfMonth(subMonths(new Date(), months));
 
@@ -68,6 +68,10 @@ export class StatsService {
         latestOnlyBeforeCutoff?: boolean;
       }) =>
         prisma.asset.findMany({
+          where: {
+            active: true,
+            siteId,
+          },
           include: {
             inspections: {
               orderBy: { createdOn: 'desc' },
@@ -113,9 +117,6 @@ export class StatsService {
       ] = await Promise.all([
         prisma.client
           .findFirst({
-            where: {
-              id: prisma.$currentUser().clientId,
-            },
             select: {
               defaultInspectionCycle: true,
             },

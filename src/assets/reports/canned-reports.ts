@@ -73,7 +73,7 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
   ],
   build: async (prismaService) => {
     const prisma = await prismaService.forContext();
-    return prisma.$queryRawTyped(getOverdueAssets());
+    return prisma.$queryRawTyped(getOverdueAssets(null));
   },
   dateRangeSupport: 'NONE',
 };

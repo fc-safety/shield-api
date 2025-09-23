@@ -1,5 +1,9 @@
 import * as csv from '@fast-csv/format';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
 import { add, isAfter } from 'date-fns';
@@ -169,7 +173,7 @@ export class TagsService {
     // If the tag is registered to a client, the user must belong to that
     // client.
     const userPerson = (await this.prisma.forUser()).$currentUser();
-    if (userPerson.clientId !== tag.clientId) {
+    if (!userPerson || userPerson.clientId !== tag.clientId) {
       throw new BadRequestException('Tag is not registered to your client.');
     }
 
@@ -229,6 +233,12 @@ export class TagsService {
 
     return this.prisma.forUser().then(async (prisma) => {
       const person = prisma.$currentUser();
+
+      if (!person) {
+        throw new ForbiddenException(
+          'Unable to find a valid user account for your user. Please contact your administrator to ensure your account is properly configured.',
+        );
+      }
 
       if (existingTag) {
         // If the tag exists but has no client or site assigned, RLS will
