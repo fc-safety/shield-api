@@ -3,7 +3,7 @@ import { ClsService } from 'nestjs-cls';
 import { normalizeState } from 'src/common/address-utils';
 import { US_STATES } from 'src/common/geography/geography.constants';
 import { CommonClsStore } from 'src/common/types';
-import { as404OrThrow, isNil } from 'src/common/utils';
+import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import {
   AssetQuestionConditionType,
@@ -15,6 +15,7 @@ import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-con
 import { CreateAssetQuestionDto } from './dto/create-asset-question.dto';
 import { CreateClientAssetQuestionCustomizationDto } from './dto/create-client-asset-question-customization.dto';
 import { QueryAssetQuestionDto } from './dto/query-asset-question.dto';
+import { QueryQuestionsByAssetPropertiesDto } from './dto/query-questions-by-asset-properties.dto';
 import { UpdateAssetQuestionConditionDto } from './dto/update-asset-question-condition.dto';
 import { UpdateAssetQuestionDto } from './dto/update-asset-question.dto';
 import { UpdateClientAssetQuestionCustomizationDto } from './dto/update-client-asset-question-customization.dto';
@@ -237,9 +238,8 @@ export class AssetQuestionsService {
 
   // ASSET-SPECIFIC QUESTIONS
 
-  async findByAsset(assetId: string, type?: AssetQuestionType) {
+  async findByAssetId(assetId: string, type?: AssetQuestionType) {
     const prisma = await this.prisma.build();
-    const isClientUserRequest = prisma.$viewContext === 'user';
 
     // Get the asset with all relevant data
     const asset = await prisma.asset
@@ -261,36 +261,80 @@ export class AssetQuestionsService {
       })
       .catch(as404OrThrow);
 
-    const andFilters: Prisma.AssetQuestionConditionWhereInput[] = [
-      {
-        conditionType: AssetQuestionConditionType.PRODUCT_CATEGORY,
-        value: {
-          array_contains: [asset.product.productCategoryId],
-        },
-      },
-      {
-        conditionType: AssetQuestionConditionType.PRODUCT,
-        value: {
-          array_contains: [asset.productId],
-        },
-      },
-      {
-        conditionType: AssetQuestionConditionType.MANUFACTURER,
-        value: {
-          array_contains: [asset.product.manufacturerId],
-        },
-      },
-    ];
+    return await this.findByAsset(asset, type);
+  }
 
-    if (asset.site.address.state) {
-      andFilters.push({
-        conditionType: AssetQuestionConditionType.REGION,
-        value: {
-          array_contains: [normalizeState(asset.site.address.state)],
-        },
-      });
-    }
+  async findByAssetProperties(query: QueryQuestionsByAssetPropertiesDto) {
+    const prisma = await this.prisma.build();
 
+    const partialAssetProperties: Partial<
+      Prisma.AssetGetPayload<{
+        include: { product: true; site: { include: { address: true } } };
+      }>
+    > = {};
+
+    [partialAssetProperties.site, partialAssetProperties.product] =
+      await Promise.all([
+        prisma.site
+          .findUnique({
+            where: { id: query.siteId },
+            include: { address: true },
+          })
+          .then((s) => s ?? undefined),
+        prisma.product
+          .findUnique({
+            where: { id: query.productId },
+          })
+          .then((p) => p ?? undefined),
+      ]);
+
+    return await this.findByAsset(partialAssetProperties, query.type);
+  }
+
+  async findByAsset(
+    asset: Partial<
+      Prisma.AssetGetPayload<{
+        include: { product: true; site: { include: { address: true } } };
+      }>
+    >,
+    type?: AssetQuestionType,
+  ) {
+    const prisma = await this.prisma.build();
+
+    const isClientUserRequest = prisma.$viewContext === 'user';
+
+    // TODO: This is beginning of support for variants.
+    // const andFilters: Prisma.AssetQuestionConditionWhereInput[] = [
+    //   {
+    //     conditionType: AssetQuestionConditionType.PRODUCT_CATEGORY,
+    //     value: {
+    //       array_contains: [asset.product.productCategoryId],
+    //     },
+    //   },
+    //   {
+    //     conditionType: AssetQuestionConditionType.PRODUCT,
+    //     value: {
+    //       array_contains: [asset.productId],
+    //     },
+    //   },
+    //   {
+    //     conditionType: AssetQuestionConditionType.MANUFACTURER,
+    //     value: {
+    //       array_contains: [asset.product.manufacturerId],
+    //     },
+    //   },
+    // ];
+
+    // if (asset.site.address.state) {
+    //   andFilters.push({
+    //     conditionType: AssetQuestionConditionType.REGION,
+    //     value: {
+    //       array_contains: [normalizeState(asset.site.address.state)],
+    //     },
+    //   });
+    // }
+
+    // Begin building raw SQL query to get questions whose conditions match the asset.
     const sqlParts: Prisma.Sql[] = [
       Prisma.sql`
         SELECT DISTINCT aq.id FROM "AssetQuestion" aq
@@ -299,11 +343,13 @@ export class AssetQuestionsService {
       `,
     ];
 
+    // Add base WHERE clauses to the query. These must ALWAYS be true.
     const andWhereClauses: Prisma.Sql[] = [
       Prisma.sql`aq."active" = true`,
       Prisma.sql`aq."parentQuestionId" IS NULL`,
     ];
 
+    // When request is coming from a client user (not a system/super admin), filter by client specific customizations.
     if (isClientUserRequest) {
       sqlParts.push(
         Prisma.sql`
@@ -315,39 +361,56 @@ export class AssetQuestionsService {
       );
     }
 
-    const orWhereClauses: Prisma.Sql[] = [];
-
+    // Filter by question type (i.e. setup, inspection or both).
     if (type !== undefined && type !== AssetQuestionType.SETUP_AND_INSPECTION) {
       const types =
         type === AssetQuestionType.SETUP
           ? [AssetQuestionType.SETUP, AssetQuestionType.SETUP_AND_INSPECTION]
-          : [
-              AssetQuestionType.INSPECTION,
-              AssetQuestionType.SETUP_AND_INSPECTION,
-            ];
+          : type === AssetQuestionType.INSPECTION
+            ? [
+                AssetQuestionType.INSPECTION,
+                AssetQuestionType.SETUP_AND_INSPECTION,
+              ]
+            : [type];
       andWhereClauses.push(Prisma.sql`aq."type"::text = ANY(${types})`);
     }
 
-    orWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_CATEGORY} AND condition."value" @> to_jsonb(${asset.product.productCategoryId}))`,
-    );
-    orWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT} AND condition."value" @> to_jsonb(${asset.productId}))`,
-    );
-    orWhereClauses.push(
-      Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.MANUFACTURER} AND condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
-    );
+    // Begin adding clauses for the conditions. We need to do some magic here to make sure that:
+    // 1. Questions are returned ONLY when ALL conditions are met.
+    //    a. This is achieved by grouping by question ID and using a HAVING clause to verify that the count of conditions met is equal to the total number of conditions.
+    // 2. When conditions have multiple values, any matching asset value renders the condition met.
+    //    a. This is achieved by using the @> operator to check if the asset value is a subset of the condition value.
 
-    if (asset.site.address.state) {
+    const orWhereClauses: Prisma.Sql[] = [];
+
+    if (asset.product) {
+      orWhereClauses.push(
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_CATEGORY} AND condition."value" @> to_jsonb(${asset.product.productCategoryId}))`,
+      );
+      orWhereClauses.push(
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.MANUFACTURER} AND condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
+      );
+      orWhereClauses.push(
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT} AND condition."value" @> to_jsonb(${asset.product.id}))`,
+      );
+    }
+
+    if (asset.site && asset.site.address.state) {
       orWhereClauses.push(
         Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.REGION} AND condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}))`,
       );
     }
 
-    if (asset.metadata) {
-      const keyPairs = Object.entries(asset.metadata).map(
-        ([k, v]) => `${k}:${v}`,
-      );
+    const assetMetadata = getValidatedMetadata(asset.metadata ?? null);
+    const productMetadata = getValidatedMetadata(
+      asset.product?.metadata ?? null,
+    );
+
+    if (assetMetadata || productMetadata) {
+      const keyPairs = [
+        ...Object.entries(assetMetadata ?? {}),
+        ...Object.entries(productMetadata ?? {}),
+      ].map(([k, v]) => `${k}:${v}`);
       if (keyPairs.length > 0) {
         // orFilters.push({
         //   conditionType: AssetQuestionConditionType.METADATA,
@@ -364,6 +427,9 @@ export class AssetQuestionsService {
       andWhereClauses.push(
         Prisma.sql`(${Prisma.join(orWhereClauses, ' OR ')})`,
       );
+    } else {
+      // Don't call database if we're not filtering by any conditions.
+      return [];
     }
 
     sqlParts.push(Prisma.sql`WHERE (${Prisma.join(andWhereClauses, ' AND ')})`);
@@ -400,27 +466,28 @@ export class AssetQuestionsService {
     return questions.map((q) => {
       const { variants, ...question } = q;
 
-      if (variants.length === 0) {
-        return q;
-      }
+      // TODO: This is beginning of support for variants.
+      // if (variants.length === 0) {
+      //   return q;
+      // }
 
-      const matchingVariant = variants
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 1))
-        .find((v) =>
-          v.conditions.every((c) =>
-            andFilters.every((f) =>
-              f.conditionType === c.conditionType &&
-              !isNil(c.value) &&
-              Array.isArray(c.value)
-                ? c.value.includes(f.value as string)
-                : c.value === f.value,
-            ),
-          ),
-        );
+      // const matchingVariant = variants
+      //   .sort((a, b) => (a.order ?? 0) - (b.order ?? 1))
+      //   .find((v) =>
+      //     v.conditions.every((c) =>
+      //       andFilters.every((f) =>
+      //         f.conditionType === c.conditionType &&
+      //         !isNil(c.value) &&
+      //         Array.isArray(c.value)
+      //           ? c.value.includes(f.value as string)
+      //           : c.value === f.value,
+      //       ),
+      //     ),
+      //   );
 
-      if (matchingVariant) {
-        return matchingVariant;
-      }
+      // if (matchingVariant) {
+      //   return matchingVariant;
+      // }
 
       return question;
     });
@@ -570,3 +637,20 @@ export class AssetQuestionsService {
     }));
   }
 }
+
+/**
+ * Validates that the metadata is an object, otherwise returns null.
+ *
+ * @param metadata The raw JSONB value from the database.
+ * @returns The validated metadata object or null if the metadata is not valid.
+ */
+const getValidatedMetadata = (metadata: Prisma.JsonValue): object | null => {
+  if (
+    typeof metadata === 'object' &&
+    metadata !== null &&
+    !Array.isArray(metadata)
+  ) {
+    return metadata;
+  }
+  return null;
+};

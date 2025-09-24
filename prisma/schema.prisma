@@ -28,6 +28,7 @@ model Asset {
   createdOn              DateTime                @default(now()) @db.Timestamptz()
   modifiedOn             DateTime                @updatedAt @db.Timestamptz()
   setupOn                DateTime?               @db.Timestamptz()
+  configured             Boolean                 @default(false)
   active                 Boolean                 @default(true)
   name                   String
   product                Product                 @relation(fields: [productId], references: [id])
@@ -318,6 +319,7 @@ model AssetQuestionResponse {
 }
 
 enum AssetQuestionType {
+  CONFIGURATION
   SETUP_AND_INSPECTION
   SETUP
   INSPECTION
@@ -742,6 +744,7 @@ model Product {
   sku                 String?
   productUrl          String?
   imageUrl            String?
+  metadata            Json?
   productCategory     ProductCategory            @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
   productCategoryId   String
   parentProduct       Product?                   @relation("PrimaryConsumableProduct", fields: [parentProductId], references: [id], onDelete: Cascade)

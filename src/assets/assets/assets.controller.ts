@@ -15,6 +15,7 @@ import {
 } from 'src/auth/policies.guard';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
 import { AssetsService } from './assets.service';
+import { ConfigureAssetDto } from './dto/configure-asset.dto';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
 import { SetupAssetDto } from './dto/setup-asset.dto';
@@ -78,6 +79,15 @@ export class AssetsController {
     @Query('tagSerialNumber') tagSerialNumber: string,
   ) {
     return this.assetsService.addTag(id, tagExternalId, tagSerialNumber);
+  }
+
+  @CheckPolicies((context) => context.user.can('setup', 'assets'))
+  @Post(':id/configure')
+  configure(
+    @Param('id') id: string,
+    @Body() configureAssetDto: ConfigureAssetDto,
+  ) {
+    return this.assetsService.configure(id, configureAssetDto);
   }
 
   @CheckPolicies((context) => context.user.can('setup', 'assets'))
