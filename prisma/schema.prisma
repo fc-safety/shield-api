@@ -401,7 +401,6 @@ model RegulatoryCode {
   // Relations
   assetQuestions AssetQuestion[]
 
-  @@unique([codeIdentifier, section]) // Prevent duplicate code sections
   @@index([governingBody])
   @@index([active])
 }
