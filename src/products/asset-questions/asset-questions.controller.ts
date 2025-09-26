@@ -17,6 +17,7 @@ import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-con
 import { CreateAssetQuestionDto } from './dto/create-asset-question.dto';
 import { CreateClientAssetQuestionCustomizationDto } from './dto/create-client-asset-question-customization.dto';
 import { QueryAssetQuestionDto } from './dto/query-asset-question.dto';
+import { QueryQuestionsByAssetPropertiesDto } from './dto/query-questions-by-asset-properties.dto';
 import { QueryQuestionsByAssetDto } from './dto/query-questions-by-asset.dto';
 import { UpdateAssetQuestionConditionDto } from './dto/update-asset-question-condition.dto';
 import { UpdateAssetQuestionDto } from './dto/update-asset-question.dto';
@@ -65,6 +66,25 @@ export class AssetQuestionsController {
     return this.assetQuestionsService.removeClientCustomization(
       customizationId,
     );
+  }
+
+  // ASSET-SPECIFIC ENDPOINTS
+
+  @Get('by-asset/:assetId')
+  @CheckPolicies(
+    ({ user }) => user.canRead('assets') || user.canCreate('inspections'),
+  )
+  findByAssetId(
+    @Param('assetId') assetId: string,
+    @Query() query: QueryQuestionsByAssetDto,
+  ) {
+    return this.assetQuestionsService.findByAssetId(assetId, query.type);
+  }
+
+  @Get('by-asset-properties')
+  @CheckPolicies(({ user }) => user.canRead('assets'))
+  findByPartialAsset(@Query() query: QueryQuestionsByAssetPropertiesDto) {
+    return this.assetQuestionsService.findByAssetProperties(query);
   }
 
   @Post()
@@ -132,19 +152,6 @@ export class AssetQuestionsController {
   @Delete('conditions/:conditionId')
   removeCondition(@Param('conditionId') conditionId: string) {
     return this.assetQuestionsService.removeCondition(conditionId);
-  }
-
-  // ASSET-SPECIFIC ENDPOINTS
-
-  @Get('by-asset/:assetId')
-  @CheckPolicies(
-    ({ user }) => user.canRead('assets') || user.canCreate('inspections'),
-  )
-  findByAsset(
-    @Param('assetId') assetId: string,
-    @Query() query: QueryQuestionsByAssetDto,
-  ) {
-    return this.assetQuestionsService.findByAsset(assetId, query.type);
   }
 
   @Post('migrate-to-conditions')

@@ -1,4 +1,9 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { subDays } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import { UsersService } from 'src/clients/users/users.service';
@@ -25,6 +30,7 @@ import {
 } from 'src/products/asset-questions/dto/create-asset-question.dto';
 import z from 'zod';
 import { ConsumablesService } from '../consumables/consumables.service';
+import { ConfigureAssetDto } from './dto/configure-asset.dto';
 import { CreateAssetSchema } from './dto/create-asset.dto';
 import { QueryAssetDto } from './dto/query-asset.dto';
 import { SetupAssetDto } from './dto/setup-asset.dto';
@@ -219,6 +225,55 @@ export class AssetsService {
     );
   }
 
+  async configure(id: string, configureAssetDto: ConfigureAssetDto) {
+    const prisma = await this.prisma.build();
+
+    const asset = await prisma.asset.findUniqueOrThrow({
+      where: { id },
+    });
+
+    if (asset.configured) {
+      throw new BadRequestException('Asset is already configured.');
+    }
+
+    const questionsMap = await prisma.assetQuestion
+      .findMany({
+        where: {
+          id: { in: configureAssetDto.responses.map((r) => r.assetQuestionId) },
+        },
+        include: {
+          setAssetMetadataConfig: true,
+        },
+      })
+      .then((q) => new Map(q.map((q) => [q.id, q])));
+
+    return await prisma.$transaction(async (tx) => {
+      await this.handleSetMetadataFromConfigs(
+        tx,
+        asset,
+        configureAssetDto.responses
+          .map((r) => ({
+            value: r.value,
+            assetQuestion: questionsMap.get(r.assetQuestionId)!,
+          }))
+          .filter(
+            (
+              r,
+            ): r is Exclude<typeof r, 'assetQuestion'> & {
+              assetQuestion: NonNullable<(typeof r)['assetQuestion']>;
+            } => !!r.assetQuestion,
+          ),
+      );
+
+      const updatedAsset = await tx.asset.update({
+        where: { id },
+        data: { configured: true },
+      });
+
+      return updatedAsset;
+    });
+  }
+
   async setup(id: string, setupAssetDto: SetupAssetDto) {
     const prismaClient = await this.prisma.forUser();
 
@@ -300,18 +355,31 @@ export class AssetsService {
     ORDER BY key
   `.then((r) => r.map((r) => r.key));
 
-    const [conditionMetadataKeys, setAssetMetadataKeys, assetMetadataKeys] =
-      await Promise.all([
-        conditionMetadataKeysPromise,
-        setAssetMetadataKeysPromise,
-        assetMetadataKeysPromise,
-      ]);
+    const productMetadataKeysPromise = prisma.$queryRaw<Array<{ key: string }>>`
+SELECT DISTINCT jsonb_object_keys("metadata") as key
+FROM "Product"
+WHERE "metadata" IS NOT NULL
+ORDER BY key
+`.then((r) => r.map((r) => r.key));
+
+    const [
+      conditionMetadataKeys,
+      setAssetMetadataKeys,
+      assetMetadataKeys,
+      productMetadataKeys,
+    ] = await Promise.all([
+      conditionMetadataKeysPromise,
+      setAssetMetadataKeysPromise,
+      assetMetadataKeysPromise,
+      productMetadataKeysPromise,
+    ]);
 
     return [
       ...new Set([
         ...conditionMetadataKeys,
         ...setAssetMetadataKeys,
         ...assetMetadataKeys,
+        ...productMetadataKeys,
       ]),
     ];
   }
@@ -341,7 +409,16 @@ export class AssetsService {
       return;
     }
 
-    const createInputs = inspection.responses.flatMap((response) =>
+    // Only activate process on inspection question responses. This is a catch
+    // in case a question is switched from inspection to setup.
+    const inspectionQuestionResponses = inspection.responses.filter(
+      (response) =>
+        ['SETUP_AND_INSPECTION', 'INSPECTION'].includes(
+          response.assetQuestion.type,
+        ),
+    );
+
+    const createInputs = inspectionQuestionResponses.flatMap((response) =>
       response.assetQuestion.assetAlertCriteria
         .map((alertCriteria) => {
           const {
@@ -423,9 +500,15 @@ export class AssetsService {
       };
     }>,
   ) {
+    // Only activate process on setup question responses. This is a catch
+    // in case a question is switched from setup to inspection.
+    const setupQuestionResponses = asset.setupQuestionResponses.filter(
+      (response) =>
+        ['SETUP_AND_INSPECTION', 'SETUP'].includes(response.assetQuestion.type),
+    );
     // Handle consumable configs from setup responses
     await Promise.all(
-      asset.setupQuestionResponses
+      setupQuestionResponses
         .filter(
           (
             response,
@@ -448,15 +531,14 @@ export class AssetsService {
   async handleSetMetadataFromConfigs(
     tx: PrismaTxClient,
     asset: Prisma.AssetGetPayload<{}>,
-    responses: Prisma.AssetQuestionResponseGetPayload<{
-      include: {
-        assetQuestion: {
-          include: {
-            setAssetMetadataConfig: true;
-          };
+    responses: {
+      assetQuestion: Prisma.AssetQuestionGetPayload<{
+        include: {
+          setAssetMetadataConfig: true;
         };
-      };
-    }>[],
+      }>;
+      value: Prisma.JsonValue;
+    }[],
   ) {
     const existingMetadata =
       CreateAssetSchema.shape.metadata.safeParse(asset.metadata).data ?? {};

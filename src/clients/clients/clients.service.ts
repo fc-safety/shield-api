@@ -485,7 +485,7 @@ export class ClientsService {
         const assetsToSetup = allAssets.filter((asset) => !asset.setupOn);
         for (const asset of assetsToSetup) {
           // Get setup questions for this asset
-          const setupQuestions = await this.assetQuestionsService.findByAsset(
+          const setupQuestions = await this.assetQuestionsService.findByAssetId(
             asset.id,
             AssetQuestionType.SETUP,
           );
@@ -775,7 +775,7 @@ export class ClientsService {
       clientId: string;
     }> = [];
 
-    const inspectionQuestions = await this.assetQuestionsService.findByAsset(
+    const inspectionQuestions = await this.assetQuestionsService.findByAssetId(
       asset.id,
       AssetQuestionType.INSPECTION,
     );
