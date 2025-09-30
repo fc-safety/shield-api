@@ -390,6 +390,19 @@ ORDER BY key
     ORDER BY metadata_value
   `.then((r) => r.map((r) => r.metadata_value));
 
+    const questionOptionValuesPromise = prisma.$queryRaw<
+      Array<{ metadata_value: string }>
+    >`
+    SELECT DISTINCT jsonb_array_elements(aq."selectOptions")->>'value' as metadata_value
+    FROM "SetAssetMetadataConfig" amc
+    LEFT JOIN "AssetQuestion" aq ON amc."assetQuestionId" = aq."id"
+    CROSS JOIN LATERAL jsonb_array_elements(amc."metadata") AS metadata_element
+    WHERE amc."metadata" IS NOT NULL
+      AND metadata_element->>'key' = ${key}
+      AND aq."selectOptions" IS NOT NULL
+    ORDER BY metadata_value
+  `.then((r) => r.map((r) => r.metadata_value));
+
     const setAssetMetadataKeysPromise = prisma.$queryRaw<
       Array<{ metadata_value: string }>
     >`
@@ -423,11 +436,13 @@ ORDER BY metadata_value
 
     const [
       conditionMetadataKeys,
+      questionOptionValues,
       setAssetMetadataKeys,
       assetMetadataKeys,
       productMetadataKeys,
     ] = await Promise.all([
       conditionMetadataKeysPromise,
+      questionOptionValuesPromise,
       setAssetMetadataKeysPromise,
       assetMetadataKeysPromise,
       productMetadataKeysPromise,
@@ -437,6 +452,7 @@ ORDER BY metadata_value
       ...new Set(
         [
           ...conditionMetadataKeys,
+          ...questionOptionValues,
           ...setAssetMetadataKeys,
           ...assetMetadataKeys,
           ...productMetadataKeys,
