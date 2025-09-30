@@ -87,6 +87,14 @@ export class AssetQuestionsController {
     return this.assetQuestionsService.findByAssetProperties(query);
   }
 
+  @Get('check-configuration-by-asset/:assetId')
+  @CheckPolicies(
+    ({ user }) => user.canRead('assets') || user.canCreate('inspections'),
+  )
+  checkConfigurationByAsset(@Param('assetId') assetId: string) {
+    return this.assetQuestionsService.checkAssetConfiguration(assetId);
+  }
+
   @Post()
   create(@Body() createAssetQuestionDto: CreateAssetQuestionDto) {
     return this.assetQuestionsService.create(createAssetQuestionDto);
