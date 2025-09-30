@@ -7,12 +7,17 @@ import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import {
   AssetQuestionConditionType,
+  AssetQuestionResponseType,
   AssetQuestionType,
   Prisma,
 } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-condition.dto';
-import { CreateAssetQuestionDto } from './dto/create-asset-question.dto';
+import {
+  CreateAssetQuestionDto,
+  CreateAssetQuestionSchema,
+  CreateSetAssetMetadataConfigSchema,
+} from './dto/create-asset-question.dto';
 import { CreateClientAssetQuestionCustomizationDto } from './dto/create-client-asset-question-customization.dto';
 import { QueryAssetQuestionDto } from './dto/query-asset-question.dto';
 import { QueryQuestionsByAssetPropertiesDto } from './dto/query-questions-by-asset-properties.dto';
@@ -246,12 +251,7 @@ export class AssetQuestionsService {
       .findUniqueOrThrow({
         where: { id: assetId },
         include: {
-          product: {
-            include: {
-              manufacturer: true,
-              productCategory: true,
-            },
-          },
+          product: true,
           site: {
             include: {
               address: true,
@@ -291,7 +291,7 @@ export class AssetQuestionsService {
     return await this.findByAsset(partialAssetProperties, query.type);
   }
 
-  async findByAsset(
+  async findQuestionIdsByAsset(
     asset: Partial<
       Prisma.AssetGetPayload<{
         include: { product: true; site: { include: { address: true } } };
@@ -444,10 +444,16 @@ export class AssetQuestionsService {
 
     const matchingIds = await prisma.$queryRaw<{ id: string }[]>(sql);
 
+    return matchingIds.map((m) => m.id);
+  }
+  async findByAsset(...args: Parameters<typeof this.findQuestionIdsByAsset>) {
+    const prisma = await this.prisma.build();
+    const questionIds = await this.findQuestionIdsByAsset(...args);
+
     const questions = await prisma.assetQuestion.findMany({
       where: {
         id: {
-          in: matchingIds.map((m) => m.id),
+          in: questionIds,
         },
       },
       include: {
@@ -491,6 +497,93 @@ export class AssetQuestionsService {
 
       return question;
     });
+  }
+
+  async checkAssetConfiguration(assetId: string) {
+    const prisma = await this.prisma.build();
+    const asset = await prisma.asset.findUniqueOrThrow({
+      where: { id: assetId },
+      include: { product: true, site: { include: { address: true } } },
+    });
+
+    const questionIds = await this.findQuestionIdsByAsset(
+      asset,
+      AssetQuestionType.CONFIGURATION,
+    );
+
+    const questions = await prisma.assetQuestion.findMany({
+      where: {
+        id: { in: questionIds },
+      },
+      include: {
+        conditions: true,
+        setAssetMetadataConfig: true,
+      },
+    });
+
+    const assetMetadata = getValidatedMetadata(asset.metadata ?? null) ?? {};
+
+    const metadataAudit: {
+      key: string;
+      staticValue?: string;
+      assetValue: string | null;
+      isMet: boolean;
+      assetQuestion: Prisma.AssetQuestionGetPayload<{}>;
+    }[] = [];
+
+    for (const question of questions) {
+      if (!question.setAssetMetadataConfig) continue;
+      const parseResult = CreateSetAssetMetadataConfigSchema.safeParse(
+        question.setAssetMetadataConfig,
+      );
+      if (!parseResult.success) continue;
+      const metadataConfigs = parseResult.data.metadata;
+
+      for (const metadataConfig of metadataConfigs) {
+        const assetMetadataValue =
+          metadataConfig.key in assetMetadata
+            ? assetMetadata[metadataConfig.key]
+            : null;
+
+        if (metadataConfig.type === 'STATIC') {
+          if (metadataConfig.value) {
+            metadataAudit.push({
+              key: metadataConfig.key,
+              staticValue: metadataConfig.value,
+              assetValue: assetMetadataValue,
+              isMet: metadataConfig.value === assetMetadataValue,
+              assetQuestion: question,
+            });
+          }
+        } else {
+          const parsedSelectOptions =
+            question.valueType === AssetQuestionResponseType.SELECT
+              ? question.selectOptions
+                ? (CreateAssetQuestionSchema.shape.selectOptions.safeParse(
+                    question.selectOptions,
+                  ).data ?? null)
+                : null
+              : null;
+
+          metadataAudit.push({
+            key: metadataConfig.key,
+            assetValue: assetMetadataValue,
+            isMet:
+              !!assetMetadataValue &&
+              (!parsedSelectOptions ||
+                parsedSelectOptions.some(
+                  (o) => o.value === assetMetadataValue,
+                )),
+            assetQuestion: question,
+          });
+        }
+      }
+    }
+
+    return {
+      checkResults: metadataAudit,
+      isConfigurationMet: metadataAudit.every((m) => m.isMet),
+    };
   }
 
   async migrateQuestionsToConditions() {

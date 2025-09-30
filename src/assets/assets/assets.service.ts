@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { subDays } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import { UsersService } from 'src/clients/users/users.service';
@@ -231,10 +226,6 @@ export class AssetsService {
     const asset = await prisma.asset.findUniqueOrThrow({
       where: { id },
     });
-
-    if (asset.configured) {
-      throw new BadRequestException('Asset is already configured.');
-    }
 
     const questionsMap = await prisma.assetQuestion
       .findMany({
