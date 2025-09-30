@@ -47,6 +47,11 @@ export class AssetsController {
     return this.assetsService.getMetadataKeys();
   }
 
+  @Get('metadata-values/:key')
+  getMetadataValues(@Param('key') key: string) {
+    return this.assetsService.getMetadataValues(key);
+  }
+
   // No more than 10 requests per minute or 100 requests per 15 minutes.
   @Throttle({
     default: { limit: 10, ttl: 1 * 60 * 1000 },

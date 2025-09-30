@@ -375,6 +375,76 @@ ORDER BY key
     ];
   }
 
+  async getMetadataValues(key: string) {
+    const prisma = await this.prisma.forContext();
+
+    const conditionMetadataKeysPromise = prisma.$queryRaw<
+      Array<{ metadata_value: string }>
+    >`
+    SELECT DISTINCT split_part(elem, ':', 2) as metadata_value
+    FROM "AssetQuestionCondition" aqc,
+         jsonb_array_elements_text("value") as elem
+    WHERE aqc."value" IS NOT NULL
+      AND aqc."conditionType" = 'METADATA'
+      AND split_part(elem, ':', 1) = ${key}
+    ORDER BY metadata_value
+  `.then((r) => r.map((r) => r.metadata_value));
+
+    const setAssetMetadataKeysPromise = prisma.$queryRaw<
+      Array<{ metadata_value: string }>
+    >`
+    SELECT DISTINCT elem->>'value' as metadata_value
+    FROM "SetAssetMetadataConfig",
+        jsonb_array_elements(metadata) as elem
+    WHERE elem->>'value' IS NOT NULL
+      AND elem->>'value' != ''
+      AND elem->>'key' = ${key}
+  `.then((r) => r.map((r) => r.metadata_value));
+
+    const assetMetadataKeysPromise = prisma.$queryRaw<
+      Array<{ metadata_value: string }>
+    >`
+    SELECT DISTINCT "metadata"->${key} as metadata_value
+    FROM "Asset"
+    WHERE "metadata" IS NOT NULL
+      AND "metadata" ? ${key}
+    ORDER BY metadata_value
+  `.then((r) => r.map((r) => r.metadata_value));
+
+    const productMetadataKeysPromise = prisma.$queryRaw<
+      Array<{ metadata_value: string }>
+    >`
+SELECT DISTINCT "metadata"->${key} as metadata_value
+FROM "Product"
+WHERE "metadata" IS NOT NULL
+  AND "metadata" ? ${key}
+ORDER BY metadata_value
+`.then((r) => r.map((r) => r.metadata_value));
+
+    const [
+      conditionMetadataKeys,
+      setAssetMetadataKeys,
+      assetMetadataKeys,
+      productMetadataKeys,
+    ] = await Promise.all([
+      conditionMetadataKeysPromise,
+      setAssetMetadataKeysPromise,
+      assetMetadataKeysPromise,
+      productMetadataKeysPromise,
+    ]);
+
+    return [
+      ...new Set(
+        [
+          ...conditionMetadataKeys,
+          ...setAssetMetadataKeys,
+          ...assetMetadataKeys,
+          ...productMetadataKeys,
+        ].filter(Boolean),
+      ),
+    ];
+  }
+
   async handleAlertTriggers(
     tx: PrismaTxClient,
     inspection: Prisma.InspectionGetPayload<{
