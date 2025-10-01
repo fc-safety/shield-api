@@ -183,7 +183,10 @@ export class TagsService {
 
     // If the tag is registered to a site, the user must belong to that
     // site.
-    if (userPerson.siteId !== tag.siteId) {
+    if (
+      !userPerson.allowedSiteIds.includes(tag.siteId) &&
+      tag.siteId !== userPerson.siteId
+    ) {
       throw new BadRequestException('Tag is not registered to your site.');
     }
 

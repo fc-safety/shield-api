@@ -413,7 +413,7 @@ export class AssetQuestionsService {
       ].map(([k, v]) => `${k}:${v}`);
       const uniqueKeyPairs = [...new Set(keyPairs)];
 
-      if (keyPairs.length > 0) {
+      if (uniqueKeyPairs.length > 0) {
         // orFilters.push({
         //   conditionType: AssetQuestionConditionType.METADATA,
         //   value: { array_contains: keyPairs },
