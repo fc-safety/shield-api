@@ -411,13 +411,15 @@ export class AssetQuestionsService {
         ...Object.entries(assetMetadata ?? {}),
         ...Object.entries(productMetadata ?? {}),
       ].map(([k, v]) => `${k}:${v}`);
+      const uniqueKeyPairs = [...new Set(keyPairs)];
+
       if (keyPairs.length > 0) {
         // orFilters.push({
         //   conditionType: AssetQuestionConditionType.METADATA,
         //   value: { array_contains: keyPairs },
         // });
         orWhereClauses.push(
-          Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.METADATA} AND condition."value" <@ to_jsonb(${keyPairs}))`,
+          Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.METADATA} AND array(SELECT jsonb_array_elements_text(condition."value")) && array(SELECT jsonb_array_elements_text(to_jsonb(${uniqueKeyPairs}))))`,
         );
       }
     }
