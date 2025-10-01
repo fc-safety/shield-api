@@ -441,7 +441,7 @@ function buildRLSContextStatements(
   return [
     prismaClient.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
     prismaClient.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
-    prismaClient.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIds}, TRUE)`,
+    prismaClient.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIdsStr}, TRUE)`,
     prismaClient.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
     prismaClient.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
   ];

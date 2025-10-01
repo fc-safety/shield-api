@@ -9,7 +9,7 @@ LEFT JOIN (
     FROM "Inspection" i
     ORDER BY i."assetId", i."createdOn" DESC
 ) i ON a."id" = i."assetId"
-WHERE (i."createdOn" IS NOT  NULL AND i."createdOn" < NOW() - (INTERVAL '1 day' * COALESCE(a."inspectionCycle", c."defaultInspectionCycle")))
+WHERE (i."createdOn" IS NULL OR i."createdOn" < NOW() - (INTERVAL '1 day' * COALESCE(a."inspectionCycle", c."defaultInspectionCycle")))
 AND a."active" = TRUE
 AND ($1::text IS NULL OR a."clientId" = $1::text)
 AND c."demoMode" = TRUE

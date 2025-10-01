@@ -36,6 +36,11 @@ export class ClientsController {
     return this.clientsService.findAll(queryClientDto);
   }
 
+  @Get('my-organization')
+  findMyOrganization() {
+    return this.clientsService.findUserOrganization();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.clientsService.findOne(id);
@@ -79,5 +84,11 @@ export class ClientsController {
     return this.clientsService.generateInspectionsForDemoClient(
       generateDemoInspectionsDto,
     );
+  }
+
+  @CheckIsAuthenticated()
+  @Post('/renew-noncompliant-demo-assets')
+  async renewNoncompliantDemoAssets() {
+    return this.clientsService.renewNoncompliantDemoAssets();
   }
 }
