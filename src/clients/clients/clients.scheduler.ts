@@ -27,16 +27,23 @@ export class ClientsScheduler {
       },
     });
     for (const client of clients) {
-      const result = await this.clientsService.renewNoncompliantDemoAssets({
-        clientId: client.id,
-      });
+      try {
+        const result = await this.clientsService.renewNoncompliantDemoAssets({
+          clientId: client.id,
+        });
 
-      if (result) {
-        this.logger.debug(
-          `--> Renewed ${result.succeededAssetIds.length} assets (${result.failedAssetIds.length} failed) for client ${client.name}`,
+        if (result) {
+          this.logger.debug(
+            `--> Renewed ${result.succeededAssetIds.length} assets (${result.failedAssetIds.length} failed) for client ${client.name}`,
+          );
+        } else {
+          this.logger.debug(`--> No assets to renew for client ${client.name}`);
+        }
+      } catch (error) {
+        this.logger.error(
+          `--> Error renewing assets for client ${client.name}`,
+          error,
         );
-      } else {
-        this.logger.debug(`--> No assets to renew for client ${client.name}`);
       }
     }
   }
