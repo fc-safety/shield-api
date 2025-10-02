@@ -570,8 +570,19 @@ export class ClientsService {
         // Generate inspection data with realistic patterns
         const now = new Date();
         const startDate = subMonths(now, options.monthsBack);
-        const inspectionsCreated: string[] = [];
 
+        if (options.resetInspections) {
+          await tx.inspection.deleteMany({
+            where: {
+              clientId: client.id,
+              createdOn: {
+                gte: startDate.toISOString(),
+              },
+            },
+          });
+        }
+
+        const inspectionsCreated: string[] = [];
         for (let i = 1; i <= options.monthsBack; i++) {
           const currentDate = min([
             subMonths(new Date(), options.monthsBack - i),
