@@ -96,7 +96,7 @@ export default function TeamInspectionReminderTemplateReact(
   props: TeamInspectionReminderTemplateProps,
 ): React.ReactElement {
   return (
-    <Layout preview="This is a test email from Shield">
+    <Layout preview={`Inspection Reminder from ${props.requestorName}`}>
       <Block>
         <Paragraph>Hi {props.firstName},</Paragraph>
         <Paragraph>
