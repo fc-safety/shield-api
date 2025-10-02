@@ -355,6 +355,10 @@ model AssetQuestionCondition {
   description     String?
   client          Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId        String?
+
+  @@index([clientId])
+  @@index([clientId, assetQuestionId])
+  @@index([conditionType])
 }
 
 model AssetAlertCriterion {
