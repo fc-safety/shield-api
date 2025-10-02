@@ -736,6 +736,24 @@ export class ClientsService {
     const hasMultiSiteVisibility =
       currentUser && currentUser.hasMultiSiteVisibility;
 
+    const allowedSiteIds = currentUser
+      ? currentUser.allowedSiteIdsStr.split(',')
+      : [];
+    let allowedSiteExternalIds: string[] = [];
+    if (!hasMultiSiteVisibility && allowedSiteIds.length > 0) {
+      const allowedSites = await prisma.site.findMany({
+        where: {
+          id: {
+            in: allowedSiteIds,
+          },
+        },
+        select: {
+          externalId: true,
+        },
+      });
+      allowedSiteExternalIds = allowedSites.map((s) => s.externalId);
+    }
+
     // Get all Keycloak users for this client to select inspectors from
     const keycloakUsersResponse =
       await this.keycloakService.findUsersByAttribute({
@@ -754,9 +772,7 @@ export class ClientsService {
                     q: {
                       key: 'site_id',
                       op: 'in',
-                      value: currentUser
-                        ? currentUser.allowedSiteIdsStr.split(',')
-                        : [],
+                      value: allowedSiteExternalIds,
                     } as const,
                   },
                 ]
