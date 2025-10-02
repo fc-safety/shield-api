@@ -9,10 +9,12 @@ import crypto from 'crypto';
 import { add, isAfter } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import { AuthService, SigningKeyExpiredError } from 'src/auth/auth.service';
+import { PersonRepresentation } from 'src/clients/people/people.service';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from 'src/config/api-config.service';
+import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Readable } from 'stream';
 import { BulkGenerateSignedTagUrlDto } from './dto/bulk-generate-signed-tag-url.dto';
@@ -78,41 +80,45 @@ export class TagsService {
   }
 
   async findOneForInspection(externalId: string) {
-    return this.prisma
-      .forContext()
-      .then((prisma) =>
-        prisma.tag.findFirstOrThrow({
-          where: { externalId },
-          include: {
-            client: true,
-            site: true,
-            asset: {
-              include: {
-                client: true,
-                product: {
-                  include: {
-                    productCategory: {
-                      include: {
-                        assetQuestions: {
-                          where: {
-                            active: true,
-                          },
+    const prisma = await this.prisma.build();
+    return prisma.tag
+      .findFirstOrThrow({
+        where: { externalId },
+        include: {
+          client: true,
+          site: true,
+          asset: {
+            include: {
+              client: true,
+              product: {
+                include: {
+                  productCategory: {
+                    include: {
+                      assetQuestions: {
+                        where: {
+                          active: true,
                         },
                       },
                     },
-                    manufacturer: true,
-                    assetQuestions: {
-                      where: {
-                        active: true,
-                      },
+                  },
+                  manufacturer: true,
+                  assetQuestions: {
+                    where: {
+                      active: true,
                     },
                   },
                 },
-                setupQuestionResponses: true,
               },
+              setupQuestionResponses: true,
             },
           },
-        }),
+        },
+      })
+      .catch(
+        this.findAndThrowReasonForTagError(
+          { externalId },
+          prisma.$currentUser(),
+        ),
       )
       .catch(as404OrThrow);
   }
@@ -148,6 +154,12 @@ export class TagsService {
             },
           },
         })
+        .catch(
+          this.findAndThrowReasonForTagError(
+            { externalId },
+            prisma.$currentUser(),
+          ),
+        )
         .catch(as404OrThrow),
     );
   }
@@ -184,7 +196,7 @@ export class TagsService {
     // If the tag is registered to a site, the user must belong to that
     // site.
     if (
-      !userPerson.allowedSiteIds.includes(tag.siteId) &&
+      !userPerson.allowedSiteIdsStr.includes(tag.siteId) &&
       tag.siteId !== userPerson.siteId
     ) {
       throw new BadRequestException('Tag is not registered to your site.');
@@ -584,5 +596,48 @@ export class TagsService {
 
       throw error;
     }
+  }
+
+  private findAndThrowReasonForTagError(
+    findInput: Prisma.TagWhereUniqueInput,
+    currentUser: PersonRepresentation | undefined | null,
+  ) {
+    return async (error: unknown) => {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        // For this endpoint in particular, we want to alert users as to why they are
+        // unable to access the tag.
+
+        // If this tag exists, get the client and site IDs.
+        const { clientId, siteId } = await this.prisma
+          .bypassRLS()
+          .tag.findUniqueOrThrow({
+            where: findInput,
+            select: { clientId: true, siteId: true },
+          });
+
+        // Try to check against the current user (if present). If the user is present along
+        // with the client and site IDs, alert the user as to why they are unable to access the tag.
+        if (currentUser) {
+          if (clientId && currentUser.clientId !== clientId) {
+            throw new BadRequestException(
+              'Tag is not registered to your client. Please contact your administrator if you think this is a mistake.',
+            );
+          }
+          if (
+            siteId &&
+            !currentUser.allowedSiteIdsStr.split(',').includes(siteId) &&
+            siteId !== currentUser.siteId
+          ) {
+            throw new BadRequestException(
+              'Tag is not registered to your site. Please contact your administrator if you think this is a mistake.',
+            );
+          }
+        }
+      }
+      throw error;
+    };
   }
 }

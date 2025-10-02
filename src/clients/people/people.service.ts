@@ -14,7 +14,7 @@ export interface PersonRepresentation {
   id: string;
   idpId: string | null;
   siteId: string;
-  allowedSiteIds: string; // Comma delimited
+  allowedSiteIdsStr: string; // Comma delimited
   clientId: string;
   visibility: TVisibility;
 }
@@ -48,13 +48,13 @@ export class PeopleService {
     const user = userInput ?? this.cls.get('user');
     invariant(user, 'No user in CLS');
 
-    let [clientId, siteId, allowedSiteIds] = [
+    let [clientId, siteId, allowedSiteIdsStr] = [
       null as string | null,
       null as string | null,
       null as string | null,
     ];
 
-    [clientId, siteId, allowedSiteIds] = await Promise.all([
+    [clientId, siteId, allowedSiteIdsStr] = await Promise.all([
       this.getUserClientId(user),
       this.getUserSiteId(user),
       this.getAllowedSiteIds(user),
@@ -105,7 +105,7 @@ export class PeopleService {
           clientId,
           idpId,
           visibility: user.visibility,
-          allowedSiteIds,
+          allowedSiteIdsStr,
         })),
       60 * 60 * 1000, // 1 hour
     );

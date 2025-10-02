@@ -690,7 +690,7 @@ export class ClientNotificationsProcessor
             id: '1',
             idpId: '1',
             siteId: site.id,
-            allowedSiteIds: site.id, // This accepts a comma-delimited list of site IDs.
+            allowedSiteIdsStr: site.id, // This accepts a comma-delimited list of site IDs.
             clientId: clientId,
             visibility,
           },

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import pRetry from 'p-retry';
@@ -114,6 +118,49 @@ export class ClientsService {
         })
         .catch(as404OrThrow),
     );
+  }
+
+  async findUserOrganization() {
+    const prisma = await this.prisma.build({ context: 'user' });
+    const currentUser = prisma.$currentUser();
+    if (!currentUser) {
+      throw new NotFoundException(
+        'Cannot find your organization, because no user information was found.',
+      );
+    }
+
+    const siteResult = await prisma.site.findUnique({
+      where: { id: currentUser.siteId },
+      select: {
+        id: true,
+        name: true,
+        externalId: true,
+        address: true,
+        phoneNumber: true,
+        primary: true,
+        client: {
+          select: {
+            id: true,
+            name: true,
+            externalId: true,
+            address: true,
+            phoneNumber: true,
+            demoMode: true,
+          },
+        },
+      },
+    });
+
+    if (!siteResult) {
+      throw new NotFoundException('Cannot details on your organization.');
+    }
+
+    const { client, ...site } = siteResult;
+
+    return {
+      site,
+      client,
+    };
   }
 
   async update(id: string, updateClientDto: UpdateClientDto) {
@@ -606,11 +653,18 @@ export class ClientsService {
     );
   }
 
-  async renewNoncompliantDemoAssets(options: { clientId: string }) {
+  async renewNoncompliantDemoAssets(options: { clientId?: string } = {}) {
     const prisma = await this.prisma.build();
 
+    const currentUser = prisma.$currentUser();
+    const clientId = options.clientId ?? currentUser?.clientId;
+
+    if (!clientId) {
+      throw new BadRequestException('Client ID is required');
+    }
+
     const client = await prisma.client.findUnique({
-      where: { id: options.clientId, demoMode: true },
+      where: { id: clientId, demoMode: true },
       include: {
         sites: true,
       },
@@ -625,9 +679,9 @@ export class ClientsService {
     const succeededAssetIds: string[] = [];
     const failedAssetIds: string[] = [];
 
-    await prisma.$transaction(async (tx) => {
+    await this.prisma.bypassRLS().$transaction(async (tx) => {
       const assetsToRenew = await tx.$queryRawTyped(
-        getAssetsToRenewForDemoClient(options.clientId),
+        getAssetsToRenewForDemoClient(client.id),
       );
 
       for (const asset of assetsToRenew) {
@@ -638,7 +692,7 @@ export class ClientsService {
         });
         if (!inspectionData) continue;
         try {
-          await this.createInspection(tx, inspectionData);
+          await this.createInspection(tx as PrismaTxClient, inspectionData);
           succeededAssetIds.push(asset.id);
         } catch (error) {
           failedAssetIds.push(asset.id);
