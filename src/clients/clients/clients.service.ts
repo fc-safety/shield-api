@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
@@ -36,6 +37,8 @@ const MAX_TX_TIMEOUT_MS_DEMO_INSPECTIONS_GENERATION = 60000;
 
 @Injectable()
 export class ClientsService {
+  private readonly logger = new Logger(ClientsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
@@ -152,7 +155,7 @@ export class ClientsService {
     });
 
     if (!siteResult) {
-      throw new NotFoundException('Cannot details on your organization.');
+      throw new NotFoundException('Cannot find details on your organization.');
     }
 
     const { client, ...site } = siteResult;
@@ -567,8 +570,19 @@ export class ClientsService {
         // Generate inspection data with realistic patterns
         const now = new Date();
         const startDate = subMonths(now, options.monthsBack);
-        const inspectionsCreated: string[] = [];
 
+        if (options.resetInspections) {
+          await tx.inspection.deleteMany({
+            where: {
+              clientId: client.id,
+              createdOn: {
+                gte: startDate.toISOString(),
+              },
+            },
+          });
+        }
+
+        const inspectionsCreated: string[] = [];
         for (let i = 1; i <= options.monthsBack; i++) {
           const currentDate = min([
             subMonths(new Date(), options.monthsBack - i),
@@ -679,11 +693,11 @@ export class ClientsService {
     const succeededAssetIds: string[] = [];
     const failedAssetIds: string[] = [];
 
-    await this.prisma.bypassRLS().$transaction(async (tx) => {
-      const assetsToRenew = await tx.$queryRawTyped(
-        getAssetsToRenewForDemoClient(client.id),
-      );
+    const assetsToRenew = await prisma.$queryRawTyped(
+      getAssetsToRenewForDemoClient(client.id),
+    );
 
+    await prisma.$transaction(async (tx) => {
       for (const asset of assetsToRenew) {
         const inspectionData = await this.generateRandomDemoInspection({
           asset,
@@ -692,9 +706,13 @@ export class ClientsService {
         });
         if (!inspectionData) continue;
         try {
-          await this.createInspection(tx as PrismaTxClient, inspectionData);
+          await this.createInspection(tx, inspectionData);
           succeededAssetIds.push(asset.id);
         } catch (error) {
+          this.logger.warn(
+            `Failed to create inspection for asset ${asset.id}:`,
+            error,
+          );
           failedAssetIds.push(asset.id);
         }
       }
@@ -714,16 +732,36 @@ export class ClientsService {
     }>,
   ) {
     const prisma = await this.prisma.build();
+    const currentUser = prisma.$currentUser();
+    const hasMultiSiteVisibility =
+      currentUser && currentUser.hasMultiSiteVisibility;
 
     // Get all Keycloak users for this client to select inspectors from
     const keycloakUsersResponse =
       await this.keycloakService.findUsersByAttribute({
         filter: {
-          q: {
-            key: 'client_id',
-            op: 'eq',
-            value: client.externalId,
-          },
+          AND: [
+            {
+              q: {
+                key: 'client_id',
+                op: 'eq',
+                value: client.externalId,
+              },
+            },
+            ...(!hasMultiSiteVisibility
+              ? [
+                  {
+                    q: {
+                      key: 'site_id',
+                      op: 'in',
+                      value: currentUser
+                        ? currentUser.allowedSiteIdsStr.split(',')
+                        : [],
+                    } as const,
+                  },
+                ]
+              : []),
+          ],
         },
         limit: 500,
         offset: 0,

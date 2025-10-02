@@ -16,7 +16,12 @@ import {
 import React from 'react';
 import { Role } from 'src/admin/roles/model/role';
 import { RolesService } from 'src/admin/roles/roles.service';
-import { TVisibility, VISIBILITY_VALUES } from 'src/auth/permissions';
+import {
+  MULTI_CLIENT_VISIBILITIES,
+  MULTI_SITE_VISIBILITIES,
+  TVisibility,
+  VISIBILITY_VALUES,
+} from 'src/auth/permissions';
 import { ClientUser } from 'src/clients/users/model/client-user';
 import { UsersService } from 'src/clients/users/users.service';
 import { groupBy } from 'src/common/utils';
@@ -673,7 +678,6 @@ export class ClientNotificationsProcessor
       }[]
     > = {
       'client-sites': [],
-      'multi-site': [],
       'site-group': [],
       'single-site': [],
       self: [],
@@ -693,6 +697,10 @@ export class ClientNotificationsProcessor
             allowedSiteIdsStr: site.id, // This accepts a comma-delimited list of site IDs.
             clientId: clientId,
             visibility,
+            hasMultiClientVisibility:
+              MULTI_CLIENT_VISIBILITIES.includes(visibility),
+            hasMultiSiteVisibility:
+              MULTI_SITE_VISIBILITIES.includes(visibility),
           },
         });
         const assetIds = await usersPrismaClient.asset

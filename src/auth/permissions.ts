@@ -61,10 +61,16 @@ export const VISIBILITY_VALUES = [
   'global',
   'client-sites',
   'site-group',
-  'multi-site',
   'single-site',
   'self',
 ] as const;
+
+export const MULTI_CLIENT_VISIBILITIES = ['super-admin', 'global'];
+
+export const MULTI_SITE_VISIBILITIES = [
+  ...MULTI_CLIENT_VISIBILITIES,
+  'client-sites',
+];
 
 // Visibility permissions (determines scope of user access).
 export const VISIBILITY = buildPermissions('visibility', VISIBILITY_VALUES);

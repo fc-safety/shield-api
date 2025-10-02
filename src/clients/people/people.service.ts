@@ -3,7 +3,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { Cache } from 'cache-manager';
 import { ClsService } from 'nestjs-cls';
-import { TVisibility } from 'src/auth/permissions';
+import {
+  MULTI_CLIENT_VISIBILITIES,
+  MULTI_SITE_VISIBILITIES,
+  TVisibility,
+} from 'src/auth/permissions';
 import { StatelessUser } from 'src/auth/user.schema';
 import { CommonClsStore } from 'src/common/types';
 import { isNil } from 'src/common/utils';
@@ -17,6 +21,8 @@ export interface PersonRepresentation {
   allowedSiteIdsStr: string; // Comma delimited
   clientId: string;
   visibility: TVisibility;
+  hasMultiClientVisibility: boolean;
+  hasMultiSiteVisibility: boolean;
 }
 
 export class UserConfigurationError extends Error {
@@ -106,6 +112,12 @@ export class PeopleService {
           idpId,
           visibility: user.visibility,
           allowedSiteIdsStr,
+          hasMultiClientVisibility: MULTI_CLIENT_VISIBILITIES.includes(
+            user.visibility,
+          ),
+          hasMultiSiteVisibility: MULTI_SITE_VISIBILITIES.includes(
+            user.visibility,
+          ),
         })),
       60 * 60 * 1000, // 1 hour
     );
