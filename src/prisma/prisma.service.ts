@@ -79,8 +79,8 @@ export class PrismaService
     return this.build({ context: 'user' });
   }
 
-  public bypassRLS() {
-    return this.$extends(this.buildBypassRLSExtension());
+  public bypassRLS(options?: BypassRLSExtensionOptions) {
+    return this.$extends(this.buildBypassRLSExtension(options));
   }
 
   public async forContext(_context?: ViewContext) {
@@ -183,12 +183,13 @@ export class PrismaService
     return {};
   }
 
-  private buildBypassRLSExtension() {
+  private buildBypassRLSExtension(options: BypassRLSExtensionOptions = {}) {
     return Prisma.defineExtension((prisma) => {
       // Build base extension that all subsequent extensions will build upon.
       const extendedPrisma = prisma.$extends({
         client: {
           $viewContext: 'admin',
+          $currentUser: () => options.person,
         },
         model: {
           $allModels: {
@@ -406,6 +407,10 @@ export class PrismaService
 
 export interface PrimaryExtensionOptions {
   context?: ViewContext;
+  person?: PersonRepresentation;
+}
+
+export interface BypassRLSExtensionOptions {
   person?: PersonRepresentation;
 }
 
