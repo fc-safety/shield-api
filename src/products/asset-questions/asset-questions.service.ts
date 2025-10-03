@@ -501,12 +501,21 @@ export class AssetQuestionsService {
     });
   }
 
-  async checkAssetConfiguration(assetId: string) {
+  async checkAssetConfiguration(
+    assetId: string | CheckAssetConfigurationAssetInput,
+  ) {
     const prisma = await this.prisma.build();
-    const asset = await prisma.asset.findUniqueOrThrow({
-      where: { id: assetId },
-      include: { product: true, site: { include: { address: true } } },
-    });
+
+    let asset: CheckAssetConfigurationAssetInput;
+
+    if (typeof assetId === 'string') {
+      asset = await prisma.asset.findUniqueOrThrow({
+        where: { id: assetId },
+        include: { product: true, site: { include: { address: true } } },
+      });
+    } else {
+      asset = assetId;
+    }
 
     const questionIds = await this.findQuestionIdsByAsset(
       asset,
@@ -530,7 +539,11 @@ export class AssetQuestionsService {
       staticValue?: string;
       assetValue: string | null;
       isMet: boolean;
-      assetQuestion: Prisma.AssetQuestionGetPayload<{}>;
+      assetQuestion: Prisma.AssetQuestionGetPayload<{
+        include: {
+          setAssetMetadataConfig: true;
+        };
+      }>;
     }[] = [];
 
     for (const question of questions) {
@@ -749,3 +762,7 @@ const getValidatedMetadata = (metadata: Prisma.JsonValue): object | null => {
   }
   return null;
 };
+
+type CheckAssetConfigurationAssetInput = Prisma.AssetGetPayload<{
+  include: { product: true; site: { include: { address: true } } };
+}>;
