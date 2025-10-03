@@ -53,7 +53,7 @@ export class ClientsService {
    * Generate realistic responses for asset questions based on their type
    */
   private generateQuestionResponse(
-    question: any,
+    question: Prisma.AssetQuestionGetPayload<{}>,
     context: { assetSerialNumber?: string; isSetup?: boolean },
   ): any {
     switch (question.valueType) {
@@ -79,6 +79,23 @@ export class ClientsService {
           'Visual inspection completed. No maintenance required at this time.',
         ];
         return comments[Math.floor(Math.random() * comments.length)];
+      case AssetQuestionResponseType.NUMBER:
+        return Math.floor(Math.random() * 100);
+      case AssetQuestionResponseType.DATE:
+        return new Date();
+      case AssetQuestionResponseType.SELECT:
+        if (!Array.isArray(question.selectOptions)) {
+          break;
+        }
+        const values = question.selectOptions
+          .filter(
+            (o): o is { value: string } =>
+              o !== null && typeof o === 'object' && 'value' in o,
+          )
+          .map((o) => o.value);
+        return values[Math.floor(Math.random() * values.length)];
+      case AssetQuestionResponseType.IMAGE:
+        return 'https://placehold.co/600x400';
       default:
         return 'Yes';
     }
@@ -492,51 +509,88 @@ export class ClientsService {
 
     const prisma = await this.prisma.build();
 
-    return prisma.$transaction(
-      async (tx) => {
-        const client = await tx.client
-          .findUniqueOrThrow({
-            where: uniqueWhere,
+    const client = await prisma.client
+      .findUniqueOrThrow({
+        where: uniqueWhere,
+        include: {
+          sites: {
             include: {
-              sites: {
+              address: true,
+              assets: {
                 include: {
-                  assets: {
-                    include: {
-                      product: true,
-                    },
-                  },
+                  product: true,
                 },
               },
             },
-          })
-          .catch(as404OrThrow);
+          },
+        },
+      })
+      .catch(as404OrThrow);
 
-        if (!client.demoMode) {
-          throw new BadRequestException(
-            'Client must be in demo mode to perform this action.',
-          );
-        }
+    if (!client.demoMode) {
+      throw new BadRequestException(
+        'Client must be in demo mode to perform this action.',
+      );
+    }
 
-        const validInspectors = await this.getValidDemoInspectors(client);
+    const validInspectors = await this.getValidDemoInspectors(client);
+    if (validInspectors.length === 0) {
+      throw new BadRequestException(
+        'No valid inspectors found for this client.',
+      );
+    }
 
-        if (validInspectors.length === 0) {
-          throw new BadRequestException(
-            'No valid inspectors found for this client.',
-          );
-        }
+    const allAssets = client.sites.flatMap(({ assets, ...site }) =>
+      assets.map((a) => ({ ...a, site })),
+    );
 
-        const allAssets = client.sites.flatMap((site) => site.assets);
+    if (allAssets.length === 0) {
+      throw new BadRequestException('No assets found for this client.');
+    }
 
-        if (allAssets.length === 0) {
-          throw new BadRequestException('No assets found for this client.');
+    const inspectionQuestionCache = new ParentChildIdMap<
+      (typeof allAssets)[0],
+      Awaited<ReturnType<typeof this.assetQuestionsService.findByAsset>>[number]
+    >();
+
+    const assetConfigurationResults = await Promise.all(
+      allAssets.map((a) =>
+        this.assetQuestionsService
+          .checkAssetConfiguration(a)
+          .then((r) => ({ ...r, asset: a })),
+      ),
+    );
+
+    return prisma.$transaction(
+      async (tx) => {
+        // For assets that need updated configuration, do that now. This affects which
+        // questions are presented to the assets. This should only need to be done once,
+        // or any time a configuration question changes.
+        if (assetConfigurationResults.length > 0) {
+          for (const result of assetConfigurationResults) {
+            const { asset, isConfigurationMet, checkResults } = result;
+            if (!isConfigurationMet) {
+              await this.assetsService.handleSetMetadataFromConfigs(
+                tx,
+                asset,
+                checkResults.map((r) => ({
+                  assetQuestion: r.assetQuestion,
+                  value: this.generateQuestionResponse(r.assetQuestion, {
+                    assetSerialNumber: asset.serialNumber,
+                    isSetup: true,
+                  }),
+                })),
+              );
+            }
+          }
         }
 
         // Ensure all assets are set up with their setup questions answered
         const assetsToSetup = allAssets.filter((asset) => !asset.setupOn);
         for (const asset of assetsToSetup) {
           // Get setup questions for this asset
-          const setupQuestions = await this.assetQuestionsService.findByAssetId(
-            asset.id,
+          const setupQuestions = await this.assetQuestionsService.findByAsset(
+            asset,
             AssetQuestionType.SETUP,
           );
 
@@ -634,6 +688,7 @@ export class ClientsService {
                     asset.createdOn = newCreatedOn;
                   }
                 },
+                inspectionQuestionCache,
               });
 
               if (!inspectionData) continue;
@@ -832,6 +887,10 @@ export class ClientsService {
     clientId: string;
     currentDate?: Date;
     onCheckAssetCreatedOn?: (inspectionTime: Date) => Promise<void>;
+    inspectionQuestionCache?: ParentChildIdMap<
+      typeof options.asset,
+      Awaited<ReturnType<AssetQuestionsService['findByAsset']>>[number]
+    >;
   }) {
     const {
       asset,
@@ -883,10 +942,16 @@ export class ClientsService {
       clientId: string;
     }> = [];
 
-    const inspectionQuestions = await this.assetQuestionsService.findByAssetId(
-      asset.id,
-      AssetQuestionType.INSPECTION,
-    );
+    let inspectionQuestions =
+      options.inspectionQuestionCache?.getChildren(asset);
+
+    if (!inspectionQuestions) {
+      inspectionQuestions = await this.assetQuestionsService.findByAsset(
+        asset,
+        AssetQuestionType.INSPECTION,
+      );
+      options.inspectionQuestionCache?.addChildren(asset, inspectionQuestions);
+    }
 
     inspectionResponses = inspectionQuestions.map((question) => {
       const responseValue = this.generateQuestionResponse(question, {
@@ -953,5 +1018,35 @@ export class ClientsService {
       skipNotifications: true,
     });
     return inspection;
+  }
+}
+
+/**
+ * Maps parent entities to their child entities by id.
+ * Useful for efficiently retrieving children by parent.
+ */
+class ParentChildIdMap<T extends { id: string }, U extends { id: string }> {
+  private readonly parentToChildIds = new Map<string, string[]>();
+  private readonly childById = new Map<string, U>();
+
+  constructor() {}
+
+  getChildren(parent: T): U[] | undefined {
+    const childIds = this.parentToChildIds.get(parent.id);
+    if (childIds) {
+      return childIds
+        .map((id) => this.childById.get(id))
+        .filter(
+          (child): child is NonNullable<typeof child> => child !== undefined,
+        );
+    }
+  }
+
+  addChildren(parent: T, children: U[]): void {
+    this.parentToChildIds.set(
+      parent.id,
+      children.map((child) => child.id),
+    );
+    children.forEach((child) => this.childById.set(child.id, child));
   }
 }
