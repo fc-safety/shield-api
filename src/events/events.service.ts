@@ -36,31 +36,102 @@ export class EventsService {
         return new Observable((observer) => {
           this.logger.debug(`Subscribing to channel ${channel}`);
 
+          let isSubscribed = false;
+          let errorListener: ((err: Error) => void) | null = null;
+          let endListener: (() => void) | null = null;
+
           const unsubscribe = () => {
+            if (!isSubscribed) {
+              return;
+            }
             this.logger.debug(`Unsubscribing from channel ${channel}`);
-            this.redis.getSubscriber().pUnsubscribe(channel);
+            try {
+              this.redis.getSubscriber().pUnsubscribe(channel);
+              isSubscribed = false;
+            } catch (error) {
+              this.logger.error(
+                `Error unsubscribing from channel ${channel}`,
+                error,
+              );
+            }
+
+            // Clean up event listeners
+            if (errorListener) {
+              this.redis.getSubscriber().off('error', errorListener);
+              errorListener = null;
+            }
+            if (endListener) {
+              this.redis.getSubscriber().off('end', endListener);
+              endListener = null;
+            }
           };
 
-          this.redis.getSubscriber().pSubscribe(channel, (message) => {
-            const payload = JSON.parse(message) as Record<string, string>;
+          // Monitor Redis subscriber connection health
+          errorListener = (err: Error) => {
+            this.logger.error(
+              `Redis subscriber error on channel ${channel}`,
+              err,
+            );
+            observer.error(
+              new Error(`Redis subscriber connection error: ${err.message}`),
+            );
+          };
 
-            if (!options.models.includes(payload.model as any)) {
-              return;
+          endListener = () => {
+            this.logger.warn(
+              `Redis subscriber disconnected while listening to ${channel}`,
+            );
+            observer.error(
+              new Error('Redis subscriber connection closed unexpectedly'),
+            );
+          };
+
+          try {
+            const subscriber = this.redis.getSubscriber();
+
+            // Check if subscriber is connected
+            if (!subscriber.isReady) {
+              throw new Error('Redis subscriber is not ready');
             }
 
-            if (
-              options.operations &&
-              !options.operations.includes(payload.operation as any)
-            ) {
-              return;
-            }
+            // Add connection health listeners
+            subscriber.on('error', errorListener);
+            subscriber.on('end', endListener);
 
-            if (options.ids && !options.ids.includes(payload.id)) {
-              return;
-            }
+            subscriber.pSubscribe(channel, (message) => {
+              try {
+                const payload = JSON.parse(message) as Record<string, string>;
 
-            observer.next(payload);
-          });
+                if (!options.models.includes(payload.model as any)) {
+                  return;
+                }
+
+                if (
+                  options.operations &&
+                  !options.operations.includes(payload.operation as any)
+                ) {
+                  return;
+                }
+
+                if (options.ids && !options.ids.includes(payload.id)) {
+                  return;
+                }
+
+                observer.next(payload);
+              } catch (error) {
+                this.logger.error(
+                  `Error processing message from channel ${channel}`,
+                  error,
+                );
+                observer.error(error);
+              }
+            });
+
+            isSubscribed = true;
+          } catch (error) {
+            this.logger.error(`Error subscribing to channel ${channel}`, error);
+            observer.error(error);
+          }
 
           return unsubscribe;
         });

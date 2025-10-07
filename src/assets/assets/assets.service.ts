@@ -547,6 +547,10 @@ ORDER BY metadata_value
         ),
     );
 
+    if (createInputs.length === 0) {
+      return [];
+    }
+
     const results = await tx.alert.createManyAndReturn({
       data: createInputs,
       select: {
@@ -651,6 +655,10 @@ ORDER BY metadata_value
           });
         }),
     );
+
+    if (Object.keys(newMetadata).length === 0) {
+      return;
+    }
 
     const mergedMetadata = {
       ...existingMetadata,
