@@ -23,7 +23,7 @@ export class AlertsController {
     return this.alertsService.findOne(id);
   }
 
-  @CheckPolicies((context) => context.user.canUpdate('alerts'))
+  @CheckPolicies((context) => context.user.can('resolve', 'alerts'))
   @Post(':id/resolve')
   resolveAlert(
     @Param('id') id: string,

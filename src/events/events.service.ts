@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { createId } from '@paralleldrive/cuid2';
 import { ClsService } from 'nestjs-cls';
 import { from, Observable, switchMap } from 'rxjs';
 import { AuthService } from 'src/auth/auth.service';
@@ -26,6 +27,7 @@ export class EventsService {
   public listenDbEvents(options: ListenDbEventsDto) {
     return from(this.validateToken(options.token)).pipe(
       switchMap((person) => {
+        const listenerId = createId();
         const model = options.models.length > 1 ? '*' : options.models[0];
         const operation =
           options.operations && options.operations.length === 1
@@ -34,7 +36,9 @@ export class EventsService {
 
         const channel = `db-events:${person.clientId}:${model}:${operation}`;
         return new Observable((observer) => {
-          this.logger.debug(`Subscribing to channel ${channel}`);
+          this.logger.debug(
+            `[${listenerId}] Subscribing to channel ${channel}`,
+          );
 
           let isSubscribed = false;
           let errorListener: ((err: Error) => void) | null = null;
@@ -44,13 +48,15 @@ export class EventsService {
             if (!isSubscribed) {
               return;
             }
-            this.logger.debug(`Unsubscribing from channel ${channel}`);
+            this.logger.debug(
+              `[${listenerId}] Unsubscribing from channel ${channel}`,
+            );
             try {
               this.redis.getSubscriber().pUnsubscribe(channel);
               isSubscribed = false;
             } catch (error) {
               this.logger.error(
-                `Error unsubscribing from channel ${channel}`,
+                `[${listenerId}] Error unsubscribing from channel ${channel}`,
                 error,
               );
             }
@@ -69,17 +75,19 @@ export class EventsService {
           // Monitor Redis subscriber connection health
           errorListener = (err: Error) => {
             this.logger.error(
-              `Redis subscriber error on channel ${channel}`,
+              `[${listenerId}] Redis subscriber error on channel ${channel}`,
               err,
             );
             observer.error(
-              new Error(`Redis subscriber connection error: ${err.message}`),
+              new Error(
+                `[${listenerId}] Redis subscriber connection error: ${err.message}`,
+              ),
             );
           };
 
           endListener = () => {
             this.logger.warn(
-              `Redis subscriber disconnected while listening to ${channel}`,
+              `[${listenerId}] Redis subscriber disconnected while listening to ${channel}`,
             );
             observer.error(
               new Error('Redis subscriber connection closed unexpectedly'),
@@ -120,7 +128,7 @@ export class EventsService {
                 observer.next(payload);
               } catch (error) {
                 this.logger.error(
-                  `Error processing message from channel ${channel}`,
+                  `[${listenerId}] Error processing message from channel ${channel}`,
                   error,
                 );
                 observer.error(error);
@@ -129,7 +137,10 @@ export class EventsService {
 
             isSubscribed = true;
           } catch (error) {
-            this.logger.error(`Error subscribing to channel ${channel}`, error);
+            this.logger.error(
+              `[${listenerId}] Error subscribing to channel ${channel}`,
+              error,
+            );
             observer.error(error);
           }
 
