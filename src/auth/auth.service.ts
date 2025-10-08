@@ -172,11 +172,34 @@ export class AuthService {
         payload?: never;
       }
   > {
-    const [head, payload, signature] = token.split('.');
-    const decodedHead = this.decodeTokenPart(head) as {
+    let head: string, payload: string, signature: string;
+    let decodedHead: {
       exp: number;
       iat: number;
     };
+
+    try {
+      [head, payload, signature] = token.split('.');
+      const decodedHeadRaw = this.decodeTokenPart(head);
+      if (
+        decodedHeadRaw !== null &&
+        typeof decodedHeadRaw === 'object' &&
+        'exp' in decodedHeadRaw &&
+        'iat' in decodedHeadRaw
+      ) {
+        decodedHead = decodedHeadRaw as {
+          exp: number;
+          iat: number;
+        };
+      } else {
+        throw new Error('Invalid token');
+      }
+    } catch (e) {
+      return {
+        isValid: false,
+        error: 'Invalid token',
+      };
+    }
 
     if (decodedHead.exp < Date.now() / 1000) {
       return {
@@ -199,10 +222,17 @@ export class AuthService {
       };
     }
 
-    return {
-      isValid: true,
-      payload: this.decodeTokenPart(payload) as T,
-    };
+    try {
+      return {
+        isValid: true,
+        payload: this.decodeTokenPart(payload) as T,
+      };
+    } catch (e) {
+      return {
+        isValid: false,
+        error: 'Invalid token',
+      };
+    }
   }
 
   private encodeTokenPart(part: object): string {
