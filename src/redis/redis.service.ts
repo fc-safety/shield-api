@@ -67,8 +67,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    this.client.destroy();
-    this.subscriber.destroy();
+    await Promise.allSettled([this.client.quit(), this.subscriber.quit()]);
   }
 
   public getPublisher() {
@@ -88,9 +87,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     // Subscribe to Redis pattern if not already subscribed
     if (!this.subscribedPatterns.has(pattern)) {
       this.subscribedPatterns.add(pattern);
-      await this.subscriber.pSubscribe(pattern, (message, channel) => {
-        this.eventManager.emit(pattern, message, channel);
-      });
+      await this.subscriber
+        .pSubscribe(pattern, (message, channel) => {
+          this.eventManager.emit(pattern, message, channel);
+        })
+        .catch((e) => {
+          // Cleanup on failure.
+          this.eventManager.off(pattern, listener);
+          this.subscribedPatterns.delete(pattern);
+          throw e;
+        });
     }
   }
 
