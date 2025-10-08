@@ -57,7 +57,6 @@ export class EventsService {
         `[${listenerId}] Adding listener to channel ${channel}`,
       );
 
-      let messageListenerActive = false;
       let errorListener: ((err: Error) => void) | null = null;
       let endListener: (() => void) | null = null;
 
@@ -91,18 +90,12 @@ export class EventsService {
       };
 
       const cleanup = () => {
-        if (!messageListenerActive) {
-          return;
-        }
         this.logger.debug(
           `[${listenerId}] Removing listener from channel ${channel}`,
         );
 
         this.redis
           .removePatternListener(channel, messageListener)
-          .then(() => {
-            messageListenerActive = false;
-          })
           .catch((error) => {
             this.logger.error(
               `[${listenerId}] Error removing listener from channel ${channel}`,
@@ -154,9 +147,7 @@ export class EventsService {
         this.redis.getSubscriber().on('error', errorListener);
         this.redis.getSubscriber().on('end', endListener);
 
-        this.redis.addPatternListener(channel, messageListener).then(() => {
-          messageListenerActive = true;
-        });
+        this.redis.addPatternListener(channel, messageListener);
       } catch (error) {
         this.logger.error(
           `[${listenerId}] Error adding listener to channel ${channel}`,
