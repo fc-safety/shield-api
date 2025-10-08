@@ -4,6 +4,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { EventEmitter } from 'events';
 import { createClient, type RedisClientType } from 'redis';
 import { ApiConfigService } from 'src/config/api-config.service';
 
@@ -12,6 +13,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private readonly client: RedisClientType;
   private readonly subscriber: RedisClientType;
+  private readonly subscribedPatterns: Set<string> = new Set();
+  private readonly eventManager = new EventEmitter<
+    Record<string, [string, string]>
+  >();
 
   constructor(private readonly config: ApiConfigService) {
     this.client = createClient({
@@ -72,5 +77,33 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   public getSubscriber() {
     return this.subscriber;
+  }
+
+  public async addPatternListener(
+    pattern: string,
+    listener: (message: string, channel: string) => void,
+  ) {
+    this.eventManager.on(pattern, listener);
+
+    // Subscribe to Redis pattern if not already subscribed
+    if (!this.subscribedPatterns.has(pattern)) {
+      this.subscribedPatterns.add(pattern);
+      await this.subscriber.pSubscribe(pattern, (message, channel) => {
+        this.eventManager.emit(pattern, message, channel);
+      });
+    }
+  }
+
+  public async removePatternListener(
+    pattern: string,
+    listener: (message: string, channel: string) => void,
+  ) {
+    this.eventManager.off(pattern, listener);
+
+    // Unsubscribe from Redis pattern if no listeners are registered
+    if (this.eventManager.listenerCount(pattern) === 0) {
+      this.subscribedPatterns.delete(pattern);
+      await this.subscriber.pUnsubscribe(pattern);
+    }
   }
 }
