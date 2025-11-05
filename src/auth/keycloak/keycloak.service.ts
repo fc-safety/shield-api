@@ -231,4 +231,202 @@ export class KeycloakService {
       return acc;
     }, attributes);
   }
+
+  /**
+   * Transactionally add a user to multiple groups.
+   * If any operation fails, all successful operations are rolled back.
+   *
+   * @param userId User ID to add to groups
+   * @param groupIds Array of group IDs to add user to
+   * @returns Promise that resolves if all operations succeed, rejects if any fail
+   * @throws Error with details if operations fail or rollback fails
+   */
+  public async addUserToGroupsTransactional(
+    userId: string,
+    groupIds: string[],
+  ): Promise<void> {
+    if (groupIds.length === 0) return;
+
+    logger.log(
+      `Starting transactional add: user ${userId} to ${groupIds.length} groups`,
+    );
+
+    // Attempt to add user to all groups concurrently
+    const results = await Promise.allSettled(
+      groupIds.map((groupId) =>
+        this.client.users.addToGroup({
+          id: userId,
+          groupId,
+        }),
+      ),
+    );
+
+    // Track successes and failures
+    const successes: string[] = [];
+    const failures: Array<{ groupId: string; error: unknown }> = [];
+
+    results.forEach((result, index) => {
+      const groupId = groupIds[index];
+      if (result.status === 'fulfilled') {
+        successes.push(groupId);
+      } else {
+        failures.push({ groupId, error: result.reason });
+        logger.error(
+          `Failed to add user ${userId} to group ${groupId}`,
+          result.reason,
+        );
+      }
+    });
+
+    // If all succeeded, we're done
+    if (failures.length === 0) {
+      logger.log(
+        `Successfully added user ${userId} to ${successes.length} groups`,
+      );
+      return;
+    }
+
+    // Some operations failed - need to rollback successful ones
+    logger.warn(
+      `Rolling back ${successes.length} successful operations due to ${failures.length} failures`,
+    );
+
+    const rollbackResults = await Promise.allSettled(
+      successes.map((groupId) =>
+        this.client.users.delFromGroup({
+          id: userId,
+          groupId,
+        }),
+      ),
+    );
+
+    // Track rollback failures
+    const rollbackFailures: Array<{ groupId: string; error: unknown }> = [];
+    rollbackResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const groupId = successes[index];
+        rollbackFailures.push({ groupId, error: result.reason });
+        logger.error(
+          `CRITICAL: Failed to rollback group ${groupId} for user ${userId}`,
+          result.reason,
+        );
+      }
+    });
+
+    // Build comprehensive error message
+    const errorMessage = [
+      `Transaction failed: ${failures.length} operations failed while adding user ${userId} to groups.`,
+      `Failed operations: ${failures.map((f) => f.groupId).join(', ')}`,
+      rollbackFailures.length > 0
+        ? `CRITICAL: Rollback failed for ${rollbackFailures.length} groups: ${rollbackFailures.map((f) => f.groupId).join(', ')}. Manual intervention required!`
+        : `Successfully rolled back ${successes.length} operations.`,
+    ].join('\n');
+
+    const error = new Error(errorMessage);
+    (error as any).failures = failures;
+    (error as any).rollbackFailures = rollbackFailures;
+    (error as any).userId = userId;
+    (error as any).groupIds = groupIds;
+
+    throw error;
+  }
+
+  /**
+   * Transactionally remove a user from multiple groups.
+   * If any operation fails, all successful operations are rolled back.
+   *
+   * @param userId User ID to remove from groups
+   * @param groupIds Array of group IDs to remove user from
+   * @returns Promise that resolves if all operations succeed, rejects if any fail
+   * @throws Error with details if operations fail or rollback fails
+   */
+  public async removeUserFromGroupsTransactional(
+    userId: string,
+    groupIds: string[],
+  ): Promise<void> {
+    if (groupIds.length === 0) return;
+
+    logger.log(
+      `Starting transactional remove: user ${userId} from ${groupIds.length} groups`,
+    );
+
+    // Attempt to remove user from all groups concurrently
+    const results = await Promise.allSettled(
+      groupIds.map((groupId) =>
+        this.client.users.delFromGroup({
+          id: userId,
+          groupId,
+        }),
+      ),
+    );
+
+    // Track successes and failures
+    const successes: string[] = [];
+    const failures: Array<{ groupId: string; error: unknown }> = [];
+
+    results.forEach((result, index) => {
+      const groupId = groupIds[index];
+      if (result.status === 'fulfilled') {
+        successes.push(groupId);
+      } else {
+        failures.push({ groupId, error: result.reason });
+        logger.error(
+          `Failed to remove user ${userId} from group ${groupId}`,
+          result.reason,
+        );
+      }
+    });
+
+    // If all succeeded, we're done
+    if (failures.length === 0) {
+      logger.log(
+        `Successfully removed user ${userId} from ${successes.length} groups`,
+      );
+      return;
+    }
+
+    // Some operations failed - need to rollback successful ones by re-adding
+    logger.warn(
+      `Rolling back ${successes.length} successful removals due to ${failures.length} failures`,
+    );
+
+    const rollbackResults = await Promise.allSettled(
+      successes.map((groupId) =>
+        this.client.users.addToGroup({
+          id: userId,
+          groupId,
+        }),
+      ),
+    );
+
+    // Track rollback failures
+    const rollbackFailures: Array<{ groupId: string; error: unknown }> = [];
+    rollbackResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const groupId = successes[index];
+        rollbackFailures.push({ groupId, error: result.reason });
+        logger.error(
+          `CRITICAL: Failed to rollback group ${groupId} for user ${userId}`,
+          result.reason,
+        );
+      }
+    });
+
+    // Build comprehensive error message
+    const errorMessage = [
+      `Transaction failed: ${failures.length} operations failed while removing user ${userId} from groups.`,
+      `Failed operations: ${failures.map((f) => f.groupId).join(', ')}`,
+      rollbackFailures.length > 0
+        ? `CRITICAL: Rollback failed for ${rollbackFailures.length} groups: ${rollbackFailures.map((f) => f.groupId).join(', ')}. Manual intervention required!`
+        : `Successfully rolled back ${successes.length} operations.`,
+    ].join('\n');
+
+    const error = new Error(errorMessage);
+    (error as any).failures = failures;
+    (error as any).rollbackFailures = rollbackFailures;
+    (error as any).userId = userId;
+    (error as any).groupIds = groupIds;
+
+    throw error;
+  }
 }

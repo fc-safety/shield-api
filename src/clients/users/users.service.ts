@@ -300,7 +300,7 @@ export class UsersService {
   /**
    * Set the exact set of roles for a user.
    * Removes all existing roles and assigns the specified ones.
-   * This is an atomic operation.
+   * This is an atomic operation with transactional guarantees.
    */
   async setRoles(
     id: string,
@@ -328,28 +328,48 @@ export class UsersService {
         g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
     );
 
-    // Remove all existing roles
-    if (existingJoinedRoleGroups.length > 0) {
-      await Promise.allSettled(
-        existingJoinedRoleGroups.map((g) =>
-          this.keycloak.client.users.delFromGroup({
-            id: keycloakUser.id,
-            groupId: g.id,
-          }),
-        ),
+    // Extract group IDs for transactional operations
+    const existingGroupIds = existingJoinedRoleGroups
+      .map((g) => g.id)
+      .filter((id): id is string => id !== undefined);
+    const newGroupIds = roleGroupsToAssign
+      .map((g) => g.id)
+      .filter((id): id is string => id !== undefined);
+
+    // Use transactional operations to ensure atomicity
+    // Remove all existing roles transactionally
+    if (existingGroupIds.length > 0) {
+      await this.keycloak.removeUserFromGroupsTransactional(
+        keycloakUser.id,
+        existingGroupIds,
       );
     }
 
-    // Add all new roles
-    if (roleGroupsToAssign.length > 0) {
-      await Promise.allSettled(
-        roleGroupsToAssign.map((g) =>
-          this.keycloak.client.users.addToGroup({
-            id: keycloakUser.id,
-            groupId: g.id,
-          }),
-        ),
-      );
+    // Add all new roles transactionally
+    if (newGroupIds.length > 0) {
+      try {
+        await this.keycloak.addUserToGroupsTransactional(
+          keycloakUser.id,
+          newGroupIds,
+        );
+      } catch (error) {
+        // If adding new roles fails, attempt to restore original roles
+        if (existingGroupIds.length > 0) {
+          try {
+            await this.keycloak.addUserToGroupsTransactional(
+              keycloakUser.id,
+              existingGroupIds,
+            );
+          } catch (restoreError) {
+            // Both operations failed - log critical error
+            throw new Error(
+              `CRITICAL: Failed to set new roles and failed to restore original roles. User ${id} may have no roles. Original error: ${error}. Restore error: ${restoreError}`,
+            );
+          }
+        }
+        // Re-throw the original error if we successfully restored or there were no roles to restore
+        throw error;
+      }
     }
   }
 
