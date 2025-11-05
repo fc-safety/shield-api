@@ -416,18 +416,22 @@ export class ClientsService {
             );
             newUserIds.push(newUser.id);
 
-            if (!user.roleName) {
+            // Assign all roles from the source user
+            if (user.roleNames.length === 0) {
               return;
             }
 
-            const roleId = roleNameMap.get(user.roleName);
-            if (!roleId) {
+            const roleIds = user.roleNames
+              .map((roleName) => roleNameMap.get(roleName))
+              .filter((roleId): roleId is string => roleId !== undefined);
+
+            if (roleIds.length === 0) {
               return;
             }
 
-            await this.usersService.assignRole(
+            await this.usersService.setRoles(
               newUser.id,
-              AssignRoleDto.create({ roleId }),
+              { roleIds },
               duplicateClient,
             );
           }),

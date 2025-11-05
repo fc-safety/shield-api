@@ -16,6 +16,8 @@ export interface ClientUser {
   username?: string;
   siteExternalId: string;
   clientExternalId: string;
+  roleNames: string[];
+  /** @deprecated Use roleNames instead. Returns first role for backward compatibility. */
   roleName?: string;
   position?: string;
 }
@@ -44,23 +46,30 @@ export const validateKeycloakUser = (
 
 export const keycloakUserAsClientUser = (
   user: ValidatedUserRepresentation,
-): ClientUser => ({
-  id: user.attributes.user_id[0],
-  createdOn: user.attributes.user_created_at[0],
-  modifiedOn: user.attributes.user_updated_at[0],
-  idpId: user.id,
-  active: !!user.enabled,
-  firstName: user.firstName ?? '',
-  lastName: user.lastName ?? '',
-  name: `${user.firstName} ${user.lastName}`.trim(),
-  email: user.email,
-  phoneNumber: user.attributes.phone_number?.[0],
-  username: user.username,
-  siteExternalId: user.attributes.site_id[0],
-  clientExternalId: user.attributes.client_id[0],
-  roleName: user.groups
-    ?.find((g) => g.includes(`${MANAGED_ROLES_GROUP_NAME}/`))
-    ?.split('/')
-    .at(-1),
-  position: user.attributes.user_position?.[0],
-});
+): ClientUser => {
+  // Extract all role groups (not just the first one)
+  const roleNames = user.groups
+    ?.filter((g) => g.includes(`${MANAGED_ROLES_GROUP_NAME}/`))
+    .map((g) => g.split('/').at(-1))
+    .filter((name): name is string => name !== undefined) ?? [];
+
+  return {
+    id: user.attributes.user_id[0],
+    createdOn: user.attributes.user_created_at[0],
+    modifiedOn: user.attributes.user_updated_at[0],
+    idpId: user.id,
+    active: !!user.enabled,
+    firstName: user.firstName ?? '',
+    lastName: user.lastName ?? '',
+    name: `${user.firstName} ${user.lastName}`.trim(),
+    email: user.email,
+    phoneNumber: user.attributes.phone_number?.[0],
+    username: user.username,
+    siteExternalId: user.attributes.site_id[0],
+    clientExternalId: user.attributes.client_id[0],
+    roleNames,
+    // Backward compatibility: return first role or undefined
+    roleName: roleNames[0],
+    position: user.attributes.user_position?.[0],
+  };
+};

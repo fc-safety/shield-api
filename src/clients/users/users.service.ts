@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
 import { ClsService } from 'nestjs-cls';
@@ -158,6 +162,10 @@ export class UsersService {
     await this.keycloak.client.users.del({ id: keycloakUser.id });
   }
 
+  /**
+   * @deprecated Use setRoles() for single role assignment or addRole() for adding additional roles.
+   * This method removes all existing roles before assigning a new one (single-role behavior).
+   */
   async assignRole(
     id: string,
     assignRoleDto: AssignRoleDto,
@@ -197,6 +205,160 @@ export class UsersService {
       id: keycloakUser.id,
       groupId: keycloakRoleGroup.id,
     });
+  }
+
+  /**
+   * Add a role to a user without removing existing roles.
+   * Supports multi-role assignment.
+   */
+  async addRole(
+    id: string,
+    addRoleDto: { roleId: string },
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
+    bypassRLS?: boolean,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+
+    // Get all role groups
+    const allRoleGroups = await this.roles.getRoleGroups();
+
+    // Find the role group to add
+    const keycloakRoleGroup = allRoleGroups.find(
+      (g) => g.attributes.role_id[0] === addRoleDto.roleId,
+    );
+    if (!keycloakRoleGroup) {
+      throw new NotFoundException(`Role ${addRoleDto.roleId} not found`);
+    }
+
+    // Check if user already has this role
+    const existingJoinedRoleGroups = allRoleGroups.filter(
+      (g) =>
+        g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
+    );
+    const alreadyHasRole = existingJoinedRoleGroups.some(
+      (g) => g.id === keycloakRoleGroup.id,
+    );
+
+    if (alreadyHasRole) {
+      throw new BadRequestException(
+        `User already has role ${addRoleDto.roleId}`,
+      );
+    }
+
+    // Add the user to the role group
+    return this.keycloak.client.users.addToGroup({
+      id: keycloakUser.id,
+      groupId: keycloakRoleGroup.id,
+    });
+  }
+
+  /**
+   * Remove a specific role from a user.
+   * Other roles remain intact.
+   */
+  async removeRole(
+    id: string,
+    removeRoleDto: { roleId: string },
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
+    bypassRLS?: boolean,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+
+    // Get all role groups
+    const allRoleGroups = await this.roles.getRoleGroups();
+
+    // Find the role group to remove
+    const keycloakRoleGroup = allRoleGroups.find(
+      (g) => g.attributes.role_id[0] === removeRoleDto.roleId,
+    );
+    if (!keycloakRoleGroup) {
+      throw new NotFoundException(`Role ${removeRoleDto.roleId} not found`);
+    }
+
+    // Check if user has this role
+    const existingJoinedRoleGroups = allRoleGroups.filter(
+      (g) =>
+        g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
+    );
+    const hasRole = existingJoinedRoleGroups.some(
+      (g) => g.id === keycloakRoleGroup.id,
+    );
+
+    if (!hasRole) {
+      throw new BadRequestException(
+        `User does not have role ${removeRoleDto.roleId}`,
+      );
+    }
+
+    // Remove the user from the role group
+    return this.keycloak.client.users.delFromGroup({
+      id: keycloakUser.id,
+      groupId: keycloakRoleGroup.id,
+    });
+  }
+
+  /**
+   * Set the exact set of roles for a user.
+   * Removes all existing roles and assigns the specified ones.
+   * This is an atomic operation.
+   */
+  async setRoles(
+    id: string,
+    setRolesDto: { roleIds: string[] },
+    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
+    bypassRLS?: boolean,
+  ) {
+    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+
+    // Get all role groups
+    const allRoleGroups = await this.roles.getRoleGroups();
+
+    // Validate all role IDs exist
+    const roleGroupsToAssign = setRolesDto.roleIds.map((roleId) => {
+      const roleGroup = allRoleGroups.find(
+        (g) => g.attributes.role_id[0] === roleId,
+      );
+      if (!roleGroup) {
+        throw new NotFoundException(`Role ${roleId} not found`);
+      }
+      return roleGroup;
+    });
+
+    // Check for duplicate role IDs
+    const uniqueRoleIds = new Set(setRolesDto.roleIds);
+    if (uniqueRoleIds.size !== setRolesDto.roleIds.length) {
+      throw new BadRequestException('Duplicate role IDs are not allowed');
+    }
+
+    // Get existing role groups the user is in
+    const existingJoinedRoleGroups = allRoleGroups.filter(
+      (g) =>
+        g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
+    );
+
+    // Remove all existing roles
+    if (existingJoinedRoleGroups.length > 0) {
+      await Promise.allSettled(
+        existingJoinedRoleGroups.map((g) =>
+          this.keycloak.client.users.delFromGroup({
+            id: keycloakUser.id,
+            groupId: g.id,
+          }),
+        ),
+      );
+    }
+
+    // Add all new roles
+    if (roleGroupsToAssign.length > 0) {
+      await Promise.allSettled(
+        roleGroupsToAssign.map((g) =>
+          this.keycloak.client.users.addToGroup({
+            id: keycloakUser.id,
+            groupId: g.id,
+          }),
+        ),
+      );
+    }
   }
 
   async resetPassword(

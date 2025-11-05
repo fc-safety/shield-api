@@ -783,25 +783,59 @@ function getRoleVisibility(role: Role) {
   return (visibility ?? 'self') as TVisibility;
 }
 
+/**
+ * Get the highest visibility level across all of a user's roles.
+ * Most permissive wins: super-admin > global > client-sites > site-group > single-site > self
+ */
 function getUserVisibility(
   user: ClientUser,
   roleMap: Map<string, Role>,
 ): TVisibility {
-  if (!user.roleName) return 'self';
-  const role = roleMap.get(user.roleName);
-  return role ? getRoleVisibility(role) : 'self';
+  if (user.roleNames.length === 0) return 'self';
+
+  // Get all visibility levels from user's roles
+  const visibilityLevels = user.roleNames
+    .map((roleName) => roleMap.get(roleName))
+    .filter((role): role is Role => role !== undefined)
+    .map((role) => getRoleVisibility(role));
+
+  if (visibilityLevels.length === 0) return 'self';
+
+  // Return the highest (most permissive) visibility level
+  // Using VISIBILITY_VALUES array which is ordered from most to least permissive
+  for (const visibility of VISIBILITY_VALUES) {
+    if (visibilityLevels.includes(visibility)) {
+      return visibility;
+    }
+  }
+
+  return 'self';
 }
 
+/**
+ * Check if a user is restricted to a single site.
+ * Returns true only if ALL of the user's roles have single-site or self visibility.
+ */
 function isSingleSiteUser(user: ClientUser, roleMap: Map<string, Role>) {
-  if (!user.roleName) return true;
-  const role = roleMap.get(user.roleName);
-  return role
-    ? ['single-site', 'self'].includes(getRoleVisibility(role))
-    : true;
+  if (user.roleNames.length === 0) return true;
+
+  // Get all visibility levels from user's roles
+  const visibilityLevels = user.roleNames
+    .map((roleName) => roleMap.get(roleName))
+    .filter((role): role is Role => role !== undefined)
+    .map((role) => getRoleVisibility(role));
+
+  if (visibilityLevels.length === 0) return true;
+
+  // User is single-site only if ALL roles are single-site or self
+  return visibilityLevels.every((v) =>
+    ['single-site', 'self'].includes(v),
+  );
 }
 
 /**
  * Returns a mapping of notification group ID to a list of users that should receive notifications for that group.
+ * A user receives notifications if ANY of their roles includes the notification group.
  *
  * @param users The users to group by notification group ID.
  * @returns A mapping of notification group ID to a list of users that should receive notifications for that group.
@@ -815,16 +849,15 @@ function getUsersGroupedByNotificationGroupId(
     notificationGroups.map((g) => [
       g.id,
       users.filter((u) => {
-        if (u.roleName === undefined) {
+        if (u.roleNames.length === 0) {
           return false;
         }
 
-        const role = roleMap.get(u.roleName);
-        if (role === undefined) {
-          return false;
-        }
-
-        return role.notificationGroups.includes(g.id);
+        // Check if ANY of the user's roles includes this notification group
+        return u.roleNames.some((roleName) => {
+          const role = roleMap.get(roleName);
+          return role && role.notificationGroups.includes(g.id);
+        });
       }),
     ]),
   );
