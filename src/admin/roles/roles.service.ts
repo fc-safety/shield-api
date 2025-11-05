@@ -1,4 +1,3 @@
-import GroupRepresentation from '@keycloak/keycloak-admin-client/lib/defs/groupRepresentation';
 import RoleRepresentation from '@keycloak/keycloak-admin-client/lib/defs/roleRepresentation';
 import {
   BadRequestException,
@@ -30,7 +29,12 @@ import {
   PermissionsGroup,
   validateKeycloakRole,
 } from './model/permission';
-import { keycloakGroupAsRole, Role, validateKeycloakGroup } from './model/role';
+import {
+  keycloakGroupAsRole,
+  Role,
+  ValidatedGroupRepresentation,
+  validateKeycloakGroup,
+} from './model/role';
 
 @Injectable()
 export class RolesService {
@@ -319,13 +323,13 @@ export class RolesService {
    * Fetch role groups from cache or Keycloak if cache miss.
    * Filters based on user permissions (super admin sees all, others see only client-assignable).
    */
-  public async getRoleGroups(): Promise<GroupRepresentation[]> {
+  public async getRoleGroups(): Promise<ValidatedGroupRepresentation[]> {
     const user = this.cls.get('user');
     const redis = this.redis.getPublisher();
 
     // Try to get from cache
     const cached = await redis.get(this.ROLE_GROUPS_CACHE_KEY);
-    let allGroups: GroupRepresentation[];
+    let allGroups: ValidatedGroupRepresentation[];
 
     if (cached) {
       allGroups = JSON.parse(cached);
@@ -356,7 +360,9 @@ export class RolesService {
    * Get a single role group by role ID.
    * Uses cached role groups for better performance.
    */
-  public async getRoleGroup(roleId: string): Promise<GroupRepresentation> {
+  public async getRoleGroup(
+    roleId: string,
+  ): Promise<ValidatedGroupRepresentation> {
     const user = this.cls.get('user');
     const groups = await this.getRoleGroups();
 
@@ -386,7 +392,7 @@ export class RolesService {
    */
   public async getRoleGroupsByRoleIds(
     roleIds: string[],
-  ): Promise<GroupRepresentation[]> {
+  ): Promise<ValidatedGroupRepresentation[]> {
     if (roleIds.length === 0) return [];
 
     const allGroups = await this.getRoleGroups();
@@ -397,7 +403,7 @@ export class RolesService {
     );
 
     // Map role IDs to groups and validate all were found
-    const result: GroupRepresentation[] = [];
+    const result: ValidatedGroupRepresentation[] = [];
     for (const roleId of roleIds) {
       const group = groupMap.get(roleId);
       if (!group) {
@@ -416,10 +422,9 @@ export class RolesService {
    * @param roleId Role ID to fetch
    * @returns Role group or undefined if not found
    */
-  public async getRoleGroupByRoleIdOrUndefined(
+  public async getRoleGroupByRoleId(
     roleId: string,
-  ): Promise<GroupRepresentation | undefined> {
-    const allGroups = await this.getRoleGroups();
-    return allGroups.find((g) => g.attributes.role_id?.[0] === roleId);
+  ): Promise<ValidatedGroupRepresentation> {
+    return this.getRoleGroupsByRoleIds([roleId]).then((groups) => groups[0]);
   }
 }
