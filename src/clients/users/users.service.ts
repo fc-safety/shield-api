@@ -174,7 +174,7 @@ export class UsersService {
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
 
-    // Get all role groups to check existing memberships and remove them. A user can only have one role.
+    // Get all role groups to check existing memberships and remove them (cached via Redis)
     const allRoleGroups = await this.roles.getRoleGroups();
 
     // Get the role group to assign.
@@ -219,7 +219,7 @@ export class UsersService {
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
 
-    // Get all role groups
+    // Get all role groups (cached via Redis)
     const allRoleGroups = await this.roles.getRoleGroups();
 
     // Find the role group to add
@@ -264,7 +264,7 @@ export class UsersService {
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
 
-    // Get all role groups
+    // Get all role groups (cached via Redis)
     const allRoleGroups = await this.roles.getRoleGroups();
 
     // Find the role group to remove
@@ -310,27 +310,19 @@ export class UsersService {
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
 
-    // Get all role groups
-    const allRoleGroups = await this.roles.getRoleGroups();
-
-    // Validate all role IDs exist
-    const roleGroupsToAssign = setRolesDto.roleIds.map((roleId) => {
-      const roleGroup = allRoleGroups.find(
-        (g) => g.attributes.role_id[0] === roleId,
-      );
-      if (!roleGroup) {
-        throw new NotFoundException(`Role ${roleId} not found`);
-      }
-      return roleGroup;
-    });
-
-    // Check for duplicate role IDs
+    // Check for duplicate role IDs first (cheap operation)
     const uniqueRoleIds = new Set(setRolesDto.roleIds);
     if (uniqueRoleIds.size !== setRolesDto.roleIds.length) {
       throw new BadRequestException('Duplicate role IDs are not allowed');
     }
 
-    // Get existing role groups the user is in
+    // Fetch only the specific role groups we need (cached + batch operation)
+    // This throws NotFoundException if any role doesn't exist
+    const roleGroupsToAssign =
+      await this.roles.getRoleGroupsByRoleIds(setRolesDto.roleIds);
+
+    // Get all role groups to find existing memberships (cached)
+    const allRoleGroups = await this.roles.getRoleGroups();
     const existingJoinedRoleGroups = allRoleGroups.filter(
       (g) =>
         g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
