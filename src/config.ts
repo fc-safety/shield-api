@@ -62,6 +62,16 @@ export const configSchema = z.object({
   LEGACY_DB_USER: z.string().optional(),
   LEGACY_DB_PASSWORD: z.string().optional(),
   LEGACY_DB_NAME: z.string().optional(),
+
+  // Shopify
+  SHOPIFY_API_KEY: z.string(),
+  SHOPIFY_API_SECRET: z.string(),
+  SHOPIFY_SCOPES: z
+    .string()
+    .default('')
+    .transform((v) => v.split(',').filter(Boolean)),
+  SHOPIFY_HOST_NAME: z.string(),
+  SHOPIFY_PRIMARY_SHOP: z.string().default('fc-safety.myshopify.com'),
 });
 
 export type Config = z.infer<typeof configSchema>;

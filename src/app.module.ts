@@ -24,6 +24,7 @@ import { RedisModule } from './redis/redis.module';
 import { SettingsModule } from './settings/settings.module';
 import { StatsModule } from './stats/stats.module';
 import { SupportModule } from './support/support.module';
+import { ShopifyModule } from './shopify/shopify.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { SupportModule } from './support/support.module';
     SupportModule,
     M2mModule,
     LegacyMigrationModule,
+    ShopifyModule,
   ],
   controllers: [],
   providers: [

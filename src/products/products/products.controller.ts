@@ -34,6 +34,11 @@ export class ProductsController {
     return this.productsService.findAll(queryProductDto);
   }
 
+  @Get('online-store')
+  shopifyFindAll() {
+    return this.productsService.shopifyFindAll();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.productsService.findOne(id);

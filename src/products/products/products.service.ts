@@ -4,6 +4,7 @@ import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { ShopifyService } from 'src/shopify/shopify.service';
 import { CreateAssetQuestionDto } from '../asset-questions/dto/create-asset-question.dto';
 import { UpdateAssetQuestionDto } from '../asset-questions/dto/update-asset-question.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -15,6 +16,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     protected readonly cls: ClsService<CommonClsStore>,
+    private readonly shopify: ShopifyService,
   ) {}
 
   async create(createProductDto: CreateProductDto) {
@@ -142,5 +144,12 @@ export class ProductsService {
         })
         .catch(as404OrThrow),
     );
+  }
+
+  async shopifyFindAll() {
+    const session = await this.shopify.getActiveSession();
+    return this.shopify.client.rest.Product.all({
+      session,
+    });
   }
 }
