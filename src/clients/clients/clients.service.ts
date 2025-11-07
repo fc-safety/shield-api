@@ -790,7 +790,8 @@ export class ClientsService {
     const prisma = await this.prisma.build();
     const currentUser = prisma.$currentUser();
     const hasMultiSiteVisibility =
-      currentUser && currentUser.hasMultiSiteVisibility;
+      prisma.$mode === 'cron' ||
+      (currentUser && currentUser.hasMultiSiteVisibility);
 
     const allowedSiteIds = currentUser
       ? currentUser.allowedSiteIdsStr.split(',')
