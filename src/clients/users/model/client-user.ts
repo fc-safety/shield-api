@@ -1,5 +1,6 @@
 import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
-import { MANAGED_ROLES_GROUP_NAME } from 'src/auth/keycloak/keycloak.service';
+import { Role, ValidatedGroupRepresentation } from 'src/admin/roles/model/role';
+import { isNil } from 'src/common/utils';
 import { z } from 'zod';
 
 export interface ClientUser {
@@ -16,9 +17,9 @@ export interface ClientUser {
   username?: string;
   siteExternalId: string;
   clientExternalId: string;
-  roleNames: string[];
-  /** @deprecated Use roleNames instead. Returns first role for backward compatibility. */
+  /** @deprecated Use roles array instead. Returns first role for backward compatibility. */
   roleName?: string;
+  roles: Pick<Role, 'id' | 'name' | 'permissions' | 'notificationGroups'>[];
   position?: string;
 }
 
@@ -46,12 +47,16 @@ export const validateKeycloakUser = (
 
 export const keycloakUserAsClientUser = (
   user: ValidatedUserRepresentation,
+  allRoleGroups: ValidatedGroupRepresentation[],
+  convertGroupToRole: (group: ValidatedGroupRepresentation) => Role,
 ): ClientUser => {
+  const groupsByPathMap = new Map(allRoleGroups.map((g) => [g.path ?? '', g]));
   // Extract all role groups (not just the first one)
-  const roleNames = user.groups
-    ?.filter((g) => g.includes(`${MANAGED_ROLES_GROUP_NAME}/`))
-    .map((g) => g.split('/').at(-1))
-    .filter((name): name is string => name !== undefined) ?? [];
+  const roles =
+    user.groups
+      ?.map((path) => groupsByPathMap.get(path))
+      .filter((group): group is NonNullable<typeof group> => !isNil(group))
+      .map((g) => convertGroupToRole(g)) ?? [];
 
   return {
     id: user.attributes.user_id[0],
@@ -67,9 +72,14 @@ export const keycloakUserAsClientUser = (
     username: user.username,
     siteExternalId: user.attributes.site_id[0],
     clientExternalId: user.attributes.client_id[0],
-    roleNames,
+    roles: roles.map((r) => ({
+      id: r.id,
+      name: r.name,
+      permissions: r.permissions,
+      notificationGroups: r.notificationGroups,
+    })),
     // Backward compatibility: return first role or undefined
-    roleName: roleNames[0],
+    roleName: roles[0]?.name ?? undefined,
     position: user.attributes.user_position?.[0],
   };
 };

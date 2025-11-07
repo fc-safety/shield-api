@@ -6,6 +6,11 @@ import {
 import { createId } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
 import { ClsService } from 'nestjs-cls';
+import {
+  keycloakGroupAsRole,
+  Role,
+  ValidatedGroupRepresentation,
+} from 'src/admin/roles/model/role';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
@@ -27,6 +32,10 @@ import {
 
 @Injectable()
 export class UsersService {
+  private readonly convertGroupToRole: (
+    group: ValidatedGroupRepresentation,
+  ) => Role;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly keycloak: KeycloakService,
@@ -34,7 +43,10 @@ export class UsersService {
     private readonly cls: ClsService<CommonClsStore>,
     private readonly notifications: NotificationsService,
     private readonly config: ApiConfigService,
-  ) {}
+  ) {
+    this.convertGroupToRole = (group: ValidatedGroupRepresentation) =>
+      keycloakGroupAsRole(group, this.config.get('AUTH_AUDIENCE'));
+  }
 
   async create(
     createUserDto: CreateUserDto,
@@ -82,6 +94,7 @@ export class UsersService {
     bypassRLS?: boolean,
   ) {
     const client = await this.getClient(clientId, bypassRLS);
+    const allRoleGroups = await this.roles.getRoleGroups();
 
     const { offset, limit } = queryUserDto;
     return this.keycloak
@@ -98,7 +111,13 @@ export class UsersService {
       .then((r) => {
         const cleanedUsers = r.results
           .filter(validateKeycloakUser)
-          .map(keycloakUserAsClientUser);
+          .map((user) =>
+            keycloakUserAsClientUser(
+              user,
+              allRoleGroups,
+              this.convertGroupToRole,
+            ),
+          );
 
         return {
           ...r,
@@ -114,7 +133,13 @@ export class UsersService {
     bypassRLS?: boolean,
   ) {
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
-    return keycloakUserAsClientUser(keycloakUser);
+    const allRoleGroups = await this.roles.getRoleGroups();
+
+    return keycloakUserAsClientUser(
+      keycloakUser,
+      allRoleGroups,
+      this.convertGroupToRole,
+    );
   }
 
   async update(
@@ -246,10 +271,12 @@ export class UsersService {
     }
 
     // Add the user to the role group
-    return this.keycloak.client.users.addToGroup({
+    await this.keycloak.client.users.addToGroup({
       id: keycloakUser.id,
       groupId: keycloakRoleGroup.id,
     });
+
+    return this.convertGroupToRole(keycloakRoleGroup);
   }
 
   /**
@@ -291,10 +318,12 @@ export class UsersService {
     }
 
     // Remove the user from the role group
-    return this.keycloak.client.users.delFromGroup({
+    await this.keycloak.client.users.delFromGroup({
       id: keycloakUser.id,
       groupId: keycloakRoleGroup.id,
     });
+
+    return removeRoleDto.roleId;
   }
 
   /**
@@ -318,8 +347,9 @@ export class UsersService {
 
     // Fetch only the specific role groups we need (cached + batch operation)
     // This throws NotFoundException if any role doesn't exist
-    const roleGroupsToAssign =
-      await this.roles.getRoleGroupsByRoleIds(setRolesDto.roleIds);
+    const roleGroupsToAssign = await this.roles.getRoleGroupsByRoleIds(
+      setRolesDto.roleIds,
+    );
 
     // Get all role groups to find existing memberships (cached)
     const allRoleGroups = await this.roles.getRoleGroups();

@@ -20,7 +20,6 @@ import { AddRoleDto } from './dto/add-role.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
-import { RemoveRoleDto } from './dto/remove-role.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SendResetPasswordQueryDto } from './dto/send-reset-password-email-query.dto';
 import { SetRolesDto } from './dto/set-roles.dto';
@@ -87,13 +86,12 @@ export class UsersController {
    */
   @Post(':id/roles')
   @CheckPolicies(({ user }) => user.canUpdate('users'))
-  @HttpCode(HttpStatus.NO_CONTENT)
   async addRole(
     @Param('id') id: string,
     @Body() addRoleDto: AddRoleDto,
     @Query('clientId') clientId?: string,
   ) {
-    await this.usersService.addRole(id, addRoleDto, clientId);
+    return this.usersService.addRole(id, addRoleDto, clientId);
   }
 
   /**
@@ -102,13 +100,12 @@ export class UsersController {
    */
   @Delete(':id/roles/:roleId')
   @CheckPolicies(({ user }) => user.canUpdate('users'))
-  @HttpCode(HttpStatus.NO_CONTENT)
   async removeRole(
     @Param('id') id: string,
     @Param('roleId') roleId: string,
     @Query('clientId') clientId?: string,
   ) {
-    await this.usersService.removeRole(id, { roleId }, clientId);
+    return this.usersService.removeRole(id, { roleId }, clientId);
   }
 
   /**

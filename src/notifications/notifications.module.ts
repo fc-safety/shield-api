@@ -1,6 +1,5 @@
 import { BullModule } from '@nestjs/bullmq';
 import { forwardRef, Module } from '@nestjs/common';
-import { RolesModule } from 'src/admin/roles/roles.module';
 import { UsersModule } from 'src/clients/users/users.module';
 import { SettingsModule } from 'src/settings/settings.module';
 import { QUEUE_NAMES, QUEUE_PREFIX } from './lib/constants';
@@ -40,7 +39,6 @@ import { NotificationsProcessor } from './processors/notifications.processor';
         },
       },
     }),
-    RolesModule,
     forwardRef(() => UsersModule),
   ],
   providers: [

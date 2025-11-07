@@ -15,7 +15,6 @@ import {
 } from 'date-fns';
 import React from 'react';
 import { Role } from 'src/admin/roles/model/role';
-import { RolesService } from 'src/admin/roles/roles.service';
 import {
   MULTI_CLIENT_VISIBILITIES,
   MULTI_SITE_VISIBILITIES,
@@ -71,7 +70,6 @@ export class ClientNotificationsProcessor
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly roles: RolesService,
     private readonly users: UsersService,
     @InjectQueue(QUEUE_NAMES.CLIENT_NOTIFICATIONS)
     private readonly clientNotificationsQueue: Queue,
@@ -150,16 +148,12 @@ export class ClientNotificationsProcessor
       return {};
     }
 
-    // Map of role name to role.
-    const roleMap = await this.getRoleMap();
-
     // All users for the client.
     const clientUsers = await this.getClientUsers(job.data.clientId);
 
     // This mapping indicates which users should receive which reminder notification types.
     const usersByNotificationGroupId = getUsersGroupedByNotificationGroupId(
       clientUsers,
-      roleMap,
       INSPECTION_REMINDER_NOTIFICATION_GROUPS,
     );
 
@@ -243,7 +237,6 @@ export class ClientNotificationsProcessor
         const visibleAssetIds = getVisibleAssetIdsForUser(
           user,
           assetVisibilityMappings,
-          roleMap,
         );
         const visibleAssets = assets.filter((a) =>
           visibleAssetIds.includes(a.id),
@@ -260,7 +253,7 @@ export class ClientNotificationsProcessor
         // Prepare presentation properties to be passed to the template.
         const props: SharedInspectionReminderTemplateProps = {
           recipientFirstName: user.firstName,
-          singleSite: isSingleSiteUser(user, roleMap),
+          singleSite: isSingleSiteUser(user),
           frontendUrl: this.config.get('FRONTEND_URL'),
           assetsDueForInspectionBySite: Object.entries(assetsBySite).map(
             ([, assets]) => ({
@@ -312,16 +305,12 @@ export class ClientNotificationsProcessor
       return {};
     }
 
-    // Map of role name to role.
-    const roleMap = await this.getRoleMap();
-
     // All users for the client.
     const clientUsers = await this.getClientUsers(job.data.clientId);
 
     // This mapping indicates which users should receive which reminder notification types.
     const usersByNotificationGroupId = getUsersGroupedByNotificationGroupId(
       clientUsers,
-      roleMap,
       Object.values(NotificationGroups).filter((g) =>
         (
           [
@@ -369,7 +358,6 @@ export class ClientNotificationsProcessor
         const visibleAssetIds = getVisibleAssetIdsForUser(
           user,
           assetVisibilityMappings,
-          roleMap,
         );
         const visibleAssets = assets.filter((a) =>
           visibleAssetIds.includes(a.id),
@@ -385,7 +373,7 @@ export class ClientNotificationsProcessor
         const props = {
           recipientFirstName: user.firstName,
           clientName: client.name,
-          singleSite: isSingleSiteUser(user, roleMap),
+          singleSite: isSingleSiteUser(user),
           frontendUrl: this.config.get('FRONTEND_URL'),
           reportRowsBySite: Object.entries(assetsBySite).map(
             ([, siteAssets]) => {
@@ -492,7 +480,6 @@ export class ClientNotificationsProcessor
         const visibleAssetIds = getVisibleAssetIdsForUser(
           user,
           assetVisibilityMappings,
-          roleMap,
         );
         const visibleConsumables = consumables.filter((c) =>
           visibleAssetIds.includes(c.assetId),
@@ -584,16 +571,12 @@ export class ClientNotificationsProcessor
       },
     });
 
-    // Map of role name to role.
-    const roleMap = await this.getRoleMap();
-
     // All users for the client.
     const clientUsers = await this.getClientUsers(alert.clientId);
 
     // This mapping indicates which users should receive which reminder notification types.
     const usersByNotificationGroupId = getUsersGroupedByNotificationGroupId(
       clientUsers,
-      roleMap,
       [NotificationGroups.inspection_alert_triggered],
     );
 
@@ -647,12 +630,6 @@ export class ClientNotificationsProcessor
     return this.users
       .findAll({ limit: 10000, offset: 0 }, clientId, true)
       .then((response) => response.results);
-  }
-
-  private async getRoleMap() {
-    return this.roles
-      .getRoles()
-      .then((roles) => new Map(roles.map((r) => [r.name, r])));
   }
 
   /**
@@ -774,7 +751,7 @@ function isThresholdMetToday(props: {
  * @param role The role to get the visibility for.
  * @returns The visibility for the given role.
  */
-function getRoleVisibility(role: Role) {
+function getRoleVisibility(role: Pick<Role, 'permissions'>) {
   const visibility = role.permissions
     .find((p) => p.includes('visibility'))
     ?.split(':')
@@ -787,17 +764,11 @@ function getRoleVisibility(role: Role) {
  * Get the highest visibility level across all of a user's roles.
  * Most permissive wins: super-admin > global > client-sites > site-group > single-site > self
  */
-function getUserVisibility(
-  user: ClientUser,
-  roleMap: Map<string, Role>,
-): TVisibility {
-  if (user.roleNames.length === 0) return 'self';
+function getUserVisibility(user: ClientUser): TVisibility {
+  if (user.roles.length === 0) return 'self';
 
   // Get all visibility levels from user's roles
-  const visibilityLevels = user.roleNames
-    .map((roleName) => roleMap.get(roleName))
-    .filter((role): role is Role => role !== undefined)
-    .map((role) => getRoleVisibility(role));
+  const visibilityLevels = user.roles.map((role) => getRoleVisibility(role));
 
   if (visibilityLevels.length === 0) return 'self';
 
@@ -816,21 +787,16 @@ function getUserVisibility(
  * Check if a user is restricted to a single site.
  * Returns true only if ALL of the user's roles have single-site or self visibility.
  */
-function isSingleSiteUser(user: ClientUser, roleMap: Map<string, Role>) {
-  if (user.roleNames.length === 0) return true;
+function isSingleSiteUser(user: ClientUser) {
+  if (user.roles.length === 0) return true;
 
   // Get all visibility levels from user's roles
-  const visibilityLevels = user.roleNames
-    .map((roleName) => roleMap.get(roleName))
-    .filter((role): role is Role => role !== undefined)
-    .map((role) => getRoleVisibility(role));
+  const visibilityLevels = user.roles.map((role) => getRoleVisibility(role));
 
   if (visibilityLevels.length === 0) return true;
 
   // User is single-site only if ALL roles are single-site or self
-  return visibilityLevels.every((v) =>
-    ['single-site', 'self'].includes(v),
-  );
+  return visibilityLevels.every((v) => ['single-site', 'self'].includes(v));
 }
 
 /**
@@ -842,21 +808,19 @@ function isSingleSiteUser(user: ClientUser, roleMap: Map<string, Role>) {
  */
 function getUsersGroupedByNotificationGroupId(
   users: ClientUser[],
-  roleMap: Map<string, Role>,
   notificationGroups: INotificationGroup[],
 ) {
   return new Map(
     notificationGroups.map((g) => [
       g.id,
       users.filter((u) => {
-        if (u.roleNames.length === 0) {
+        if (u.roles.length === 0) {
           return false;
         }
 
         // Check if ANY of the user's roles includes this notification group
-        return u.roleNames.some((roleName) => {
-          const role = roleMap.get(roleName);
-          return role && role.notificationGroups.includes(g.id);
+        return u.roles.some((role) => {
+          return role.notificationGroups.includes(g.id);
         });
       }),
     ]),
@@ -874,9 +838,8 @@ function getVisibleAssetIdsForUser(
       assetIds: string[];
     }[]
   >,
-  roleMap: Map<string, Role>,
 ) {
-  const visibility = getUserVisibility(user, roleMap);
+  const visibility = getUserVisibility(user);
 
   return (
     assetVisibilityMappings[visibility].find(

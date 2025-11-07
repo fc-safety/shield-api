@@ -22,7 +22,6 @@ import {
 import { getAssetsToRenewForDemoClient } from 'src/generated/prisma/client/sql';
 import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
-import { AssignRoleDto } from '../users/dto/assign-role.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { QueryUserDto } from '../users/dto/query-user.dto';
 import { UsersService } from '../users/users.service';
@@ -417,13 +416,11 @@ export class ClientsService {
             newUserIds.push(newUser.id);
 
             // Assign all roles from the source user
-            if (user.roleNames.length === 0) {
+            if (user.roles.length === 0) {
               return;
             }
 
-            const roleIds = user.roleNames
-              .map((roleName) => roleNameMap.get(roleName))
-              .filter((roleId): roleId is string => roleId !== undefined);
+            const roleIds = user.roles.map((role) => role.id);
 
             if (roleIds.length === 0) {
               return;
