@@ -22,7 +22,6 @@ import {
 import { getAssetsToRenewForDemoClient } from 'src/generated/prisma/client/sql';
 import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
-import { AssignRoleDto } from '../users/dto/assign-role.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { QueryUserDto } from '../users/dto/query-user.dto';
 import { UsersService } from '../users/users.service';
@@ -416,18 +415,20 @@ export class ClientsService {
             );
             newUserIds.push(newUser.id);
 
-            if (!user.roleName) {
+            // Assign all roles from the source user
+            if (user.roles.length === 0) {
               return;
             }
 
-            const roleId = roleNameMap.get(user.roleName);
-            if (!roleId) {
+            const roleIds = user.roles.map((role) => role.id);
+
+            if (roleIds.length === 0) {
               return;
             }
 
-            await this.usersService.assignRole(
+            await this.usersService.setRoles(
               newUser.id,
-              AssignRoleDto.create({ roleId }),
+              { roleIds },
               duplicateClient,
             );
           }),
@@ -789,7 +790,8 @@ export class ClientsService {
     const prisma = await this.prisma.build();
     const currentUser = prisma.$currentUser();
     const hasMultiSiteVisibility =
-      currentUser && currentUser.hasMultiSiteVisibility;
+      prisma.$mode === 'cron' ||
+      (currentUser && currentUser.hasMultiSiteVisibility);
 
     const allowedSiteIds = currentUser
       ? currentUser.allowedSiteIdsStr.split(',')

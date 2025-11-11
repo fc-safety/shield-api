@@ -185,11 +185,13 @@ export class PrismaService
 
   private buildBypassRLSExtension(options: BypassRLSExtensionOptions = {}) {
     return Prisma.defineExtension((prisma) => {
+      const mode = this.cls.get('mode');
       // Build base extension that all subsequent extensions will build upon.
       const extendedPrisma = prisma.$extends({
         client: {
           $viewContext: 'admin',
           $currentUser: () => options.person,
+          $mode: mode ?? 'request',
         },
         model: {
           $allModels: {
@@ -263,7 +265,8 @@ export class PrismaService
     const user = this.cls.get('user');
     const context = options.context ?? this.cls.get('viewContext');
     const isSuperAdmin = !!user?.isSuperAdmin();
-    const cronMode = this.cls.get('mode') === 'cron';
+    const mode = this.cls.get('mode');
+    const cronMode = mode === 'cron';
     const shouldBypassRLS = cronMode || (isSuperAdmin && context === 'admin');
 
     let person: PersonRepresentation | undefined;
@@ -288,6 +291,7 @@ export class PrismaService
         client: {
           $currentUser: () => person,
           $viewContext: context,
+          $mode: mode ?? 'request',
         },
         model: {
           $allModels: {

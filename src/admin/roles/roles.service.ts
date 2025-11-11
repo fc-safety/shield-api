@@ -19,6 +19,7 @@ import {
 import { isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { NotificationGroups } from 'src/notifications/notification-types';
+import { RedisService } from 'src/redis/redis.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateNotificationGroupMappingDto } from './dto/update-notification-group-mapping.dto';
 import { UpdatePermissionMappingDto } from './dto/update-permission-mapping.dto';
@@ -28,7 +29,12 @@ import {
   PermissionsGroup,
   validateKeycloakRole,
 } from './model/permission';
-import { keycloakGroupAsRole, Role, validateKeycloakGroup } from './model/role';
+import {
+  keycloakGroupAsRole,
+  Role,
+  ValidatedGroupRepresentation,
+  validateKeycloakGroup,
+} from './model/role';
 
 @Injectable()
 export class RolesService {
@@ -37,10 +43,15 @@ export class RolesService {
   private parentRolesGroupId: Promise<string>;
   private defaultVisibilityRole: Promise<RoleRepresentation | null>;
 
+  // Cache configuration
+  private readonly ROLE_GROUPS_CACHE_KEY = 'role-groups:all';
+  private readonly ROLE_GROUPS_CACHE_TTL = 300; // 5 minutes in seconds
+
   constructor(
     private readonly keycloak: KeycloakService,
     private readonly config: ApiConfigService,
     private readonly cls: ClsService,
+    private readonly redis: RedisService,
   ) {
     this.appClientId = this.config.get('AUTH_AUDIENCE');
     this.appClientUuid = getShieldClient(
@@ -161,6 +172,9 @@ export class RolesService {
       });
     }
 
+    // Invalidate cache after creating role
+    await this.invalidateRoleGroupsCache();
+
     return this.getRole(roleId);
   }
 
@@ -220,12 +234,19 @@ export class RolesService {
         attributes,
       },
     );
+
+    // Invalidate cache after updating role
+    await this.invalidateRoleGroupsCache();
+
     return this.getRole(roleId);
   }
 
   async deleteRole(roleId: string) {
     const roleGroup = await this.getRole(roleId);
     await this.keycloak.client.groups.del({ id: roleGroup.groupId });
+
+    // Invalidate cache after deleting role
+    await this.invalidateRoleGroupsCache();
   }
 
   async updatePermissionToRoleMappings(
@@ -274,6 +295,9 @@ export class RolesService {
         })),
       });
     }
+
+    // Invalidate cache after updating permissions
+    await this.invalidateRoleGroupsCache();
   }
 
   async updateNotificationGroups(
@@ -286,38 +310,121 @@ export class RolesService {
     });
   }
 
-  public async getRoleGroup(roleId: string) {
+  /**
+   * Invalidate the role groups cache.
+   * Call this after creating, updating, or deleting roles.
+   */
+  private async invalidateRoleGroupsCache() {
+    const redis = this.redis.getPublisher();
+    await redis.del(this.ROLE_GROUPS_CACHE_KEY);
+  }
+
+  /**
+   * Fetch role groups from cache or Keycloak if cache miss.
+   * Filters based on user permissions (super admin sees all, others see only client-assignable).
+   */
+  public async getRoleGroups(): Promise<ValidatedGroupRepresentation[]> {
     const user = this.cls.get('user');
-    const group = (
-      await this.keycloak.client.groups.find({
-        q: `role_id:${roleId}`,
-        briefRepresentation: false,
-        populateHierarchy: false,
-      })
-    ).at(0);
+    const redis = this.redis.getPublisher();
+
+    // Try to get from cache
+    const cached = await redis.get(this.ROLE_GROUPS_CACHE_KEY);
+    let allGroups: ValidatedGroupRepresentation[];
+
+    if (cached) {
+      allGroups = JSON.parse(cached);
+    } else {
+      // Cache miss - fetch from Keycloak
+      const groups = await this.keycloak.client.groups.listSubGroups({
+        parentId: await this.parentRolesGroupId,
+      });
+      allGroups = groups.filter(validateKeycloakGroup);
+
+      // Store in cache
+      await redis.setEx(
+        this.ROLE_GROUPS_CACHE_KEY,
+        this.ROLE_GROUPS_CACHE_TTL,
+        JSON.stringify(allGroups),
+      );
+    }
+
+    // Filter based on user permissions
+    return allGroups.filter(
+      (g) =>
+        g.attributes.role_client_assignable?.[0] === 'true' ||
+        !!user?.isSuperAdmin(),
+    );
+  }
+
+  /**
+   * Get a single role group by role ID.
+   * Uses cached role groups for better performance.
+   */
+  public async getRoleGroup(
+    roleId: string,
+  ): Promise<ValidatedGroupRepresentation> {
+    const user = this.cls.get('user');
+    const groups = await this.getRoleGroups();
+
+    const group = groups.find((g) => g.attributes.role_id?.[0] === roleId);
+
     if (
       !group ||
-      !validateKeycloakGroup(group) ||
       !(
         group.attributes.role_client_assignable?.[0] === 'true' ||
         user?.isSuperAdmin()
       )
-    )
+    ) {
       throw new NotFoundException(`Role ${roleId} not found`);
+    }
+
     return group;
   }
 
-  public async getRoleGroups() {
-    const user = this.cls.get('user');
-    const groups = await this.keycloak.client.groups.listSubGroups({
-      parentId: await this.parentRolesGroupId,
-    });
-    return groups
-      .filter(validateKeycloakGroup)
-      .filter(
-        (g) =>
-          g.attributes.role_client_assignable?.[0] === 'true' ||
-          !!user?.isSuperAdmin(),
-      );
+  /**
+   * Get multiple role groups by role IDs.
+   * Consolidated method that fetches all groups once and maps to requested IDs.
+   * More efficient than multiple getRoleGroup() calls.
+   *
+   * @param roleIds Array of role IDs to fetch
+   * @returns Array of role groups
+   * @throws NotFoundException if any role ID is not found
+   */
+  public async getRoleGroupsByRoleIds(
+    roleIds: string[],
+  ): Promise<ValidatedGroupRepresentation[]> {
+    if (roleIds.length === 0) return [];
+
+    const allGroups = await this.getRoleGroups();
+
+    // Create a map for O(1) lookup
+    const groupMap = new Map(
+      allGroups.map((g) => [g.attributes.role_id?.[0], g]),
+    );
+
+    // Map role IDs to groups and validate all were found
+    const result: ValidatedGroupRepresentation[] = [];
+    for (const roleId of roleIds) {
+      const group = groupMap.get(roleId);
+      if (!group) {
+        throw new NotFoundException(`Role ${roleId} not found`);
+      }
+      result.push(group);
+    }
+
+    return result;
+  }
+
+  /**
+   * Get a single role group by role ID, optimized for batch operations.
+   * Returns undefined if not found instead of throwing.
+   *
+   * @param roleId Role ID to fetch
+   * @returns Role group or undefined if not found
+   */
+  public async getRoleGroupByRoleId(
+    roleId: string,
+  ): Promise<ValidatedGroupRepresentation> {
+    return this.getRoleGroupsByRoleIds([roleId]).then((groups) => groups[0]);
   }
 }
