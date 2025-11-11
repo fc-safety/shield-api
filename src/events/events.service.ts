@@ -8,12 +8,14 @@ import { createId } from '@paralleldrive/cuid2';
 import { ClsService } from 'nestjs-cls';
 import {
   endWith,
+  from,
   ignoreElements,
   interval,
   map,
   merge,
   Observable,
   share,
+  switchMap,
   takeUntil,
 } from 'rxjs';
 import { AuthService } from 'src/auth/auth.service';
@@ -39,125 +41,133 @@ export class EventsService {
     private readonly authService: AuthService,
   ) {}
 
-  public listenDbEvents(
-    person: PersonRepresentation,
-    options: ListenDbEventsDto,
-    listenerId?: string,
-  ) {
-    listenerId = listenerId ?? createId();
-    const model = options.models.length > 1 ? '*' : options.models[0];
-    const operation =
-      options.operations && options.operations.length === 1
-        ? options.operations[0]
-        : '*';
+  public listenDbEvents(options: ListenDbEventsDto) {
+    const listenerId = createId();
 
-    const channel = `db-events:${person.clientId}:${model}:${operation}`;
-    return new Observable((observer) => {
-      this.logger.debug(
-        `[${listenerId}] Adding listener to channel ${channel}`,
-      );
+    return from(this.validateToken(options.token)).pipe(
+      switchMap((person) => {
+        // Build the channel pattern to listen to.
+        const clientId = person.clientId;
+        const model = options.models.length > 1 ? '*' : options.models[0];
+        const operation =
+          options.operations && options.operations.length === 1
+            ? options.operations[0]
+            : '*';
+        const channelPattern = `db-events:${clientId}:${model}:${operation}`;
 
-      let errorListener: ((err: Error) => void) | null = null;
-      let endListener: (() => void) | null = null;
-
-      const messageListener = (message: string) => {
-        try {
-          const payload = JSON.parse(message) as Record<string, string>;
-
-          if (!options.models.includes(payload.model as any)) {
-            return;
-          }
-
-          if (
-            options.operations &&
-            !options.operations.includes(payload.operation as any)
-          ) {
-            return;
-          }
-
-          if (options.ids && !options.ids.includes(payload.id)) {
-            return;
-          }
-
-          observer.next(payload);
-        } catch (error) {
-          this.logger.error(
-            `[${listenerId}] Error processing message from channel ${channel}`,
-            error,
+        return new Observable((observer) => {
+          this.logger.debug(
+            `[${listenerId}] Adding listener to channel ${channelPattern}`,
           );
-          observer.error(error);
-        }
-      };
 
-      const cleanup = () => {
-        this.logger.debug(
-          `[${listenerId}] Removing listener from channel ${channel}`,
-        );
+          // PREPARE LISTENERS
+          // 1. Message listener - main listener to process messages
+          // 2. Error listener - to handle errors
+          // 3. End listener - to handle end of connection
 
-        this.redis
-          .removePatternListener(channel, messageListener)
-          .catch((error) => {
+          const messageListener = (message: string) => {
+            try {
+              const payload = JSON.parse(message) as Record<string, string>;
+
+              if (!options.models.includes(payload.model as any)) {
+                return;
+              }
+
+              if (
+                options.operations &&
+                !options.operations.includes(payload.operation as any)
+              ) {
+                return;
+              }
+
+              if (options.ids && !options.ids.includes(payload.id)) {
+                return;
+              }
+
+              observer.next(payload);
+            } catch (error) {
+              this.logger.error(
+                `[${listenerId}] Error processing message from channel ${channelPattern}`,
+                error,
+              );
+              observer.error(error);
+            }
+          };
+
+          const errorListener = (err: Error) => {
             this.logger.error(
-              `[${listenerId}] Error removing listener from channel ${channel}`,
+              `[${listenerId}] Redis subscriber error on channel ${channelPattern}`,
+              err,
+            );
+            observer.error(
+              new Error(
+                `[${listenerId}] Redis subscriber connection error: ${err.message}`,
+              ),
+            );
+          };
+
+          const endListener = () => {
+            this.logger.warn(
+              `[${listenerId}] Redis subscriber disconnected while listening to ${channelPattern}`,
+            );
+            observer.error(
+              new Error('Redis subscriber connection closed unexpectedly'),
+            );
+          };
+
+          // SETUP LISTENERS (including main message listener)
+
+          let startListenerPromise: Promise<void> = Promise.resolve();
+          try {
+            // Check if Redis subscriber is connected
+            if (!this.redis.getSubscriber().isReady) {
+              throw new Error('Redis subscriber is not ready');
+            }
+
+            // Add connection health listeners
+            this.redis.getSubscriber().on('error', errorListener);
+            this.redis.getSubscriber().on('end', endListener);
+
+            startListenerPromise = this.redis.addPatternListener(
+              channelPattern,
+              messageListener,
+            );
+          } catch (error) {
+            this.logger.error(
+              `[${listenerId}] Error adding listener to channel ${channelPattern}`,
               error,
             );
-          });
+            observer.error(error);
+          }
 
-        // Clean up event listeners
-        if (errorListener) {
-          this.redis.getSubscriber().off('error', errorListener);
-          errorListener = null;
-        }
-        if (endListener) {
-          this.redis.getSubscriber().off('end', endListener);
-          endListener = null;
-        }
-      };
+          // CLEANUP LISTENERS (called on unsubscribe)
 
-      // Monitor Redis subscriber connection health
-      errorListener = (err: Error) => {
-        this.logger.error(
-          `[${listenerId}] Redis subscriber error on channel ${channel}`,
-          err,
-        );
-        observer.error(
-          new Error(
-            `[${listenerId}] Redis subscriber connection error: ${err.message}`,
-          ),
-        );
-      };
+          return async () => {
+            this.logger.debug(
+              `[${listenerId}] Removing listener from channel ${channelPattern}`,
+            );
 
-      endListener = () => {
-        this.logger.warn(
-          `[${listenerId}] Redis subscriber disconnected while listening to ${channel}`,
-        );
-        observer.error(
-          new Error('Redis subscriber connection closed unexpectedly'),
-        );
-      };
+            // Make sure the listener startup is complete before
+            // attempting to clean it up.
+            await startListenerPromise;
 
-      // SETUP LISTENERS (including main message listener)
-      try {
-        // Check if Redis subscriber is connected
-        if (!this.redis.getSubscriber().isReady) {
-          throw new Error('Redis subscriber is not ready');
-        }
-
-        // Add connection health listeners
-        this.redis.getSubscriber().on('error', errorListener);
-        this.redis.getSubscriber().on('end', endListener);
-
-        this.redis.addPatternListener(channel, messageListener);
-      } catch (error) {
-        this.logger.error(
-          `[${listenerId}] Error adding listener to channel ${channel}`,
-          error,
-        );
-        observer.error(error);
-      }
-
-      return cleanup;
-    });
+            await this.redis
+              .removePatternListener(channelPattern, messageListener)
+              .catch((error) => {
+                this.logger.error(
+                  `[${listenerId}] Error removing listener from channel ${channelPattern}`,
+                  error,
+                );
+              })
+              .finally(() => {
+                // Clean up event listeners
+                this.redis.getSubscriber().off('error', errorListener);
+                this.redis.getSubscriber().off('end', endListener);
+              });
+          };
+        });
+      }),
+    );
   }
 
   public async generateToken() {
