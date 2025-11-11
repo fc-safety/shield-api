@@ -117,28 +117,31 @@ export class EventsService {
 
           // SETUP LISTENERS (including main message listener)
 
-          let startListenerPromise: Promise<void> = Promise.resolve();
-          try {
-            // Check if Redis subscriber is connected
-            if (!this.redis.getSubscriber().isReady) {
-              throw new Error('Redis subscriber is not ready');
+          const startListenerPromise = new Promise<void>(async (resolve) => {
+            try {
+              // Check if Redis subscriber is connected
+              if (!this.redis.getSubscriber().isReady) {
+                throw new Error('Redis subscriber is not ready');
+              }
+
+              // Add connection health listeners
+              this.redis.getSubscriber().on('error', errorListener);
+              this.redis.getSubscriber().on('end', endListener);
+
+              await this.redis.addPatternListener(
+                channelPattern,
+                messageListener,
+              );
+            } catch (error) {
+              this.logger.error(
+                `[${listenerId}] Error adding listener to channel ${channelPattern}`,
+                error,
+              );
+              observer.error(error);
+            } finally {
+              resolve();
             }
-
-            // Add connection health listeners
-            this.redis.getSubscriber().on('error', errorListener);
-            this.redis.getSubscriber().on('end', endListener);
-
-            startListenerPromise = this.redis.addPatternListener(
-              channelPattern,
-              messageListener,
-            );
-          } catch (error) {
-            this.logger.error(
-              `[${listenerId}] Error adding listener to channel ${channelPattern}`,
-              error,
-            );
-            observer.error(error);
-          }
+          });
 
           // CLEANUP LISTENERS (called on unsubscribe)
 
