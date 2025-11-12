@@ -8,6 +8,7 @@ import {
   TResource,
   TVisibility,
   VISIBILITY,
+  VISIBILITY_VALUES,
 } from './permissions';
 
 export const keycloakTokenPayloadSchema = z.object({
@@ -73,12 +74,22 @@ export class StatelessUser {
   }
 
   public get visibility(): TVisibility {
-    const visibilityPermission = this.permissions?.find((p) =>
-      p.startsWith('visibility:'),
-    );
+    if (this.permissions) {
+      const visibilityPermissions = new Set<TVisibility>();
+      this.permissions
+        .filter((p) => p.startsWith('visibility:'))
+        .forEach((p) =>
+          visibilityPermissions.add(
+            p.replace('visibility:', '') as TVisibility,
+          ),
+        );
 
-    if (visibilityPermission) {
-      return visibilityPermission.replace('visibility:', '') as TVisibility;
+      // Return the most permissive visibility level.
+      for (const visibility of VISIBILITY_VALUES) {
+        if (visibilityPermissions.has(visibility)) {
+          return visibility;
+        }
+      }
     }
 
     return 'self';
