@@ -56,7 +56,7 @@ export default function InspectionAlertTriggeredTemplateReact({
   frontendUrl,
 }: InspectionAlertTriggeredTemplateProps): React.ReactElement {
   const rowData = [
-    { label: 'Date', value: format(alert.createdOn, 'PPpp') },
+    { label: 'Date', value: format(alert.createdOn, 'PPpp zzzz') },
     {
       label: 'Level',
       value: (
@@ -192,7 +192,7 @@ InspectionAlertTriggeredTemplateReact.Text = ({
 
     Here are the details:
 
-    Date: ${format(alert.createdOn, 'PPpp')}
+    Date: ${format(alert.createdOn, 'PPpp zzzz')}
     Level: ${alert.alertLevel.toLowerCase()}
     Asset: ${asset.name} – ${asset.categoryName}
     Asset Location: ${asset.location} – ${asset.placement}
@@ -224,7 +224,8 @@ InspectionAlertTriggeredTemplateReact.PreviewProps = {
     createdOn: new Date(),
     alertLevel: AlertLevel.URGENT,
     message: 'pressure gauge reading is below minimum threshold',
-    questionPrompt: 'Is the pressure gauge reading within normal range (12-15 PSI)?',
+    questionPrompt:
+      'Is the pressure gauge reading within normal range (12-15 PSI)?',
     questionResponseValue: '8 PSI',
     inspectionImageUrl: null,
   },
