@@ -13,11 +13,11 @@ import { z } from 'zod';
 const QueryClientFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     externalId: prismaStringFilter(z.string()),
     status: prismaEnumFilter(z.enum(['ACTIVE', 'INACTIVE', 'PENDING'])),
-    startedOn: prismaDateTimeFilter(z.coerce.date()),
+    startedOn: prismaDateTimeFilter(z.iso.datetime()),
     address: filterAddressSchema,
   })
   .partial() satisfies z.Schema<Prisma.ClientWhereInput>;

@@ -10,8 +10,8 @@ import { z } from 'zod';
 const QueryInspectionRouteFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     name: prismaStringFilter(z.string()),
     siteId: prismaStringFilter(z.string()),
     clientId: prismaStringFilter(z.string()),

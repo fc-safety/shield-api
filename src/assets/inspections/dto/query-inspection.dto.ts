@@ -11,8 +11,8 @@ import { z } from 'zod';
 const QueryInspectionFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     asset: z.object({
       id: prismaStringFilter(z.string()),
       name: prismaStringFilter(z.string()),

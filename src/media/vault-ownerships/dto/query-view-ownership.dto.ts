@@ -11,13 +11,11 @@ import { z } from 'zod';
 const QueryViewOwnershipFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     key: prismaStringFilter(z.string()),
     bucketName: prismaStringFilter(z.string()),
-    accessType: z.enum(
-      Object.values(VaultAccessType) as [VaultAccessType, ...VaultAccessType[]],
-    ),
+    accessType: z.enum(Object.values(VaultAccessType)),
     owner: z.object({
       id: prismaStringFilter(z.string()),
     }),

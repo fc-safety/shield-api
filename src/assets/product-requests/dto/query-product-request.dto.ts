@@ -12,20 +12,13 @@ import { z } from 'zod';
 const QueryProductRequestFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     asset: z.object({
       id: prismaStringFilter(z.string()),
       name: prismaStringFilter(z.string()),
     }),
-    status: prismaEnumFilter(
-      z.enum(
-        Object.values(ProductRequestStatus) as [
-          ProductRequestStatus,
-          ...ProductRequestStatus[],
-        ],
-      ),
-    ),
+    status: prismaEnumFilter(z.enum(Object.values(ProductRequestStatus))),
   })
   .partial() satisfies z.Schema<Prisma.ProductRequestWhereInput>;
 

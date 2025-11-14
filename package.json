@@ -53,7 +53,7 @@
     "jwks-rsa": "^3.2.0",
     "mysql2": "^3.14.2",
     "nestjs-cls": "^6.0.1",
-    "nestjs-zod": "^4.3.1",
+    "nestjs-zod": "^5.0.1",
     "p-retry": "^6.2.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -63,7 +63,7 @@
     "rxjs": "^7.8.2",
     "tailwind-merge": "^3.3.1",
     "telnyx": "^2.0.0",
-    "zod": "^3.24.5"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",

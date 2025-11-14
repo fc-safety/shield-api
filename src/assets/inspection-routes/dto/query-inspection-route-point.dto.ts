@@ -11,8 +11,8 @@ import { z } from 'zod';
 const QueryInspectionRoutePointFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     order: prismaNumberFilter(z.number()),
     assetId: prismaStringFilter(z.string()),
     siteId: prismaStringFilter(z.string()),

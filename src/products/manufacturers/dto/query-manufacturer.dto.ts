@@ -12,8 +12,8 @@ import { z } from 'zod';
 const QueryManufacturerFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     active: prismaBoolFilter(z.coerce.boolean()),
     name: prismaStringFilter(z.string()),
     client: z.object({
