@@ -37,7 +37,7 @@ const BaseQueryProductFiltersSchema = z
         id: prismaStringFilter(z.string()),
       })
       .partial(),
-    parentProductId: prismaStringFilter(z.string()),
+    parentProductId: prismaStringFilter(z.string(), { nullable: true }),
     parentProduct: z
       .object({
         id: prismaStringFilter(z.string()),

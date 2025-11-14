@@ -55,7 +55,7 @@ const QueryAssetQuestionFiltersSchema = z
     client: z.object({
       externalId: prismaStringFilter(z.string()),
     }),
-    clientId: prismaStringFilter(z.string()),
+    clientId: prismaStringFilter(z.string(), { nullable: true }),
   })
   .partial() satisfies z.Schema<Prisma.AssetQuestionWhereInput>;
 

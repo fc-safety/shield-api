@@ -72,14 +72,23 @@ export const prismaStringFilter = <TValue extends z.ZodString>(
   } = {},
   // singularType?: z.ZodTypeAny,
 ) => {
-  const stringFilters = buildPrismaStringFilters<TValue>(zodType).partial();
   if (options.nullable) {
+    const nullableZodType = zodType.transform((value) =>
+      value === '_NULL' ? null : value,
+    ) as unknown as TValue;
     return z.union([
-      zodType.transform((value) => (value === '_NULL' ? null : value)),
-      stringFilters,
+      nullableZodType,
+      buildPrismaStringFilters<TValue>(nullableZodType).partial(),
     ]) as unknown as TValue;
   }
-  return z.union([zodType, stringFilters]);
+
+  const nonNullableZodType = zodType.refine((value) => value !== '_NULL', {
+    message: 'Value cannot be _NULL',
+  });
+  return z.union([
+    nonNullableZodType,
+    buildPrismaStringFilters<TValue>(nonNullableZodType).partial(),
+  ]);
 };
 
 export const OrderValueOptions = ['asc', 'desc'] as const;

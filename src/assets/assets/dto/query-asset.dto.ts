@@ -15,7 +15,7 @@ const BaseQueryAssetFiltersSchema = z
     createdOn: prismaDateTimeFilter(z.iso.datetime()),
     modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     active: prismaBoolFilter(z.stringbool()),
-    tagId: prismaStringFilter(z.string()),
+    tagId: prismaStringFilter(z.string(), { nullable: true }),
     site: z
       .object({
         id: prismaStringFilter(z.string()),
