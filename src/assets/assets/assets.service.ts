@@ -1,6 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { subDays } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
+import { jsx } from 'react/jsx-runtime';
 import { UsersService } from 'src/clients/users/users.service';
 import { testAlertRule } from 'src/common/alert-utils';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
@@ -701,7 +702,7 @@ ORDER BY metadata_value
 
     await this.notifications.sendEmails(
       users.results.map((user) => ({
-        react: TeamInspectionReminderTemplateReact({
+        react: jsx(TeamInspectionReminderTemplateReact, {
           ...templateProps,
           firstName: user.firstName,
         }),

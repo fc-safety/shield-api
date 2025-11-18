@@ -1,5 +1,4 @@
-import type KeycloakAdminClient from '@keycloak/keycloak-admin-client';
-import { type NetworkError } from '@keycloak/keycloak-admin-client';
+import KeycloakAdminClient from '@keycloak/keycloak-admin-client';
 import GroupRepresentation from '@keycloak/keycloak-admin-client/lib/defs/groupRepresentation';
 import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
 import { RequestArgs } from '@keycloak/keycloak-admin-client/lib/resources/agent';
@@ -18,7 +17,6 @@ import {
 const logger = new Logger('KeycloakService');
 
 export const KEYCLOAK_ADMIN_CLIENT = 'keycloak-admin-client';
-export let KCNetworkError: typeof NetworkError | undefined;
 
 export const MANAGED_ROLES_GROUP_NAME = 'Roles (managed by Shield API)';
 
@@ -45,23 +43,6 @@ const refreshAuth = async (
     realmName: config.defaultRealm,
   });
 };
-
-async function loadKeycloakModule() {
-  try {
-    return (await eval(
-      "import('@keycloak/keycloak-admin-client')",
-    )) as typeof import('@keycloak/keycloak-admin-client');
-  } catch {
-    return await import('@keycloak/keycloak-admin-client');
-  }
-}
-
-export async function loadKeycloakAdminClient() {
-  const { default: KeycloakAdminClient, NetworkError } =
-    await loadKeycloakModule();
-  KCNetworkError = NetworkError;
-  return KeycloakAdminClient;
-}
 
 export const getShieldClient = async (
   adminClient: KeycloakAdminClient,
@@ -101,9 +82,7 @@ const syncShieldClientPermissions = async (
 };
 
 export const keycloakAdminClientFactory = async (config: ApiConfigService) => {
-  const KCAdminClient = await loadKeycloakAdminClient();
-
-  const keycloakClient = new KCAdminClient({
+  const keycloakClient = new KeycloakAdminClient({
     realmName: config.get('KEYCLOAK_ADMIN_CLIENT_ADMIN_REALM'),
     baseUrl: config.get('KEYCLOAK_ADMIN_CLIENT_BASE_URL'),
   });

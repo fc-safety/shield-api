@@ -17,7 +17,8 @@ interface ValidateJWTTokenOptions {
   allowPublic?: boolean;
 }
 
-const createSecret = cuid2Init({ length: 64 });
+const createId32 = cuid2Init({ length: 32 });
+const createSecret = () => createId32() + createId32();
 
 export class SigningKeyExpiredError extends Error {
   constructor(message: string) {
