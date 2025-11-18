@@ -12,11 +12,11 @@ const CreateInspectionSchema = z.object({
   }),
   status: z.enum(['PENDING', 'COMPLETE']),
   useragent: z.string(),
-  ipv4: z.string().ip({ version: 'v4' }).optional(),
-  ipv6: z.string().ip({ version: 'v6' }).optional(),
-  latitude: z.number().safe().gte(-90).lte(90),
-  longitude: z.number().safe().gte(-180).lte(180),
-  locationAccuracy: z.number().safe(),
+  ipv4: z.ipv4().nullable().optional(),
+  ipv6: z.ipv6().nullable().optional(),
+  latitude: z.number().int().gte(-90).lte(90),
+  longitude: z.number().int().gte(-180).lte(180),
+  locationAccuracy: z.number().int().nullable(),
   comments: z.string().optional(),
   responses: z.object({
     createMany: z.object({

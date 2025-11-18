@@ -11,9 +11,9 @@ import { z } from 'zod';
 export const QueryConsumableFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
-    expiresOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
+    expiresOn: prismaDateTimeFilter(z.iso.datetime()),
     asset: z
       .object({
         id: prismaStringFilter(z.string()),

@@ -8,11 +8,11 @@ import {
 import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
-const QueryProductCateogryFiltersSchema = z
+const BaseQueryProductCateogryFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     name: prismaStringFilter(z.string()),
     shortName: prismaStringFilter(z.string()),
     description: prismaStringFilter(z.string()),
@@ -21,8 +21,15 @@ const QueryProductCateogryFiltersSchema = z
     client: z.object({
       externalId: prismaStringFilter(z.string()),
     }),
+    clientId: prismaStringFilter(z.string(), { nullable: true }),
   })
   .partial() satisfies z.Schema<Prisma.ProductCategoryWhereInput>;
+
+const QueryProductCateogryFiltersSchema =
+  BaseQueryProductCateogryFiltersSchema.extend({
+    OR: z.array(BaseQueryProductCateogryFiltersSchema),
+    AND: z.array(BaseQueryProductCateogryFiltersSchema),
+  }).partial() satisfies z.Schema<Prisma.ProductCategoryWhereInput>;
 
 const QueryProductCateogryOrderSchema = z
   .object({

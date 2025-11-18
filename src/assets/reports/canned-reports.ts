@@ -10,6 +10,8 @@ import {
 } from 'src/generated/prisma/client/sql';
 import { CannedReport } from './types';
 
+const DEFAULT_DATE_FORMAT = 'PPpp zzzz';
+
 type ActiveAssetRow = getActiveAssets.Result;
 const ActiveAssetsCannedReport: CannedReport<ActiveAssetRow> = {
   id: 'active-assets',
@@ -19,7 +21,7 @@ const ActiveAssetsCannedReport: CannedReport<ActiveAssetRow> = {
   columns: [
     {
       alias: 'createdOn',
-      valueFn: (row) => format(row.createdOn, 'PPpp'),
+      valueFn: (row) => format(row.createdOn, DEFAULT_DATE_FORMAT),
     },
     'siteName',
     'tagSerialNumber',
@@ -29,7 +31,8 @@ const ActiveAssetsCannedReport: CannedReport<ActiveAssetRow> = {
     'placement',
     {
       alias: 'setupOn',
-      valueFn: (row) => (row.setupOn ? format(row.setupOn, 'PPpp') : ''),
+      valueFn: (row) =>
+        row.setupOn ? format(row.setupOn, DEFAULT_DATE_FORMAT) : '',
     },
     'productName',
     'productCategoryName',
@@ -54,7 +57,9 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
       alias: 'lastInspectionDate',
       label: 'Last Inspected',
       valueFn: (row) =>
-        row.lastInspectionDate ? format(row.lastInspectionDate, 'PPpp') : '',
+        row.lastInspectionDate
+          ? format(row.lastInspectionDate, DEFAULT_DATE_FORMAT)
+          : '',
     },
     'siteName',
     'tagSerialNumber',
@@ -64,7 +69,8 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
     'placement',
     {
       alias: 'setupOn',
-      valueFn: (row) => (row.setupOn ? format(row.setupOn, 'PPpp') : ''),
+      valueFn: (row) =>
+        row.setupOn ? format(row.setupOn, DEFAULT_DATE_FORMAT) : '',
     },
     'productName',
     'productCategoryName',
@@ -88,7 +94,7 @@ const AllInspectionsCannedReport: CannedReport<InspectionRow> = {
     {
       alias: 'createdOn',
       label: 'Inspection Date',
-      valueFn: (row) => format(row.createdOn, 'PPpp'),
+      valueFn: (row) => format(row.createdOn, DEFAULT_DATE_FORMAT),
     },
     'siteName',
     'inspectorName',
@@ -120,11 +126,12 @@ const ExpiringConsumablesCannedReport: CannedReport<ExpiringConsumableRow> = {
   columns: [
     {
       alias: 'createdOn',
-      valueFn: (row) => format(row.createdOn, 'PPpp'),
+      valueFn: (row) => format(row.createdOn, DEFAULT_DATE_FORMAT),
     },
     {
       alias: 'expiresOn',
-      valueFn: (row) => (row.expiresOn ? format(row.expiresOn, 'PPpp') : ''),
+      valueFn: (row) =>
+        row.expiresOn ? format(row.expiresOn, DEFAULT_DATE_FORMAT) : '',
     },
     'quantity',
     'assetName',
@@ -155,11 +162,12 @@ const ExpiredConsumablesCannedReport: CannedReport<ExpiredConsumableRow> = {
   columns: [
     {
       alias: 'createdOn',
-      valueFn: (row) => format(row.createdOn, 'PPpp'),
+      valueFn: (row) => format(row.createdOn, DEFAULT_DATE_FORMAT),
     },
     {
       alias: 'expiresOn',
-      valueFn: (row) => (row.expiresOn ? format(row.expiresOn, 'PPpp') : ''),
+      valueFn: (row) =>
+        row.expiresOn ? format(row.expiresOn, DEFAULT_DATE_FORMAT) : '',
     },
     'quantity',
     'assetName',
@@ -188,19 +196,20 @@ const RecentAlertsCannedReport: CannedReport<RecentAlertRow> = {
   columns: [
     {
       alias: 'createdOn',
-      valueFn: (row) => format(row.createdOn, 'PPpp'),
+      valueFn: (row) => format(row.createdOn, DEFAULT_DATE_FORMAT),
     },
     'alertLevel',
     'message',
     'resolved',
     {
       alias: 'resolvedOn',
-      valueFn: (row) => (row.resolvedOn ? format(row.resolvedOn, 'PPpp') : ''),
+      valueFn: (row) =>
+        row.resolvedOn ? format(row.resolvedOn, DEFAULT_DATE_FORMAT) : '',
     },
     'resolutionNote',
     {
       alias: 'inspectionDate',
-      valueFn: (row) => format(row.inspectionDate, 'PPpp'),
+      valueFn: (row) => format(row.inspectionDate, DEFAULT_DATE_FORMAT),
     },
     'inspectorName',
     'assetName',
@@ -231,19 +240,20 @@ const UnresolvedAlertsCannedReport: CannedReport<UnresolvedAlertRow> = {
   columns: [
     {
       alias: 'createdOn',
-      valueFn: (row) => format(row.createdOn, 'PPpp'),
+      valueFn: (row) => format(row.createdOn, DEFAULT_DATE_FORMAT),
     },
     'alertLevel',
     'message',
     'resolved',
     {
       alias: 'resolvedOn',
-      valueFn: (row) => (row.resolvedOn ? format(row.resolvedOn, 'PPpp') : ''),
+      valueFn: (row) =>
+        row.resolvedOn ? format(row.resolvedOn, DEFAULT_DATE_FORMAT) : '',
     },
     'resolutionNote',
     {
       alias: 'inspectionDate',
-      valueFn: (row) => format(row.inspectionDate, 'PPpp'),
+      valueFn: (row) => format(row.inspectionDate, DEFAULT_DATE_FORMAT),
     },
     'inspectorName',
     'assetName',

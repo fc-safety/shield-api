@@ -16,7 +16,7 @@ export default function NewLandingFormLeadTemplateReact({
   formData,
 }: NewLandingFormLeadProps): React.ReactElement {
   const rowData = [
-    { label: 'Timestamp', value: format(timestamp, 'PPpp') },
+    { label: 'Timestamp', value: format(timestamp, 'PPpp zzzz') },
     { label: 'Name', value: `${formData.firstName} ${formData.lastName}` },
     { label: 'Company Name', value: formData.companyName },
     {
@@ -76,7 +76,7 @@ NewLandingFormLeadTemplateReact.Text = ({
 
   Here are the details:
 
-  Timestamp: ${format(timestamp, 'PPpp')}
+  Timestamp: ${format(timestamp, 'PPpp zzzz')}
   Name: ${formData.firstName} ${formData.lastName}
   Company Name: ${formData.companyName}
   Email: ${formData.email}

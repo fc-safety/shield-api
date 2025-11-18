@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { filterAddressSchema, orderAddressSchema } from 'src/common/schema';
 import {
+  booleanString,
   buildFixedQuerySchema,
   emptyAsObject,
   prismaBoolFilter,
@@ -14,12 +15,12 @@ import { z } from 'zod';
 const BaseQuerySiteFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     externalId: prismaStringFilter(z.string()),
     address: filterAddressSchema,
-    primary: prismaBoolFilter(z.coerce.boolean()),
-    parentSiteId: prismaStringFilter(z.string()),
+    primary: prismaBoolFilter(z.stringbool()),
+    parentSiteId: prismaStringFilter(z.string(), { nullable: true }),
     clientId: prismaStringFilter(z.string()),
   })
   .partial() satisfies z.Schema<Prisma.SiteWhereInput>;
@@ -52,6 +53,23 @@ const QuerySiteOrderSchema = z
   })
   .partial();
 
+const QuerySiteIncludeSchema = z
+  .object({
+    subsites: z.union([
+      z.object({
+        include: z
+          .object({
+            address: booleanString,
+          })
+          .partial(),
+      }),
+      booleanString,
+    ]),
+  })
+  .partial() satisfies z.Schema<Prisma.SiteInclude>;
+
 export class QuerySiteDto extends createZodDto(
-  QuerySiteFiltersSchema.extend(buildFixedQuerySchema(QuerySiteOrderSchema)),
+  QuerySiteFiltersSchema.extend(
+    buildFixedQuerySchema(QuerySiteOrderSchema, QuerySiteIncludeSchema),
+  ),
 ) {}

@@ -11,7 +11,12 @@ COPY package*.json ./
 
 # Install app dependencies
 RUN npm ci --ignore-scripts
-RUN npm i --ignore-scripts @swc/core-linux-x64-gnu
+# Install platform-specific SWC core
+RUN if [ "$(uname -m)" = "x86_64" ]; then \
+      npm i --ignore-scripts @swc/core-linux-x64-gnu; \
+    elif [ "$(uname -m)" = "aarch64" ] || [ "$(uname -m)" = "arm64" ]; then \
+      npm i --ignore-scripts @swc/core-linux-arm64-gnu; \
+    fi
 
 # Bundle app source
 COPY . .

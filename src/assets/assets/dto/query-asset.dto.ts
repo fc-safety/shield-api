@@ -12,10 +12,10 @@ import { z } from 'zod';
 const BaseQueryAssetFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
-    active: prismaBoolFilter(z.coerce.boolean()),
-    tagId: prismaStringFilter(z.string()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
+    active: prismaBoolFilter(z.stringbool()),
+    tagId: prismaStringFilter(z.string(), { nullable: true }),
     site: z
       .object({
         id: prismaStringFilter(z.string()),

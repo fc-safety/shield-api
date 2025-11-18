@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import { QueryConsumableFiltersSchema } from 'src/assets/consumables/dto/query-consumable.dto';
 import {
+  booleanString,
   buildFixedQuerySchema,
   emptyAsObject,
   prismaBoolFilter,
@@ -16,9 +17,9 @@ import { z } from 'zod';
 const BaseQueryProductFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
-    createdOn: prismaDateTimeFilter(z.coerce.date()),
-    modifiedOn: prismaDateTimeFilter(z.coerce.date()),
-    active: prismaBoolFilter(z.coerce.boolean()),
+    createdOn: prismaDateTimeFilter(z.iso.datetime()),
+    modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
+    active: prismaBoolFilter(z.stringbool()),
     manufacturer: z
       .object({
         id: prismaStringFilter(z.string()),
@@ -36,7 +37,7 @@ const BaseQueryProductFiltersSchema = z
         id: prismaStringFilter(z.string()),
       })
       .partial(),
-    parentProductId: prismaStringFilter(z.string()),
+    parentProductId: prismaStringFilter(z.string(), { nullable: true }),
     parentProduct: z
       .object({
         id: prismaStringFilter(z.string()),
@@ -61,6 +62,7 @@ const BaseQueryProductFiltersSchema = z
     client: z.object({
       externalId: prismaStringFilter(z.string()),
     }),
+    clientId: prismaStringFilter(z.string(), { nullable: true }),
   })
   .partial() satisfies z.Schema<Prisma.ProductWhereInput>;
 
@@ -126,7 +128,6 @@ const QueryProductIncludeSchema = z
       }),
     ]),
     parentProduct: z.union([
-      z.coerce.boolean(),
       z.object({
         include: z
           .object({
@@ -136,6 +137,7 @@ const QueryProductIncludeSchema = z
           })
           .partial(),
       }),
+      booleanString,
     ]),
   })
   .partial() satisfies z.Schema<Prisma.ProductInclude>;

@@ -7,13 +7,18 @@ export type PrismaQueryFilters<T extends { where?: any; orderBy?: any }> =
     order?: T['orderBy'];
   };
 
+export const booleanString = z.stringbool({
+  truthy: ['true', '1'],
+  falsy: ['false', '0'],
+});
+
 const buildPrismaBoolFilters = <T extends z.ZodTypeAny>(zodType: T) =>
   z.object({
     equals: zodType,
     not: zodType,
   });
 
-export const prismaBoolFilter = <TValue extends z.ZodBoolean>(
+export const prismaBoolFilter = <TValue extends z.ZodType<boolean>>(
   zodType: TValue,
 ) => {
   return z.union([zodType, buildPrismaBoolFilters<TValue>(zodType).partial()]);
@@ -25,12 +30,7 @@ const buildPrismaEnumFilters = <T extends z.ZodTypeAny>(zodType: T) =>
     notIn: z.array(zodType),
   });
 
-export const prismaEnumFilter = <
-  TEnum extends [string, ...string[]],
-  TValue extends z.ZodEnum<TEnum>,
->(
-  zodType: TValue,
-) => {
+export const prismaEnumFilter = <TValue extends z.ZodEnum>(zodType: TValue) => {
   return z.union([zodType, buildPrismaEnumFilters<TValue>(zodType).partial()]);
 };
 
@@ -42,7 +42,7 @@ const buildPrismaDateTimeFilters = <T extends z.ZodTypeAny>(zodType: T) =>
     gte: zodType,
   });
 
-export const prismaDateTimeFilter = <TValue extends z.ZodDate>(
+export const prismaDateTimeFilter = <TValue extends z.ZodISODateTime>(
   zodType: TValue,
 ) => {
   return z.union([
@@ -67,13 +67,27 @@ const buildPrismaStringFilters = <T extends z.ZodTypeAny>(zodType: T) =>
 
 export const prismaStringFilter = <TValue extends z.ZodString>(
   zodType: TValue,
-  singularType?: z.ZodTypeAny,
+  options: {
+    nullable?: boolean;
+  } = {},
+  // singularType?: z.ZodTypeAny,
 ) => {
-  return z.union([
-    (singularType ?? zodType).transform((value) =>
+  if (options.nullable) {
+    const nullableZodType = zodType.transform((value) =>
       value === '_NULL' ? null : value,
-    ),
-    buildPrismaStringFilters<TValue>(zodType).partial(),
+    ) as unknown as TValue;
+    return z.union([
+      nullableZodType,
+      buildPrismaStringFilters<TValue>(nullableZodType).partial(),
+    ]) as unknown as TValue;
+  }
+
+  const nonNullableZodType = zodType.refine((value) => value !== '_NULL', {
+    message: 'Value cannot be _NULL',
+  });
+  return z.union([
+    nonNullableZodType,
+    buildPrismaStringFilters<TValue>(nonNullableZodType).partial(),
   ]);
 };
 
