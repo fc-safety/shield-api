@@ -12,6 +12,16 @@ import {
 } from './create-asset-question.dto';
 
 const UpdateAssetQuestionSchema = CreateAssetQuestionSchema.extend({
+  active: z.boolean(), // remove default value (https://zod.dev/v4/changelog?id=defaults-applied-within-optional-fields)
+  required: z.boolean(), // remove default value (https://zod.dev/v4/changelog?id=defaults-applied-within-optional-fields)
+  client: z
+    .object({
+      connect: z.object({
+        id: z.string(),
+      }),
+      disconnect: z.boolean(),
+    })
+    .partial(),
   conditions: z
     .object({
       createMany: z.object({
