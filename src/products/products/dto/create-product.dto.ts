@@ -30,6 +30,7 @@ export const CreateProductSchema = z.object({
       }),
     })
     .optional(),
+  displayExpirationDate: z.boolean().optional(),
   quantity: z.number().optional(),
   price: z.number().optional(),
   ansiCategory: z
