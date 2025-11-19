@@ -15,8 +15,11 @@ RUN npm install --ignore-scripts
 # Bundle app source
 COPY . .
 
-# Generate Prisma types for app build.
+# Transpile Prisma config file.
 RUN npx swc prisma.config.ts -o prisma.config.js
+
+# Generate Prisma types for app build.
+RUN npx prisma generate --sql
 
 # Creates a "dist" folder with the production build
 RUN npm run build
@@ -29,7 +32,6 @@ WORKDIR /app
 COPY --from=builder /usr/src/app/package*.json ./
 RUN npm ci --ignore-scripts --omit=dev && \
     npm cache clean --force
-# COPY --from=builder /usr/src/app/node_modules ./node_modules
 
 COPY --from=builder /usr/src/app/dist ./dist
 COPY --from=builder /usr/src/app/prisma.config.js ./prisma.config.js
