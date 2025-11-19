@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
-    "module": "NodeNext",
-    "target": "es2022",
-    "lib": ["ES2022", "DOM"],
-    "moduleResolution": "NodeNext",
+    "module": "nodenext",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "moduleResolution": "nodenext",
     "strict": true,
     "types": ["node"],
+    "esModuleInterop": true,
 
     "declaration": true,
     "removeComments": true,

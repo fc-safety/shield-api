@@ -1,8 +1,8 @@
 import { ArgumentsHost, Catch, ExceptionFilter, Logger } from '@nestjs/common';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { Response } from 'express';
+import { Prisma } from 'src/generated/prisma/client';
 
-@Catch(PrismaClientKnownRequestError)
+@Catch(Prisma.PrismaClientKnownRequestError)
 export class PrismaErrorsFilter implements ExceptionFilter {
   logger = new Logger(PrismaErrorsFilter.name);
 
@@ -13,7 +13,7 @@ export class PrismaErrorsFilter implements ExceptionFilter {
     const status = 500;
     const message = 'Internal server error';
 
-    if (exception instanceof PrismaClientKnownRequestError) {
+    if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       // TODO: This doesn't really work for 404s because there are other types
       // of these that aren't the same as simply a resource wasn't found.
       // if (exception.code === 'P2025') {

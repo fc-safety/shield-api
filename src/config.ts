@@ -5,6 +5,10 @@ export const configSchema = z.object({
   // GENERAL
   PORT: z.coerce.number().optional().default(3000),
   FRONTEND_URL: z.string(),
+
+  // DATABASE
+  DATABASE_URL: z.string(),
+
   // AUTH
   AUTH_JWKS_URI: z.string(),
   AUTH_ISSUER: z.string(),

@@ -19,7 +19,7 @@ import {
   InspectionStatus,
   Prisma,
 } from 'src/generated/prisma/client';
-import { getAssetsToRenewForDemoClient } from 'src/generated/prisma/client/sql';
+import { getAssetsToRenewForDemoClient } from 'src/generated/prisma/sql';
 import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';

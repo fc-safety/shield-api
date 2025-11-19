@@ -7,7 +7,7 @@ import {
   getRecentAlerts,
   getRecentInspections,
   getUnresolvedAlerts,
-} from 'src/generated/prisma/client/sql';
+} from 'src/generated/prisma/sql';
 import { CannedReport } from './types';
 
 const DEFAULT_DATE_FORMAT = 'PPpp zzzz';

@@ -5,16 +5,15 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider        = "prisma-client-js"
+  provider        = "prisma-client"
   previewFeatures = ["typedSql"]
   // For Docker deployments.
   binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
-  output          = "../src/generated/prisma/client"
+  output          = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Assets, Tags, Inspections & Alerts
@@ -58,23 +57,24 @@ model Asset {
 }
 
 model Consumable {
-  id                String    @id @default(cuid(2))
+  id                    String    @id @default(cuid(2))
   /**
    * The legacy ID of the consumable (maps to `inventory.i_id` in the legacy database).
    */
-  legacyInventoryId String?
-  createdOn         DateTime  @default(now()) @db.Timestamptz()
-  modifiedOn        DateTime  @updatedAt @db.Timestamptz()
-  asset             Asset?    @relation(fields: [assetId], references: [id])
-  assetId           String?
-  product           Product   @relation(fields: [productId], references: [id])
-  productId         String
-  expiresOn         DateTime? @db.Timestamptz()
-  quantity          Int       @default(1)
-  site              Site      @relation(fields: [siteId], references: [id])
-  siteId            String    @default(dbgenerated("current_setting('app.current_site_id'::text)"))
-  client            Client    @relation(fields: [clientId], references: [id])
-  clientId          String    @default(dbgenerated("current_setting('app.current_client_id'::text)"))
+  legacyInventoryId     String?
+  createdOn             DateTime  @default(now()) @db.Timestamptz()
+  modifiedOn            DateTime  @updatedAt @db.Timestamptz()
+  asset                 Asset?    @relation(fields: [assetId], references: [id])
+  assetId               String?
+  product               Product   @relation(fields: [productId], references: [id])
+  productId             String
+  displayExpirationDate Boolean   @default(false)
+  expiresOn             DateTime? @db.Timestamptz()
+  quantity              Int       @default(1)
+  site                  Site      @relation(fields: [siteId], references: [id])
+  siteId                String    @default(dbgenerated("current_setting('app.current_site_id'::text)"))
+  client                Client    @relation(fields: [clientId], references: [id])
+  clientId              String    @default(dbgenerated("current_setting('app.current_client_id'::text)"))
 
   @@index([legacyInventoryId])
   @@index([clientId])

@@ -11,13 +11,10 @@ import {
   UserConfigurationError,
 } from 'src/clients/people/people.service';
 import { isNil, ViewContext } from 'src/common/utils';
-import {
-  Prisma,
-  PrismaClient,
-  PrismaPromise,
-} from 'src/generated/prisma/client';
+import { Prisma, PrismaClient } from 'src/generated/prisma/client';
 import { RedisService } from 'src/redis/redis.service';
 import { CommonClsStore } from '../common/types';
+import { PrismaAdapter } from './prisma.adapter';
 
 const DEFAULT_PRISMA_OPTIONS = {
   log: [
@@ -38,7 +35,7 @@ const DEFAULT_PRISMA_OPTIONS = {
       level: 'warn',
     },
   ],
-} satisfies ConstructorParameters<typeof PrismaClient>[0];
+} satisfies Pick<Prisma.PrismaClientOptions, 'log'>;
 
 export type PrismaTxClient = Parameters<
   Parameters<Awaited<ReturnType<PrismaService['build']>>['$transaction']>[0]
@@ -46,7 +43,9 @@ export type PrismaTxClient = Parameters<
 
 @Injectable()
 export class PrismaService
-  extends PrismaClient<typeof DEFAULT_PRISMA_OPTIONS>
+  extends PrismaClient<
+    Prisma.PrismaClientOptions & typeof DEFAULT_PRISMA_OPTIONS
+  >
   implements OnModuleInit
 {
   private readonly logger = new Logger(PrismaService.name);
@@ -55,8 +54,12 @@ export class PrismaService
     protected readonly cls: ClsService<CommonClsStore>,
     private readonly redis: RedisService,
     private readonly peopleService: PeopleService,
+    private readonly prismaAdapter: PrismaAdapter,
   ) {
-    super(DEFAULT_PRISMA_OPTIONS);
+    super({
+      adapter: prismaAdapter,
+      ...DEFAULT_PRISMA_OPTIONS,
+    });
   }
 
   async onModuleInit() {
@@ -203,7 +206,7 @@ export class PrismaService
       // Define helper function to set RLS context and execute a query.
       const setRLSContextAndExecute = async <
         A extends Prisma.Args<any, any>,
-        P extends PrismaPromise<any>,
+        P extends Prisma.PrismaPromise<any>,
       >(
         query: (args: A) => P,
         args: A,
@@ -331,7 +334,7 @@ export class PrismaService
       // Define helper function to set RLS context and execute a query.
       const setRLSContextAndExecute = async <
         A extends Prisma.Args<any, any>,
-        P extends PrismaPromise<any>,
+        P extends Prisma.PrismaPromise<any>,
       >(
         query: (args: A) => P,
         args: A,
@@ -421,17 +424,17 @@ export interface BypassRLSExtensionOptions {
 function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: true,
-): PrismaPromise<any>[];
+): Prisma.PrismaPromise<any>[];
 function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: false,
   person: PersonRepresentation,
-): PrismaPromise<any>[];
+): Prisma.PrismaPromise<any>[];
 function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: boolean,
   person?: PersonRepresentation,
-): PrismaPromise<any>[];
+): Prisma.PrismaPromise<any>[];
 function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: boolean,
