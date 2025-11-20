@@ -90,7 +90,6 @@ export class TagsService {
           site: true,
           asset: {
             include: {
-              client: true,
               product: {
                 include: {
                   productCategory: {
