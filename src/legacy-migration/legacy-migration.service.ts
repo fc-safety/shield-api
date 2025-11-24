@@ -323,7 +323,9 @@ export class LegacyMigrationService implements OnModuleDestroy {
         data: {
           createdOn: legacyClient.c_date_insert ?? undefined,
           startedOn: legacyClient.c_date_insert ?? new Date(),
-          status: legacyClient.c_status === 1 ? 'ACTIVE' : 'INACTIVE',
+          // Automatically mark auto-migrated clients as legacy.
+          // Client can be moved to "ACTIVE" manually later.
+          status: 'LEGACY',
           legacyClientId: legacyClient.c_id,
           name: legacyClient.c_name,
           address: {
