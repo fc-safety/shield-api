@@ -66,30 +66,26 @@ export class LegacyMigrationService implements OnModuleDestroy {
     await this._connectionPool.end();
   }
 
-  async getDb() {
-    return new Promise<mariadb.Connection>(async (resolve, reject) => {
-      let db: mariadb.Connection;
-      try {
-        db = await this._connectionPool.getConnection();
-      } catch (e) {
-        this.logger.error(
-          'Error connecting to MySQL. Attempting to process legacy migrations will fail.',
-          e,
-        );
-        reject(new ConnectionNotInitializedError());
-        return;
-      }
+  async initDb() {
+    let db: mariadb.Connection;
+    try {
+      db = await this._connectionPool.getConnection();
+    } catch (e) {
+      this.logger.error(
+        'Error connecting to MySQL. Attempting to process legacy migrations will fail.',
+        e,
+      );
+      throw new ConnectionNotInitializedError();
+    }
 
-      db.on('error', (e) => {
-        this.logger.error(
-          'Error occured while connected to legacy database.',
-          e,
-        );
-        reject(e);
-      });
-
-      resolve(db);
+    db.on('error', (e) => {
+      this.logger.error(
+        'Error occurred while connected to legacy database.',
+        e,
+      );
     });
+
+    return db;
   }
 
   async getWsToken() {
@@ -126,7 +122,7 @@ export class LegacyMigrationService implements OnModuleDestroy {
 
     let closeLegacyDb: () => Promise<void> = async () => {};
     try {
-      const legacyDb = await this.getDb();
+      const legacyDb = await this.initDb();
       closeLegacyDb = async () => {
         await legacyDb.end().catch((e) => {
           this.logger.error('Error closing legacy database connection.', e);

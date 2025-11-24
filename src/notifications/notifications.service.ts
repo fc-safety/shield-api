@@ -32,14 +32,6 @@ export type SendSmsOptions = {
   text: string;
 };
 
-// const loadTelnyxModule = async () => {
-//   try {
-//     return (await eval('import("telnyx")')) as typeof import('telnyx');
-//   } catch {
-//     return await import('telnyx');
-//   }
-// };
-
 @Injectable()
 export class NotificationsService {
   private readonly resend: Resend;
@@ -54,9 +46,6 @@ export class NotificationsService {
     private readonly clientNotificationsQueue: Queue,
   ) {
     this.resend = new Resend(config.get('RESEND_API_KEY'));
-    // this.telnyx = loadTelnyxModule().then(
-    //   (m) => new m.Telnyx({ apiKey: config.get('TELNYX_API_KEY') }),
-    // );
     this.telnyx = new Telnyx({ apiKey: config.get('TELNYX_API_KEY') });
 
     this.queues = {
