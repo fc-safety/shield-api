@@ -1,4 +1,3 @@
-import { JsonValue } from '@prisma/client/runtime/library';
 import {
   differenceInDays,
   format,
@@ -7,7 +6,7 @@ import {
   isSameDay,
   parseISO,
 } from 'date-fns';
-import { $Enums } from 'src/generated/prisma/client';
+import { $Enums, Prisma } from 'src/generated/prisma/client';
 import {
   CreateAssetAlertCriterionRuleSchema,
   RuleClauseSchema,
@@ -15,7 +14,7 @@ import {
 import { z } from 'zod';
 
 const compare = (
-  value: JsonValue,
+  value: Prisma.JsonValue,
   valueType: $Enums.AssetQuestionResponseType,
   clause: string | number,
   ops: {
@@ -55,7 +54,7 @@ const explain = (result: boolean, message: string) =>
   result ? message : false;
 
 const testAlertRuleClause = (
-  value: JsonValue,
+  value: Prisma.JsonValue,
   valueType: $Enums.AssetQuestionResponseType,
   clause: z.infer<typeof RuleClauseSchema>,
 ) => {
@@ -179,7 +178,7 @@ const testAlertRuleClause = (
 };
 
 export const testAlertRule = (
-  value: JsonValue,
+  value: Prisma.JsonValue,
   valueType: $Enums.AssetQuestionResponseType,
   rule: z.infer<typeof CreateAssetAlertCriterionRuleSchema>,
 ): string | false => {

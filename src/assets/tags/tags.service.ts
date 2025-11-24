@@ -83,14 +83,13 @@ export class TagsService {
   async findOneForInspection(externalId: string) {
     const prisma = await this.prisma.build();
     return prisma.tag
-      .findFirstOrThrow({
+      .findUniqueOrThrow({
         where: { externalId },
         include: {
           client: true,
           site: true,
           asset: {
             include: {
-              client: true,
               product: {
                 include: {
                   productCategory: {
@@ -107,6 +106,20 @@ export class TagsService {
                     where: {
                       active: true,
                     },
+                  },
+                },
+              },
+              consumables: {
+                include: {
+                  product: true,
+                },
+                orderBy: {
+                  expiresOn: 'desc',
+                },
+                distinct: ['productId'],
+                where: {
+                  product: {
+                    displayExpirationDate: true,
                   },
                 },
               },

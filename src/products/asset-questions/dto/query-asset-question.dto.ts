@@ -15,7 +15,7 @@ import {
 } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
-const QueryAssetQuestionFiltersSchema = z
+const BaseQueryAssetQuestionFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
     createdOn: prismaDateTimeFilter(z.iso.datetime()),
@@ -58,6 +58,11 @@ const QueryAssetQuestionFiltersSchema = z
     clientId: prismaStringFilter(z.string(), { nullable: true }),
   })
   .partial() satisfies z.Schema<Prisma.AssetQuestionWhereInput>;
+
+const QueryAssetQuestionFiltersSchema =
+  BaseQueryAssetQuestionFiltersSchema.extend({
+    OR: z.array(BaseQueryAssetQuestionFiltersSchema),
+  }).partial() satisfies z.Schema<Prisma.AssetQuestionWhereInput>;
 
 const QueryAssetQuestionOrderSchema = z
   .object({

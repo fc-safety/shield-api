@@ -14,7 +14,7 @@ export const CreateConsumableSchema = z.object({
       id: z.string(),
     }),
   }),
-  expiresOn: z.string().datetime().optional(),
+  expiresOn: z.iso.datetime().optional().nullable(),
   quantity: z.number().optional(),
   site: z
     .object({

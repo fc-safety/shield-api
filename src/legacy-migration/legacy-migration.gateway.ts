@@ -81,7 +81,11 @@ export class LegacyMigrationGateway
       if (error instanceof BaseWsException) {
         client.close(error.code, error.message);
       } else {
-        client.close(1011, 'Internal server error');
+        this.logger.error('Error occurred while processing migration', error);
+        client.close(
+          1011,
+          'An unexpected error occurred. Please try again later.',
+        );
       }
     }
   }

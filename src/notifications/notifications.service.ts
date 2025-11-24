@@ -1,10 +1,11 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Queue } from 'bullmq';
+import { jsx } from 'react/jsx-runtime';
 import { CreateEmailOptions, Resend } from 'resend';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { SettingsService } from 'src/settings/settings.service';
-import type Telnyx from 'telnyx';
+import Telnyx from 'telnyx';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
 import { NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
 import {
@@ -31,18 +32,10 @@ export type SendSmsOptions = {
   text: string;
 };
 
-const loadTelnyxModule = async () => {
-  try {
-    return (await eval('import("telnyx")')) as typeof import('telnyx');
-  } catch {
-    return await import('telnyx');
-  }
-};
-
 @Injectable()
 export class NotificationsService {
   private readonly resend: Resend;
-  private readonly telnyx: Promise<Telnyx>;
+  private readonly telnyx: Telnyx;
   private readonly queues: Record<string, Queue>;
   constructor(
     private readonly settings: SettingsService,
@@ -53,9 +46,7 @@ export class NotificationsService {
     private readonly clientNotificationsQueue: Queue,
   ) {
     this.resend = new Resend(config.get('RESEND_API_KEY'));
-    this.telnyx = loadTelnyxModule().then(
-      (m) => new m.Telnyx(config.get('TELNYX_API_KEY')),
-    );
+    this.telnyx = new Telnyx({ apiKey: config.get('TELNYX_API_KEY') });
 
     this.queues = {
       [this.notificationsQueue.name]: this.notificationsQueue,
@@ -63,15 +54,15 @@ export class NotificationsService {
     };
   }
 
-  async sendEmail(options: SendEmailOptions) {
+  async sendEmail(options: Omit<CreateEmailOptions, 'from'>) {
     const {
       data: { systemEmailFromAddress },
     } = await this.settings.getGlobalSettings();
 
     const { data, error } = await this.resend.emails.send({
-      from: systemEmailFromAddress,
       ...options,
-    });
+      from: systemEmailFromAddress,
+    } as CreateEmailOptions);
 
     if (error) {
       throw new Error(error.message);
@@ -80,7 +71,7 @@ export class NotificationsService {
     return data;
   }
 
-  async sendEmails(options: SendEmailOptions[]) {
+  async sendEmails(options: Omit<CreateEmailOptions, 'from'>[]) {
     const {
       data: { systemEmailFromAddress },
     } = await this.settings.getGlobalSettings();
@@ -89,10 +80,13 @@ export class NotificationsService {
       // Make sure we don't exceed Resend's batch size limit.
       chunkArray(options, 100).map((batch) =>
         this.resend.batch.send(
-          batch.map((o) => ({
-            from: systemEmailFromAddress,
-            ...o,
-          })),
+          batch.map(
+            (o) =>
+              ({
+                from: systemEmailFromAddress,
+                ...o,
+              }) as CreateEmailOptions,
+          ),
         ),
       ),
     ).then((results) => ({
@@ -109,9 +103,8 @@ export class NotificationsService {
 
   async sendSms(options: SendSmsOptions) {
     const phoneNumber = this.config.get('TELNYX_PHONE_NUMBER');
-    const telnyx = await this.telnyx;
 
-    await telnyx.messages.send({
+    await this.telnyx.messages.send({
       from: phoneNumber,
       to: options.to,
       text: options.text,
@@ -172,7 +165,7 @@ export class NotificationsService {
 
     const props = templateProps ?? Template.PreviewProps;
 
-    const text = Template.Text(props as any);
+    const text = Template.Text(props);
 
     await this.sendEmail({
       subject: subject ?? Template.Subject,
@@ -180,7 +173,7 @@ export class NotificationsService {
       cc,
       bcc,
       text,
-      react: Template(props as any),
+      react: jsx(Template, props),
       replyTo,
     });
   }

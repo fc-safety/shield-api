@@ -10,20 +10,16 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Install app dependencies
-RUN npm ci --ignore-scripts
-# Install platform-specific SWC core
-RUN if [ "$(uname -m)" = "x86_64" ]; then \
-      npm i --ignore-scripts @swc/core-linux-x64-gnu; \
-    elif [ "$(uname -m)" = "aarch64" ] || [ "$(uname -m)" = "arm64" ]; then \
-      npm i --ignore-scripts @swc/core-linux-arm64-gnu; \
-    fi
+RUN npm install --ignore-scripts
 
 # Bundle app source
 COPY . .
 
+# Transpile Prisma config file.
+RUN npx swc prisma.config.ts -o prisma.config.js
+
 # Generate Prisma types for app build.
-RUN npx prisma migrate deploy
-RUN npm run db:generate
+RUN npx prisma generate --sql
 
 # Creates a "dist" folder with the production build
 RUN npm run build
@@ -33,11 +29,13 @@ FROM node:24-alpine
 
 WORKDIR /app
 
+COPY --from=builder /usr/src/app/package*.json ./
+RUN npm ci --ignore-scripts --omit=dev && \
+    npm cache clean --force
+
 COPY --from=builder /usr/src/app/dist ./dist
-# Copy Prisma engines to a special tmp directory for Prisma to find.
-COPY --from=builder /usr/src/app/src/generated/prisma/client/*.node ./dist/generated/prisma/client/
+COPY --from=builder /usr/src/app/prisma.config.js ./prisma.config.js
 COPY --from=builder /usr/src/app/prisma ./prisma
-COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/entrypoint.sh .
 
 # Set entrypoint to run migrations and start app.

@@ -8,7 +8,7 @@ export const ImagesValueSchema = z.object({
 export const ConfigureAssetSchema = z.object({
   responses: z.array(
     z.object({
-      value: z.union([z.string(), z.number().safe(), ImagesValueSchema]),
+      value: z.union([z.string(), z.number(), ImagesValueSchema]),
       assetQuestionId: z.string().nonempty(),
     }),
   ),

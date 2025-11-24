@@ -120,6 +120,13 @@ export const BaseCreateAssetQuestionSchema = z.object({
   helpText: z.string().optional(),
   placeholder: z.string().optional(),
   tone: z.string().optional(),
+  client: z
+    .object({
+      connect: z.object({
+        id: z.string(),
+      }),
+    })
+    .optional(),
   parentQuestion: z
     .object({
       connect: z.object({

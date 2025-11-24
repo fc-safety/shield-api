@@ -372,7 +372,7 @@ export class AssetQuestionsService {
                 AssetQuestionType.SETUP_AND_INSPECTION,
               ]
             : [type];
-      andWhereClauses.push(Prisma.sql`aq."type"::text = ANY(${types})`);
+      andWhereClauses.push(Prisma.sql`aq."type"::text = ANY(${types}::text[])`);
     }
 
     // Begin adding clauses for the conditions. We need to do some magic here to make sure that:
@@ -385,19 +385,19 @@ export class AssetQuestionsService {
 
     if (asset.product) {
       orWhereClauses.push(
-        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_CATEGORY} AND condition."value" @> to_jsonb(${asset.product.productCategoryId}))`,
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT_CATEGORY} AND condition."value" @> to_jsonb(${asset.product.productCategoryId}::text))`,
       );
       orWhereClauses.push(
-        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.MANUFACTURER} AND condition."value" @> to_jsonb(${asset.product.manufacturerId}))`,
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.MANUFACTURER} AND condition."value" @> to_jsonb(${asset.product.manufacturerId}::text))`,
       );
       orWhereClauses.push(
-        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT} AND condition."value" @> to_jsonb(${asset.product.id}))`,
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.PRODUCT} AND condition."value" @> to_jsonb(${asset.product.id}::text))`,
       );
     }
 
     if (asset.site && asset.site.address.state) {
       orWhereClauses.push(
-        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.REGION} AND condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}))`,
+        Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.REGION} AND condition."value" @> to_jsonb(${normalizeState(asset.site.address.state)}::text))`,
       );
     }
 
@@ -419,7 +419,7 @@ export class AssetQuestionsService {
         //   value: { array_contains: keyPairs },
         // });
         orWhereClauses.push(
-          Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.METADATA} AND array(SELECT jsonb_array_elements_text(condition."value")) && array(SELECT jsonb_array_elements_text(to_jsonb(${uniqueKeyPairs}))))`,
+          Prisma.sql`(condition."conditionType"::text = ${AssetQuestionConditionType.METADATA} AND array(SELECT jsonb_array_elements_text(condition."value")) && array(SELECT jsonb_array_elements_text(to_jsonb(${uniqueKeyPairs}::text[]))))`,
         );
       }
     }
@@ -448,6 +448,7 @@ export class AssetQuestionsService {
 
     return matchingIds.map((m) => m.id);
   }
+
   async findByAsset(...args: Parameters<typeof this.findQuestionIdsByAsset>) {
     const prisma = await this.prisma.build();
     const questionIds = await this.findQuestionIdsByAsset(...args);

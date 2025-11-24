@@ -5,16 +5,15 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider        = "prisma-client-js"
+  provider        = "prisma-client"
   previewFeatures = ["typedSql"]
   // For Docker deployments.
   binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
-  output          = "../src/generated/prisma/client"
+  output          = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // Assets, Tags, Inspections & Alerts
@@ -727,48 +726,49 @@ model AnsiCategory {
 }
 
 model Product {
-  id                  String                     @id @default(cuid(2))
+  id                    String                     @id @default(cuid(2))
   /**
    * The legacy ID of the product (maps to `products.p_id` in the legacy database).
    */
-  legacyProductId     String?
+  legacyProductId       String?
   /**
    * The legacy ID of the consumable product (maps to `consumables.con_id` in the legacy database).
    */
-  legacyConsumableId  String?
-  createdOn           DateTime                   @default(now()) @db.Timestamptz()
-  modifiedOn          DateTime                   @updatedAt @db.Timestamptz()
-  active              Boolean                    @default(true)
-  manufacturer        Manufacturer               @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
-  manufacturerId      String
-  type                ProductType
-  name                String
-  description         String?
-  sku                 String?
-  productUrl          String?
-  imageUrl            String?
-  metadata            Json?
-  productCategory     ProductCategory            @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
-  productCategoryId   String
-  parentProduct       Product?                   @relation("PrimaryConsumableProduct", fields: [parentProductId], references: [id], onDelete: Cascade)
-  parentProductId     String?
-  consumableProducts  Product[]                  @relation("PrimaryConsumableProduct")
-  quantity            Int?
-  price               Float?
-  ansiCategory        AnsiCategory?              @relation(fields: [ansiCategoryId], references: [id])
-  ansiCategoryId      String?
-  perishable          Boolean                    @default(false)
-  ansiMinimumRequired Boolean                    @default(false)
-  assets              Asset[]
-  consumables         Consumable[]
-  productRequestItems ProductRequestItem[]
+  legacyConsumableId    String?
+  createdOn             DateTime                   @default(now()) @db.Timestamptz()
+  modifiedOn            DateTime                   @updatedAt @db.Timestamptz()
+  active                Boolean                    @default(true)
+  manufacturer          Manufacturer               @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  manufacturerId        String
+  type                  ProductType
+  name                  String
+  description           String?
+  sku                   String?
+  productUrl            String?
+  imageUrl              String?
+  metadata              Json?
+  productCategory       ProductCategory            @relation(fields: [productCategoryId], references: [id], onDelete: Cascade)
+  productCategoryId     String
+  parentProduct         Product?                   @relation("PrimaryConsumableProduct", fields: [parentProductId], references: [id], onDelete: Cascade)
+  parentProductId       String?
+  consumableProducts    Product[]                  @relation("PrimaryConsumableProduct")
+  displayExpirationDate Boolean                    @default(false)
+  quantity              Int?
+  price                 Float?
+  ansiCategory          AnsiCategory?              @relation(fields: [ansiCategoryId], references: [id])
+  ansiCategoryId        String?
+  perishable            Boolean                    @default(false)
+  ansiMinimumRequired   Boolean                    @default(false)
+  assets                Asset[]
+  consumables           Consumable[]
+  productRequestItems   ProductRequestItem[]
   /**
    * @deprecated
    */
-  assetQuestions      AssetQuestion[]
-  consumableConfigs   ConsumableQuestionConfig[]
-  client              Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId            String?
+  assetQuestions        AssetQuestion[]
+  consumableConfigs     ConsumableQuestionConfig[]
+  client                Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId              String?
 
   @@index([legacyProductId])
   @@index([legacyConsumableId])
