@@ -22,7 +22,7 @@ export class SitesService {
         buildPrismaFindArgs<typeof prisma.site>(querySiteDto, {
           include: {
             address: true,
-            _count: { select: { subsites: true } },
+            _count: { select: { subsites: true, assets: true } },
           },
         }),
       ),
