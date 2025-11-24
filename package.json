@@ -53,7 +53,7 @@
     "fast-csv": "^5.0.5",
     "json5": "^2.2.3",
     "jwks-rsa": "^3.2.0",
-    "mysql2": "^3.15.3",
+    "mariadb": "^3.4.5",
     "nestjs-cls": "^6.1.0",
     "nestjs-zod": "^5.0.1",
     "p-retry": "^7.1.0",

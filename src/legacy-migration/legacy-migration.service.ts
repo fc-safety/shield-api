@@ -1,9 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import mysql from 'mysql2/promise';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import mariadb from 'mariadb/promise';
 import { AuthService } from 'src/auth/auth.service';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma } from 'src/generated/prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
 import type * as LegacyModels from './types/legacy-models';
 import type { WsPrompt } from './types/ws';
 import {
@@ -17,12 +17,24 @@ import {
   WsCloseNormalException,
 } from './utils/ws-exceptions';
 
-const EXPIRES_IN_SECONDS = 60 * 60 * 4; // 4 hours
+const AUTH_TOKEN_EXPIRES_IN_SECONDS = 60 * 60 * 4; // 4 hours
+const MIGRATION_SESSION_EXPIRES_IN_MINUTES = 30;
 
-type WsHandlerOptions = {
+interface DataHandlers {
+  legacyDb: mariadb.Connection;
+  prismaTx: PrismaTxClient;
+}
+
+interface WsHandlers {
   prompt: WsPrompt;
   emitEvent: (event: string, data: any) => void;
-};
+}
+
+type MigrationFn<TContext, TReturn = void> = (
+  dataHandlers: DataHandlers,
+  wsHandlers: WsHandlers,
+  context: TContext,
+) => Promise<TReturn>;
 
 class ConnectionNotInitializedError extends Error {
   constructor() {
@@ -31,41 +43,60 @@ class ConnectionNotInitializedError extends Error {
 }
 
 @Injectable()
-export class LegacyMigrationService implements OnModuleInit {
-  private _connection: mysql.Connection | null = null;
-  private get connection() {
-    if (!this._connection) {
-      throw new ConnectionNotInitializedError();
-    }
-    return this._connection;
-  }
+export class LegacyMigrationService implements OnModuleDestroy {
+  private readonly logger = new Logger(LegacyMigrationService.name);
+  private _connectionPool: mariadb.Pool;
 
   constructor(
     private readonly authService: AuthService,
     private readonly prisma: PrismaService,
     private readonly config: ApiConfigService,
-  ) {}
+  ) {
+    this._connectionPool = mariadb.createPool({
+      host: this.config.get('LEGACY_DB_HOST'),
+      user: this.config.get('LEGACY_DB_USER'),
+      password: this.config.get('LEGACY_DB_PASSWORD'),
+      database: this.config.get('LEGACY_DB_NAME'),
+      port: this.config.get('LEGACY_DB_PORT'),
+      connectionLimit: 10,
+    });
+  }
 
-  async onModuleInit() {
-    // TODO: Get the connection from the config.
-    this._connection = await mysql
-      .createConnection({
-        host: this.config.get('LEGACY_DB_HOST'),
-        user: this.config.get('LEGACY_DB_USER'),
-        password: this.config.get('LEGACY_DB_PASSWORD'),
-        database: this.config.get('LEGACY_DB_NAME'),
-      })
-      .catch((e) => {
-        console.error(
+  async onModuleDestroy() {
+    await this._connectionPool.end();
+  }
+
+  async getDb() {
+    return new Promise<mariadb.Connection>(async (resolve, reject) => {
+      let db: mariadb.Connection;
+      try {
+        db = await this._connectionPool.getConnection();
+      } catch (e) {
+        this.logger.error(
           'Error connecting to MySQL. Attempting to process legacy migrations will fail.',
           e,
         );
-        return null;
+        reject(new ConnectionNotInitializedError());
+        return;
+      }
+
+      db.on('error', (e) => {
+        this.logger.error(
+          'Error occured while connected to legacy database.',
+          e,
+        );
+        reject(e);
       });
+
+      resolve(db);
+    });
   }
 
   async getWsToken() {
-    return await this.authService.generateCustomToken({}, EXPIRES_IN_SECONDS);
+    return await this.authService.generateCustomToken(
+      {},
+      AUTH_TOKEN_EXPIRES_IN_SECONDS,
+    );
   }
 
   async validateWsToken(token: string | null | undefined) {
@@ -79,33 +110,86 @@ export class LegacyMigrationService implements OnModuleInit {
     return await this.authService.validateCustomToken<{}>(token);
   }
 
-  async processMigration(handlerOptions: WsHandlerOptions) {
-    const { emitEvent } = handlerOptions;
+  async processMigration(wsHandlers: WsHandlers) {
+    const { emitEvent } = wsHandlers;
+
     emitEvent('alert', {
       type: 'info',
       message:
-        'Hello! I am here to help you migrate clients over from the old system to this one.',
+        'Hello! I am here to help you migrate clients over from the legacy system to this one.',
     });
-    emitEvent('alert', {
-      type: 'warning',
-      message:
-        'Just a heads up: this is a work in progress. It is not yet ready for production use.',
-    });
+    // emitEvent('alert', {
+    //   type: 'warning',
+    //   message:
+    //     'Just a heads up: this is a work in progress. It is not yet ready for production use.',
+    // });
 
+    let closeLegacyDb: () => Promise<void> = async () => {};
     try {
-      const legacyClient = await this.selectClient(handlerOptions);
-      await this.migrateClient(legacyClient, handlerOptions);
+      const legacyDb = await this.getDb();
+      closeLegacyDb = async () => {
+        await legacyDb.end().catch((e) => {
+          this.logger.error('Error closing legacy database connection.', e);
+        });
+      };
+
+      const legacyClient = await this.selectClient({ legacyDb }, wsHandlers);
+
+      await this.prisma.bypassRLS().$transaction(
+        async (tx) => {
+          const dataHandlers: DataHandlers = { prismaTx: tx, legacyDb };
+
+          // MIGRATE CLIENT
+          const { newClient } = await this.migrateClient(
+            dataHandlers,
+            wsHandlers,
+            {
+              legacyClient,
+            },
+          );
+
+          // MIGRATE SITES
+          const { legacyPrimaryKeyToNewSiteMap } = await this.migrateSites(
+            dataHandlers,
+            wsHandlers,
+            { legacyClient, newClient },
+          );
+
+          // MIGRATE ASSETS
+          const { legacyPrimaryKeyToNewAssetMap } = await this.migrateAssets(
+            dataHandlers,
+            wsHandlers,
+            {
+              newClient,
+              legacyClient,
+              legacyPrimaryKeyToNewSiteMap,
+            },
+          );
+
+          emitEvent('alert', {
+            type: 'info',
+            message: `Great! That's it for now. Migrating users and inspection history is not yet supported and will need to be done manually.`,
+          });
+        },
+        { timeout: MIGRATION_SESSION_EXPIRES_IN_MINUTES * 60 * 1000 },
+      );
     } catch (e) {
       if (e instanceof ConnectionNotInitializedError) {
-        emitEvent('alert', {
-          type: 'error',
-          message:
-            'The connection to the legacy database could not be established. Please try again later.',
-        });
-        throw new WsCloseInternalException('Connection not initialized.');
+        throw new WsCloseInternalException(
+          'The connection to the legacy database could not be established. Please try again later.',
+        );
+      } else if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        if (e.code === 'P2028') {
+          throw new WsCloseInternalException(
+            `The migration timed out after ${MIGRATION_SESSION_EXPIRES_IN_MINUTES} minutes. Please try again.`,
+          );
+        }
+        throw e;
       } else {
         throw e;
       }
+    } finally {
+      await closeLegacyDb();
     }
 
     emitEvent('alert', {
@@ -115,9 +199,16 @@ export class LegacyMigrationService implements OnModuleInit {
     });
   }
 
-  private async selectClient({ prompt }: WsHandlerOptions) {
-    const [rows] = await this.connection.execute('SELECT * FROM clients');
-    const clients = rows as LegacyModels.Client[];
+  private async selectClient(
+    dataHandlers: Pick<DataHandlers, 'legacyDb'>,
+    wsHandlers: WsHandlers,
+  ) {
+    const { legacyDb } = dataHandlers;
+    const { prompt } = wsHandlers;
+
+    const clients = await legacyDb.query<LegacyModels.Client[]>(
+      'SELECT * FROM clients',
+    );
     const clientMap = new Map<number, LegacyModels.Client>(
       clients.map((client) => [client.c_no, client]),
     );
@@ -155,21 +246,26 @@ export class LegacyMigrationService implements OnModuleInit {
     return client;
   }
 
-  private async migrateClient(
-    legacyClient: LegacyModels.Client,
-    handlerOptions: WsHandlerOptions,
-  ) {
-    const { emitEvent, prompt } = handlerOptions;
+  private migrateClient: MigrationFn<
+    {
+      legacyClient: LegacyModels.Client;
+    },
+    { newClient: TClientBasic }
+  > = async (dataHandlers, wsHandlers, context) => {
+    const { legacyDb, prismaTx } = dataHandlers;
+    const { emitEvent, prompt } = wsHandlers;
+    const { legacyClient } = context;
 
     emitEvent('alert', {
       type: 'info',
       message: `Great! Let me check if this client is already in the new system.`,
     });
 
-    let newClient = await this.prisma.bypassRLS().client.findFirst({
+    let newClient = await prismaTx.client.findFirst({
       where: {
         legacyClientId: legacyClient.c_id,
       },
+      select: CLIENT_BASIC_SELECT,
     });
 
     if (!newClient) {
@@ -178,11 +274,11 @@ export class LegacyMigrationService implements OnModuleInit {
         message: `Looks like it isn't there yet. I'll go ahead and start migrating it over.`,
       });
 
-      const [rows] = await this.connection.execute(
+      // ---> GET ADDRESS FROM PRIMARY LOCATION IF AVAILABLE, OR PROMPT FOR IT
+      const locations = await legacyDb.query<LegacyModels.Location[]>(
         'SELECT * FROM locations WHERE loc_c_no = ? ORDER BY loc_date_insert DESC',
         [legacyClient.c_no],
       );
-      const locations = rows as LegacyModels.Location[];
       const primaryLocation =
         locations.find((location) => location.loc_type === 1) ??
         locations.at(0);
@@ -190,11 +286,11 @@ export class LegacyMigrationService implements OnModuleInit {
       let address: Prisma.ClientCreateInput['address']['create'] | null =
         primaryLocation && primaryLocation.loc_addr1 && primaryLocation.loc_city
           ? {
-              street1: primaryLocation.loc_addr1,
-              street2: primaryLocation.loc_addr2,
-              city: primaryLocation.loc_city,
-              state: primaryLocation.loc_state,
-              zip: primaryLocation.loc_zip,
+              street1: primaryLocation.loc_addr1.trim(),
+              street2: primaryLocation.loc_addr2?.trim(),
+              city: primaryLocation.loc_city.trim(),
+              state: primaryLocation.loc_state?.trim(),
+              zip: primaryLocation.loc_zip?.trim(),
             }
           : null;
 
@@ -212,6 +308,7 @@ export class LegacyMigrationService implements OnModuleInit {
         address = response.value;
       }
 
+      // ---> GET PHONE NUMBER FROM PRIMARY LOCATION IF AVAILABLE, OR PROMPT FOR IT
       let phoneNumber = legacyClient.c_phone;
       if (!phoneNumber) {
         const response = await prompt(
@@ -225,7 +322,8 @@ export class LegacyMigrationService implements OnModuleInit {
         phoneNumber = response.value;
       }
 
-      newClient = await this.prisma.bypassRLS().client.create({
+      // ---> CREATE NEW CLIENT
+      newClient = await prismaTx.client.create({
         data: {
           createdOn: legacyClient.c_date_insert ?? undefined,
           startedOn: legacyClient.c_date_insert ?? new Date(),
@@ -239,6 +337,7 @@ export class LegacyMigrationService implements OnModuleInit {
           homeUrl: legacyClient.c_www,
           defaultInspectionCycle: 30,
         },
+        select: CLIENT_BASIC_SELECT,
       });
 
       emitEvent('alert', {
@@ -265,25 +364,23 @@ export class LegacyMigrationService implements OnModuleInit {
       }
     }
 
-    await this.migrateSites({ legacyClient, newClient }, handlerOptions);
-  }
+    return { newClient };
+  };
 
-  private async migrateSites(
-    context: {
+  private migrateSites: MigrationFn<
+    {
       legacyClient: LegacyModels.Client;
-      newClient: Prisma.ClientGetPayload<{}>;
+      newClient: TClientBasic;
     },
-    handlerOptions: WsHandlerOptions,
-  ) {
-    const { emitEvent, prompt } = handlerOptions;
+    {
+      legacyPrimaryKeyToNewSiteMap: Map<number, TSiteBasic>;
+    }
+  > = async (dataHandlers, wsHandlers, context) => {
+    const { legacyDb, prismaTx } = dataHandlers;
+    const { emitEvent, prompt } = wsHandlers;
     const { legacyClient, newClient } = context;
 
-    emitEvent('alert', {
-      type: 'info',
-      message: `Now let's work on migrating the client's sites (also known as locations).`,
-    });
-
-    const clientAddress = await this.prisma.bypassRLS().address.findFirst({
+    const clientAddress = await prismaTx.address.findFirst({
       where: {
         client: {
           id: newClient.id,
@@ -300,19 +397,34 @@ export class LegacyMigrationService implements OnModuleInit {
       lastPhoneNumber: newClient.phoneNumber,
     };
 
-    const [locationRows] = await this.connection.execute(
+    const legacySites = await legacyDb.query<LegacyModels.Location[]>(
       'SELECT * FROM locations WHERE loc_c_no = ? ORDER BY loc_date_insert DESC',
       [legacyClient.c_no],
     );
-    const legacySites = locationRows as LegacyModels.Location[];
 
-    const alreadyMigratedSites = await this.prisma.bypassRLS().site.findMany({
-      select: {
-        id: true,
-        legacySiteId: true,
-        legacyGroupId: true,
-        clientId: true,
-      },
+    const legacySiteGroups = await legacyDb.query<LegacyModels.Group[]>(
+      'SELECT * FROM groups WHERE group_c_no = ?',
+      [legacyClient.c_no],
+    );
+
+    const totalLegacySites = legacySites.length + legacySiteGroups.length;
+
+    if (totalLegacySites > 0) {
+      emitEvent('alert', {
+        type: 'info',
+        message: `Now let's work on migrating the client's sites (also known as locations).`,
+      });
+    } else {
+      emitEvent('alert', {
+        type: 'info',
+        message: `I can see this client has no sites to migrate. We can go ahead and skip the site migration.`,
+      });
+      return { legacyPrimaryKeyToNewSiteMap: new Map() };
+    }
+
+    /** All sites that were already migrated, including both site groups and subsites. */
+    const alreadyMigratedSites = await prismaTx.site.findMany({
+      select: SITE_BASIC_SELECT,
       where: {
         client: {
           legacyClientId: legacyClient.c_id,
@@ -320,29 +432,41 @@ export class LegacyMigrationService implements OnModuleInit {
       },
     });
 
-    const [groupRows] = await this.connection.execute(
-      'SELECT * FROM groups WHERE group_c_no = ?',
-      [legacyClient.c_no],
-    );
-    const legacySiteGroups = groupRows as LegacyModels.Group[];
+    /** Maps legacy group primary key to the new site group ID. */
+    const legacyPrimaryKeyToNewSiteGroupIdMap = new Map<number, string>();
 
-    const alreadyMigratedLegacySiteGroupIdsMap = new Map(
+    /** Maps legacy group external ID to the new site group instance. */
+    const legacyIdToNewSiteGroupIdMap = new Map<string, string>(
       alreadyMigratedSites
-        .filter((site) => site.legacyGroupId)
+        .filter(
+          (
+            site,
+          ): site is typeof site & {
+            legacyGroupId: NonNullable<typeof site.legacyGroupId>;
+          } => !!site.legacyGroupId,
+        )
         .map((site) => [site.legacyGroupId, site.id]),
     );
 
-    const legacyToNewSiteGroupIdMap = new Map<number, string>();
-
+    let migratedSiteGroupCount = 0;
     for (const legacySiteGroup of legacySiteGroups) {
-      if (alreadyMigratedLegacySiteGroupIdsMap.has(legacySiteGroup.group_id)) {
-        legacyToNewSiteGroupIdMap.set(
+      // As a safety, ignore groups that don't have an external ID. In practice, all groups
+      // should have an external ID.
+      if (legacySiteGroup.group_id === null) {
+        continue;
+      }
+
+      // Don't duplicate site groups that were already migrated, but still add the
+      // primary key mappings to be used for migrating subsites.
+      if (legacyIdToNewSiteGroupIdMap.has(legacySiteGroup.group_id)) {
+        legacyPrimaryKeyToNewSiteGroupIdMap.set(
           legacySiteGroup.group_no,
-          alreadyMigratedLegacySiteGroupIdsMap.get(legacySiteGroup.group_id)!,
+          legacyIdToNewSiteGroupIdMap.get(legacySiteGroup.group_id)!,
         );
         continue;
       }
 
+      // ---> BUILD NEW SITE GROUP
       const siteGroupName = legacySiteGroup.group_name ?? 'Unknown';
       const groupDisplay = `${siteGroupName}${legacySiteGroup.group_desc ? ` (${legacySiteGroup.group_desc})` : ''}`;
 
@@ -351,7 +475,7 @@ export class LegacyMigrationService implements OnModuleInit {
           message: `What's the address for the site group ${groupDisplay}?`,
           value: memory.lastAddress,
         },
-        handlerOptions,
+        wsHandlers,
       );
       memory.lastAddress = address;
 
@@ -360,11 +484,12 @@ export class LegacyMigrationService implements OnModuleInit {
           message: `What's the phone number for the site group ${groupDisplay}?`,
           value: memory.lastPhoneNumber,
         },
-        handlerOptions,
+        wsHandlers,
       );
       memory.lastPhoneNumber = phoneNumber;
 
-      const newSiteGroup = await this.prisma.bypassRLS().site.create({
+      // ---> CREATE NEW SITE GROUP
+      const newSiteGroup = await prismaTx.site.create({
         data: {
           legacyGroupId: legacySiteGroup.group_id,
           name: siteGroupName,
@@ -380,148 +505,258 @@ export class LegacyMigrationService implements OnModuleInit {
         },
       });
 
-      legacyToNewSiteGroupIdMap.set(legacySiteGroup.group_no, newSiteGroup.id);
+      legacyPrimaryKeyToNewSiteGroupIdMap.set(
+        legacySiteGroup.group_no,
+        newSiteGroup.id,
+      );
+
+      migratedSiteGroupCount++;
     }
+
+    let migratedSiteCount = 0;
+
+    /** Maps legacy location primary key to the new site instance. Does not include site groups,
+     * because legacy site groups could not be assigned assets.
+     */
+    const legacyPrimaryKeyToNewSiteMap = new Map<number, TSiteBasic>();
+
+    /** Maps legacy location external ID to the new site instance. */
+    const legacyIdToNewSiteIdMap = new Map<string, TSiteBasic>(
+      alreadyMigratedSites
+        .filter(
+          (
+            site,
+          ): site is typeof site & {
+            legacySiteId: NonNullable<typeof site.legacySiteId>;
+          } => !!site.legacySiteId,
+        )
+        .map((site) => [site.legacySiteId, site]),
+    );
 
     for (const legacySite of legacySites) {
       let newSite = alreadyMigratedSites.find(
         (s) => s.legacySiteId === legacySite.loc_id,
       );
 
-      if (!newSite) {
-        let siteName = legacySite.loc_name;
-        if (!siteName && (legacySite.loc_addr1 || legacySite.loc_city)) {
-          const response = await prompt(
-            {
-              message: `What's the name for the site located at ${[legacySite.loc_addr1, legacySite.loc_city, legacySite.loc_state, legacySite.loc_zip].filter(Boolean).join(', ')}?`,
-            },
-            {
-              schema: stringValueSchema,
-            },
-          );
-
-          siteName = response.value;
-        }
-
-        if (!siteName) {
-          const [assetRows] = await this.connection.execute(
-            'SELECT COUNT(a_no) as count FROM assets WHERE a_loc_no = ?',
-            [legacySite.loc_no],
-          );
-          const assetCount = (assetRows as { count: number }[])[0].count;
-          if (assetCount < 1) {
-            // If this site has no name and no assets, we can skip it.
-            continue;
-          }
-        }
-
-        let address: Prisma.SiteCreateInput['address']['create'] | null = null;
-        if (legacySite.loc_addr1 && legacySite.loc_city) {
-          address = {
-            street1: legacySite.loc_addr1,
-            street2: legacySite.loc_addr2,
-            city: legacySite.loc_city,
-            state: legacySite.loc_state,
-            zip: legacySite.loc_zip,
-          };
-        } else {
-          address = await this.promptForAddress(
-            {
-              message: `What's the address for the site ${siteName ?? 'Unknown'}?`,
-              value: memory.lastAddress,
-            },
-            handlerOptions,
-          );
-        }
-        memory.lastAddress = address;
-
-        let phoneNumber = legacySite.loc_phone;
-        if (!phoneNumber) {
-          phoneNumber = await this.promptForPhoneNumber(
-            {
-              message: `What's the phone number for the site ${siteName ?? 'Unknown'}?`,
-              value: memory.lastPhoneNumber,
-            },
-            handlerOptions,
-          );
-        }
-        memory.lastPhoneNumber = phoneNumber;
-
-        newSite = await this.prisma.bypassRLS().site.create({
-          data: {
-            createdOn: legacySite.loc_date_insert ?? undefined,
-            legacySiteId: legacySite.loc_id,
-            name:
-              siteName ??
-              legacySite.loc_city ??
-              legacySite.loc_state ??
-              'Unknown',
-            phoneNumber,
-            address: {
-              create: address,
-            },
-            client: {
-              connect: {
-                id: newClient.id,
-              },
-            },
-            parentSite:
-              legacySite.loc_group_no !== null &&
-              legacyToNewSiteGroupIdMap.has(legacySite.loc_group_no)
-                ? {
-                    connect: {
-                      id: legacyToNewSiteGroupIdMap.get(
-                        legacySite.loc_group_no,
-                      )!,
-                    },
-                  }
-                : undefined,
-          },
-        });
-      }
-
-      await this.migrateAssets({ legacySite, newSite }, handlerOptions);
-    }
-  }
-
-  private async migrateAssets(
-    context: {
-      legacySite: LegacyModels.Location;
-      newSite: Prisma.SiteGetPayload<{ select: { id: true; clientId: true } }>;
-    },
-    handlerOptions: WsHandlerOptions,
-  ) {
-    const { emitEvent, prompt } = handlerOptions;
-    const { legacySite, newSite } = context;
-
-    const [assetRows] = await this.connection.execute(
-      'SELECT * FROM assets WHERE a_loc_no = ?',
-      [legacySite.loc_no],
-    );
-    const legacyAssets = assetRows as LegacyModels.Asset[];
-
-    for (const legacyAsset of legacyAssets) {
-      if (legacyAsset.a_p_no === null || !legacyAsset.a_id) {
+      if (!legacySite.loc_id) {
         continue;
       }
 
-      const [product, tag] = await Promise.all([
-        this.getOrMigrateProduct(legacyAsset.a_p_no, {
-          newClientId: newSite.clientId,
-          legacyClientNo: legacySite.loc_c_no ?? -1,
+      if (legacyIdToNewSiteIdMap.has(legacySite.loc_id)) {
+        legacyPrimaryKeyToNewSiteMap.set(
+          legacySite.loc_no,
+          legacyIdToNewSiteIdMap.get(legacySite.loc_id)!,
+        );
+        continue;
+      }
+
+      // ---> BUILD NEW SITE
+      let siteName = legacySite.loc_name;
+      if (!siteName && (legacySite.loc_addr1 || legacySite.loc_city)) {
+        const response = await prompt(
+          {
+            message: `What's the name for the site located at ${[legacySite.loc_addr1, legacySite.loc_city, legacySite.loc_state, legacySite.loc_zip].filter(Boolean).join(', ')}?`,
+          },
+          {
+            schema: stringValueSchema,
+          },
+        );
+
+        siteName = response.value;
+      }
+
+      if (!siteName) {
+        const assetRows = await legacyDb.query(
+          'SELECT COUNT(a_no) as count FROM assets WHERE a_loc_no = ?',
+          [legacySite.loc_no],
+        );
+        const assetCount = (assetRows as { count: number }[])[0].count;
+        if (assetCount < 1) {
+          // If this site has no name and no assets, we can skip it.
+          continue;
+        }
+      }
+
+      let address: Prisma.SiteCreateInput['address']['create'] | null = null;
+      if (legacySite.loc_addr1 && legacySite.loc_city) {
+        address = {
+          street1: legacySite.loc_addr1,
+          street2: legacySite.loc_addr2,
+          city: legacySite.loc_city,
+          state: legacySite.loc_state,
+          zip: legacySite.loc_zip,
+        };
+      } else {
+        address = await this.promptForAddress(
+          {
+            message: `What's the address for the site ${siteName ?? 'Unknown'}?`,
+            value: memory.lastAddress,
+          },
+          wsHandlers,
+        );
+      }
+      memory.lastAddress = address;
+
+      let phoneNumber = legacySite.loc_phone;
+      if (!phoneNumber) {
+        phoneNumber = await this.promptForPhoneNumber(
+          {
+            message: `What's the phone number for the site ${siteName ?? 'Unknown'}?`,
+            value: memory.lastPhoneNumber,
+          },
+          wsHandlers,
+        );
+      }
+      memory.lastPhoneNumber = phoneNumber;
+
+      // ---> CREATE NEW SITE
+      newSite = await prismaTx.site.create({
+        data: {
+          createdOn: legacySite.loc_date_insert ?? undefined,
+          legacySiteId: legacySite.loc_id,
+          name:
+            siteName ??
+            legacySite.loc_city ??
+            legacySite.loc_state ??
+            'Unknown',
+          phoneNumber,
+          address: {
+            create: address,
+          },
+          client: {
+            connect: {
+              id: newClient.id,
+            },
+          },
+          parentSite:
+            legacySite.loc_group_no !== null &&
+            legacyPrimaryKeyToNewSiteGroupIdMap.has(legacySite.loc_group_no)
+              ? {
+                  connect: {
+                    id: legacyPrimaryKeyToNewSiteGroupIdMap.get(
+                      legacySite.loc_group_no,
+                    )!,
+                  },
+                }
+              : undefined,
+        },
+        select: SITE_BASIC_SELECT,
+      });
+
+      legacyPrimaryKeyToNewSiteMap.set(legacySite.loc_no, newSite);
+      migratedSiteCount++;
+    }
+
+    const totalSites = migratedSiteCount + migratedSiteGroupCount;
+
+    emitEvent('alert', {
+      type: totalSites > 0 ? 'info' : 'warning',
+      message:
+        totalSites > 0
+          ? `Successfully migrated ${migratedSiteCount} sites and ${migratedSiteGroupCount} site groups.`
+          : `No sites were migrated. This is likely due either to the sites already being migrated or the site data is missing too much information.`,
+    });
+
+    return { legacyPrimaryKeyToNewSiteMap };
+  };
+
+  private migrateAssets: MigrationFn<
+    {
+      newClient: TClientBasic;
+      legacyClient: LegacyModels.Client;
+      legacyPrimaryKeyToNewSiteMap: Map<number, TSiteBasic>;
+    },
+    { legacyPrimaryKeyToNewAssetMap: Map<number, TAssetBasic> }
+  > = async (dataHandlers: DataHandlers, wsHandlers: WsHandlers, context) => {
+    const { legacyDb, prismaTx } = dataHandlers;
+    const { emitEvent, prompt } = wsHandlers;
+    const { newClient, legacyClient, legacyPrimaryKeyToNewSiteMap } = context;
+
+    const legacyAssets = await legacyDb.query<LegacyModels.Asset[]>(
+      'SELECT * FROM assets WHERE a_loc_no IN (SELECT loc_no FROM locations WHERE loc_c_no = ?)',
+      [legacyClient.c_no],
+    );
+
+    if (legacyAssets.length > 0) {
+      emitEvent('alert', {
+        type: 'info',
+        message: `Now let's work on migrating the client's assets.`,
+      });
+    } else {
+      emitEvent('alert', {
+        type: 'info',
+        message: `I can see this client has no assets to migrate. We can go ahead and skip the asset migration.`,
+      });
+      return { legacyPrimaryKeyToNewAssetMap: new Map() };
+    }
+
+    const alreadyMigratedAssets = await prismaTx.asset.findMany({
+      select: ASSET_BASIC_SELECT,
+      where: {
+        client: {
+          legacyClientId: legacyClient.c_id,
+        },
+      },
+    });
+
+    let assetsMigrated = 0;
+
+    /** Maps legacy asset primary key to the new asset instance. */
+    const legacyPrimaryKeyToNewAssetMap = new Map<number, TAssetBasic>();
+
+    /** Maps legacy asset external ID to the new asset instance. */
+    const legacyIdToNewAssetMap = new Map(
+      alreadyMigratedAssets.map((asset) => [asset.legacyAssetId, asset]),
+    );
+
+    for (const legacyAsset of legacyAssets) {
+      if (legacyAsset.a_id === null) {
+        continue;
+      }
+
+      // If the asset has already been migrated, skip it.
+      if (legacyIdToNewAssetMap.has(legacyAsset.a_id)) {
+        legacyPrimaryKeyToNewAssetMap.set(
+          legacyAsset.a_no,
+          legacyIdToNewAssetMap.get(legacyAsset.a_id)!,
+        );
+        continue;
+      }
+
+      // ---> GET CONNECTED SITE
+      let newSite: TSiteBasic;
+      if (
+        legacyAsset.a_loc_no !== null &&
+        legacyPrimaryKeyToNewSiteMap.has(legacyAsset.a_loc_no)
+      ) {
+        newSite = legacyPrimaryKeyToNewSiteMap.get(legacyAsset.a_loc_no)!;
+      } else {
+        continue;
+      }
+
+      // ---> GET CONNECTED PRODUCT AND TAG
+      const [{ product }, { tag }] = await Promise.all([
+        this.getOrMigrateProduct(dataHandlers, wsHandlers, {
+          legacyProductNo: legacyAsset.a_p_no,
+          legacyProductCategoryNo: legacyAsset.a_cat_no,
+          newClient,
+          legacyClient,
         }),
         legacyAsset.a_t_no === null
-          ? Promise.resolve(null)
-          : this.getOrMigrateTag(legacyAsset.a_t_no, {
-              legacySite,
+          ? Promise.resolve({ tag: null })
+          : this.getOrMigrateTag(dataHandlers, wsHandlers, {
+              legacyTagNo: legacyAsset.a_t_no,
               newSite,
             }),
       ]);
 
+      // If asset isn't tied to a product, skip it.
+      // This shouldn't happen in practice, but it's a safety check.
       if (!product) {
         continue;
       }
 
+      // ---> BUILD NEW ASSET
       const assetName = [
         legacyAsset.a_location,
         product.productCategory.shortName ?? product.productCategory.name,
@@ -530,7 +765,8 @@ export class LegacyMigrationService implements OnModuleInit {
         .filter(Boolean)
         .join(' ');
 
-      await this.prisma.bypassRLS().asset.create({
+      // ---> CREATE NEW ASSET
+      const asset = await prismaTx.asset.create({
         data: {
           legacyAssetId: legacyAsset.a_id,
           active: legacyAsset.a_status === 1,
@@ -561,9 +797,22 @@ export class LegacyMigrationService implements OnModuleInit {
             },
           },
         },
+        select: ASSET_BASIC_SELECT,
       });
+      legacyPrimaryKeyToNewAssetMap.set(legacyAsset.a_no, asset);
+      assetsMigrated++;
     }
-  }
+
+    emitEvent('alert', {
+      type: assetsMigrated > 0 ? 'info' : 'warning',
+      message:
+        assetsMigrated > 0
+          ? `Successfully migrated ${assetsMigrated} assets.`
+          : `No assets were migrated. This is likely due either to the assets already being migrated or the asset data is missing too much information.`,
+    });
+
+    return { legacyPrimaryKeyToNewAssetMap };
+  };
 
   private async promptForAddress(
     context: {
@@ -573,10 +822,10 @@ export class LegacyMigrationService implements OnModuleInit {
         | Prisma.SiteCreateInput['address']['create']
         | null;
     },
-    handlerOptions: WsHandlerOptions,
+    wsHandlers: WsHandlers,
   ) {
     const { message, value } = context;
-    const { prompt } = handlerOptions;
+    const { prompt } = wsHandlers;
 
     const { value: address } = await prompt(
       { message, type: 'address', value },
@@ -588,10 +837,10 @@ export class LegacyMigrationService implements OnModuleInit {
 
   private async promptForPhoneNumber(
     context: { message: string; value: string | null },
-    handlerOptions: WsHandlerOptions,
+    wsHandlers: WsHandlers,
   ) {
     const { message, value } = context;
-    const { prompt } = handlerOptions;
+    const { prompt } = wsHandlers;
 
     const { value: phoneNumber } = await prompt(
       { message, type: 'phone', value },
@@ -601,64 +850,160 @@ export class LegacyMigrationService implements OnModuleInit {
     return phoneNumber;
   }
 
-  private async getOrMigrateProduct(
-    legacyProductNo: number,
-    context: {
-      newClientId: string;
-      legacyClientNo: number;
+  private getOrMigrateProduct: MigrationFn<
+    {
+      newClient: TClientBasic;
+      legacyClient: LegacyModels.Client;
+      legacyProductNo: number | null;
+      legacyProductCategoryNo: number | null;
     },
-  ) {
-    const { newClientId, legacyClientNo } = context;
+    { product: TProductBasic | null }
+  > = async (dataHandlers, wsHandlers: WsHandlers, context) => {
+    const { legacyDb, prismaTx } = dataHandlers;
+    const {
+      legacyProductNo,
+      legacyProductCategoryNo,
+      newClient,
+      legacyClient,
+    } = context;
 
-    const [productRows] = await this.connection.execute(
-      'SELECT * FROM products WHERE p_no = ?',
-      [legacyProductNo],
-    );
-    const legacyProduct = productRows[0] as LegacyModels.Product | undefined;
-
-    if (!legacyProduct || !legacyProduct.p_id) {
-      return null;
+    if (legacyProductNo === null && legacyProductCategoryNo === null) {
+      return { product: null };
     }
 
-    if (legacyProduct.p_type === 2) {
-      // Not dealing with consumables for now.
-      return null;
+    let legacyProduct: LegacyModels.Product | null = null;
+    let legacyProductCategory: LegacyModels.Category | null = null;
+
+    if (legacyProductNo) {
+      legacyProduct = await legacyDb
+        .query<LegacyModels.Product>('SELECT * FROM products WHERE p_no = ?', [
+          legacyProductNo,
+        ])
+        .then((rows) => rows[0]);
+    } else if (legacyProductCategoryNo) {
+      legacyProductCategory = await legacyDb
+        .query<LegacyModels.Category>(
+          'SELECT * FROM category WHERE cat_no = ?',
+          [legacyProductCategoryNo],
+        )
+        .then((rows) => rows[0]);
     }
 
-    let product = await this.prisma.bypassRLS().product.findFirst({
-      where: {
-        legacyProductId: legacyProduct.p_id,
-      },
-      include: {
-        productCategory: true,
-        manufacturer: true,
-      },
-    });
+    if (
+      (!legacyProduct || !legacyProduct.p_id) &&
+      (!legacyProductCategory || !legacyProductCategory.cat_id)
+    ) {
+      return { product: null };
+    }
 
-    if (!product) {
-      if (!legacyProduct.p_cat_no || !legacyProduct.p_mfg_no) {
-        return null;
+    let product: TProductBasic | null = null;
+    let productCategory: TProductCategoryBasic | null = null;
+
+    if (!legacyProduct) {
+      // If no legacy product is found, there must be an associated product category.
+      // Try to find or create this category in the new system.
+      productCategory = await this.getOrMigrateProductCategory(
+        dataHandlers,
+        wsHandlers,
+        {
+          newClient,
+          legacyClient,
+          legacyProductCategoryNo: legacyProductCategory!.cat_no,
+        },
+      ).then((result) => result.productCategory);
+
+      // If the get or create failed, give up and return null.
+      if (!productCategory || !productCategory.name.trim()) {
+        return { product: null };
       }
 
-      const [productCategory, manufacturer] = await Promise.all([
-        this.getOrMigrateProductCategory(legacyProduct.p_cat_no, {
-          newClientId,
-          legacyClientNo,
-        }),
-        this.getOrMigrateManufacturer(legacyProduct.p_mfg_no, {
-          newClientId,
-          legacyClientNo,
-        }),
-      ]);
+      // Otherwise, try to create (or find if this was already created) a generic product for this category.
+      const genericCategoryPrefix = `#${legacyProductCategory!.cat_no} ${productCategory.name.trim()}`;
+      const genericProductName = `${genericCategoryPrefix} Asset`;
+      product = await prismaTx.product.findFirst({
+        where: {
+          name: genericProductName,
+          productCategoryId: productCategory.id,
+        },
+        select: PRODUCT_BASIC_SELECT,
+      });
 
-      if (!productCategory || !manufacturer) {
-        return null;
+      // If no product was found, create a new one.
+      if (!product) {
+        product = await prismaTx.product.create({
+          data: {
+            name: genericProductName,
+            type: 'PRIMARY',
+            productCategory: {
+              connect: {
+                id: productCategory.id,
+              },
+            },
+            // Create a default manufacturer for this product.
+            // In the old system, no custom manufacturers were used, but manufacturers
+            // are always required in the new system.
+            manufacturer: {
+              create: {
+                name: `${genericCategoryPrefix} Manufacturer`,
+                client: {
+                  connect: {
+                    id: newClient.id,
+                  },
+                },
+              },
+            },
+            client: {
+              connect: {
+                id: newClient.id,
+              },
+            },
+          },
+          select: PRODUCT_BASIC_SELECT,
+        });
+      }
+    } else {
+      // If legacy product is found, make sure it's properly migrated to the new system.
+
+      // In practice, consumable product types connected to assets shouldn't happen,
+      // but we're checking anyway for safety.
+      if (legacyProduct.p_type === 2) {
+        // Not dealing with consumables for now.
+        return { product: null };
       }
 
-      // Try to match by name for products with the same manufacturer and category.
-      const productCandidateByName = await this.prisma
-        .bypassRLS()
-        .product.findFirst({
+      // Try to find the product in the new system.
+      product = await prismaTx.product.findFirst({
+        where: {
+          legacyProductId: legacyProduct.p_id,
+        },
+        select: PRODUCT_BASIC_SELECT,
+      });
+
+      // If no product is found, try to migrate it.
+      if (!product) {
+        if (!legacyProduct.p_cat_no || !legacyProduct.p_mfg_no) {
+          return { product: null };
+        }
+
+        const [{ productCategory }, { manufacturer }] = await Promise.all([
+          this.getOrMigrateProductCategory(dataHandlers, wsHandlers, {
+            newClient,
+            legacyClient,
+            legacyProductCategoryNo: legacyProduct.p_cat_no,
+          }),
+          this.getOrMigrateManufacturer(dataHandlers, wsHandlers, {
+            newClient,
+            legacyClient,
+            legacyManufacturerNo: legacyProduct.p_mfg_no,
+          }),
+        ]);
+
+        if (!productCategory || !manufacturer) {
+          return { product: null };
+        }
+
+        // Try to match by name for products with the same manufacturer and category.
+        const productCandidateByName = await prismaTx.product.findFirst({
           where: {
             name: {
               equals: legacyProduct.p_name?.trim() ?? '',
@@ -669,60 +1014,61 @@ export class LegacyMigrationService implements OnModuleInit {
           },
         });
 
-      if (productCandidateByName) {
-        // If it exists, update the product with the legacy ID.
-        product = await this.prisma.bypassRLS().product.update({
-          where: {
-            id: productCandidateByName.id,
-          },
-          data: {
-            legacyProductId: legacyProduct.p_id,
-            manufacturerId: manufacturer.id,
-            productCategoryId: productCategory.id,
-          },
-          include: {
-            productCategory: true,
-            manufacturer: true,
-          },
-        });
-      } else {
-        // Otherwise, create a new product.
-        product = await this.prisma.bypassRLS().product.create({
-          data: {
-            legacyProductId: legacyProduct.p_id,
-            createdOn: legacyProduct.p_date_insert ?? undefined,
-            // Automatically marked auto-migrated products as inactive.
-            active: false,
-            manufacturerId: manufacturer.id,
-            productCategoryId: productCategory.id,
-            type: 'PRIMARY',
-            name: legacyProduct.p_name ?? '#' + legacyProductNo,
-            description: legacyProduct.p_desc ?? '',
-            sku: legacyProduct.p_sku ?? '',
-            productUrl: legacyProduct.p_sales_url,
-            imageUrl: legacyProduct.p_image_url,
-          },
-          include: {
-            productCategory: true,
-            manufacturer: true,
-          },
-        });
+        if (productCandidateByName) {
+          // If it exists, update the product with the legacy ID.
+          product = await prismaTx.product.update({
+            where: {
+              id: productCandidateByName.id,
+            },
+            data: {
+              legacyProductId: legacyProduct.p_id,
+              manufacturerId: manufacturer.id,
+              productCategoryId: productCategory.id,
+            },
+            include: {
+              productCategory: true,
+              manufacturer: true,
+            },
+          });
+        } else {
+          // Otherwise, create a new product.
+          product = await prismaTx.product.create({
+            data: {
+              legacyProductId: legacyProduct.p_id,
+              createdOn: legacyProduct.p_date_insert ?? undefined,
+              // Automatically marked auto-migrated products as inactive.
+              active: false,
+              manufacturerId: manufacturer.id,
+              productCategoryId: productCategory.id,
+              type: 'PRIMARY',
+              name: legacyProduct.p_name ?? '#' + legacyProductNo,
+              description: legacyProduct.p_desc ?? '',
+              sku: legacyProduct.p_sku ?? '',
+              productUrl: legacyProduct.p_sales_url,
+              imageUrl: legacyProduct.p_image_url,
+            },
+            select: PRODUCT_BASIC_SELECT,
+          });
+        }
       }
     }
 
-    return product;
-  }
+    return { product };
+  };
 
-  private async getOrMigrateProductCategory(
-    legacyProductCategoryNo: number,
-    context: {
-      newClientId: string;
-      legacyClientNo: number;
+  private getOrMigrateProductCategory: MigrationFn<
+    {
+      legacyProductCategoryNo: number;
+      newClient: TClientBasic;
+      legacyClient: LegacyModels.Client;
+      defaultActive?: boolean;
     },
-  ) {
-    const { newClientId, legacyClientNo } = context;
+    { productCategory: TProductCategoryBasic | null }
+  > = async (dataHandlers, wsHandlers, context) => {
+    const { legacyDb, prismaTx } = dataHandlers;
+    const { legacyProductCategoryNo, newClient, legacyClient } = context;
 
-    const [productCategoryRows] = await this.connection.execute(
+    const productCategoryRows = await legacyDb.query(
       'SELECT * FROM category WHERE cat_no = ?',
       [legacyProductCategoryNo],
     );
@@ -731,12 +1077,11 @@ export class LegacyMigrationService implements OnModuleInit {
       | undefined;
 
     if (!legacyProductCategory || !legacyProductCategory.cat_id) {
-      return null;
+      return { productCategory: null };
     }
 
-    let productCategory = await this.prisma
-      .bypassRLS()
-      .productCategory.findMany({
+    let productCategory = await prismaTx.productCategory
+      .findMany({
         where: {
           OR: [
             {
@@ -750,6 +1095,7 @@ export class LegacyMigrationService implements OnModuleInit {
             },
           ],
         },
+        select: PRODUCT_CATEGORY_BASIC_SELECT,
       })
       .then((candidates) => {
         const first = candidates.at(0);
@@ -767,53 +1113,58 @@ export class LegacyMigrationService implements OnModuleInit {
       if (
         legacyProductCategory.cat_c_no &&
         legacyProductCategory.cat_c_no > 1 &&
-        legacyProductCategory.cat_c_no === legacyClientNo
+        legacyProductCategory.cat_c_no === legacyClient.c_no
       ) {
         client = {
           connect: {
-            id: newClientId,
+            id: newClient.id,
           },
         };
       }
 
-      productCategory = await this.prisma.bypassRLS().productCategory.create({
+      productCategory = await prismaTx.productCategory.create({
         data: {
           legacyCategoryId: legacyProductCategory.cat_id,
           name: legacyProductCategory.cat_name ?? 'Unknown',
           createdOn: legacyProductCategory.cat_date_insert ?? undefined,
-          // Automatically marked auto-migrated product categories as inactive.
-          active: false,
+          // Automatically mark auto-migrated product categories as active
+          // when they belong to a client, otherwise inactive.
+          active: !!client,
           description: legacyProductCategory.cat_desc ?? '',
           shortName: legacyProductCategory.cat_nic ?? '',
           icon: this.cleanIcon(legacyProductCategory.cat_icon),
           color: this.cleanColor(legacyProductCategory.cat_color),
           client,
         },
+        select: PRODUCT_CATEGORY_BASIC_SELECT,
       });
     } else if (productCategory.legacyCategoryId === null) {
-      productCategory = await this.prisma.bypassRLS().productCategory.update({
+      productCategory = await prismaTx.productCategory.update({
         where: {
           id: productCategory.id,
         },
         data: {
           legacyCategoryId: legacyProductCategory.cat_id,
         },
+        select: PRODUCT_CATEGORY_BASIC_SELECT,
       });
     }
 
-    return productCategory;
-  }
+    return { productCategory };
+  };
 
-  private async getOrMigrateManufacturer(
-    legacyManufacturerNo: number,
-    context: {
-      newClientId: string;
-      legacyClientNo: number;
+  private getOrMigrateManufacturer: MigrationFn<
+    {
+      legacyManufacturerNo: number;
+      newClient: TClientBasic;
+      legacyClient: LegacyModels.Client;
     },
-  ) {
-    const { newClientId, legacyClientNo } = context;
+    { manufacturer: TManufacturerBasic | null }
+  > = async (dataHandlers, wsHandlers, context) => {
+    const { legacyDb, prismaTx } = dataHandlers;
+    const { legacyManufacturerNo, newClient, legacyClient } = context;
 
-    const [manufacturerRows] = await this.connection.execute(
+    const manufacturerRows = await legacyDb.query(
       'SELECT * FROM manufacturers WHERE mfg_no = ?',
       [legacyManufacturerNo],
     );
@@ -822,12 +1173,11 @@ export class LegacyMigrationService implements OnModuleInit {
       | undefined;
 
     if (!legacyManufacturer || !legacyManufacturer.mfg_id) {
-      return null;
+      return { manufacturer: null };
     }
 
-    let manufacturer = await this.prisma
-      .bypassRLS()
-      .manufacturer.findMany({
+    let manufacturer = await prismaTx.manufacturer
+      .findMany({
         where: {
           OR: [
             {
@@ -841,6 +1191,7 @@ export class LegacyMigrationService implements OnModuleInit {
             },
           ],
         },
+        select: MANUFACTURER_BASIC_SELECT,
       })
       .then((candidates) => {
         const first = candidates.at(0);
@@ -858,16 +1209,16 @@ export class LegacyMigrationService implements OnModuleInit {
       if (
         legacyManufacturer.mfg_c_no &&
         legacyManufacturer.mfg_c_no > 1 &&
-        legacyManufacturer.mfg_c_no === legacyClientNo
+        legacyManufacturer.mfg_c_no === legacyClient.c_no
       ) {
         client = {
           connect: {
-            id: newClientId,
+            id: newClient.id,
           },
         };
       }
 
-      manufacturer = await this.prisma.bypassRLS().manufacturer.create({
+      manufacturer = await prismaTx.manufacturer.create({
         data: {
           legacyManufacturerId: legacyManufacturer.mfg_id,
           createdOn: legacyManufacturer.mfg_date_insert ?? undefined,
@@ -877,43 +1228,45 @@ export class LegacyMigrationService implements OnModuleInit {
           homeUrl: legacyManufacturer.mfg_www,
           client,
         },
+        select: MANUFACTURER_BASIC_SELECT,
       });
     } else if (manufacturer.legacyManufacturerId === null) {
-      manufacturer = await this.prisma.bypassRLS().manufacturer.update({
+      manufacturer = await prismaTx.manufacturer.update({
         where: {
           id: manufacturer.id,
         },
         data: {
           legacyManufacturerId: legacyManufacturer.mfg_id,
         },
+        select: MANUFACTURER_BASIC_SELECT,
       });
     }
 
-    return manufacturer;
-  }
+    return { manufacturer };
+  };
 
-  private async getOrMigrateTag(
-    legacyTagNo: number,
-    context: {
-      legacySite: LegacyModels.Location;
-      newSite: Prisma.SiteGetPayload<{ select: { id: true; clientId: true } }>;
+  private getOrMigrateTag: MigrationFn<
+    {
+      legacyTagNo: number;
+      newSite: TSiteBasic;
     },
-  ) {
-    const { newSite } = context;
+    { tag: TTagBasic | null }
+  > = async (dataHandlers, wsHandlers, context) => {
+    const { legacyDb, prismaTx } = dataHandlers;
+    const { legacyTagNo, newSite } = context;
 
-    const [tagRows] = await this.connection.execute(
-      'SELECT * FROM tags WHERE t_no = ?',
-      [legacyTagNo],
-    );
+    const tagRows = await legacyDb.query('SELECT * FROM tags WHERE t_no = ?', [
+      legacyTagNo,
+    ]);
     const legacyTag = tagRows[0] as LegacyModels.Tag | undefined;
 
     if (!legacyTag || legacyTag.t_serial === null || !legacyTag.t_id) {
-      return null;
+      return { tag: null };
     }
 
     const serialNumber = legacyTag.t_serial.toString().padStart(7, '0');
 
-    let tag = await this.prisma.bypassRLS().tag.findFirst({
+    let tag = await prismaTx.tag.findFirst({
       where: {
         OR: [
           {
@@ -926,21 +1279,23 @@ export class LegacyMigrationService implements OnModuleInit {
           },
         ],
       },
+      select: TAG_BASIC_SELECT,
     });
 
     if (!tag) {
-      tag = await this.prisma.bypassRLS().tag.create({
+      tag = await prismaTx.tag.create({
         data: {
           legacyTagId: legacyTag.t_id,
           serialNumber,
           clientId: newSite.clientId,
           siteId: newSite.id,
         },
+        select: TAG_BASIC_SELECT,
       });
     }
 
-    return tag;
-  }
+    return { tag };
+  };
 
   private cleanIcon(icon: string | null) {
     if (!icon) {
@@ -966,3 +1321,78 @@ export class LegacyMigrationService implements OnModuleInit {
     return color;
   }
 }
+
+const CLIENT_BASIC_SELECT = {
+  id: true,
+  legacyClientId: true,
+  phoneNumber: true,
+} satisfies Prisma.ClientSelect;
+type TClientBasic = Prisma.ClientGetPayload<{
+  select: typeof CLIENT_BASIC_SELECT;
+}>;
+
+const SITE_BASIC_SELECT = {
+  id: true,
+  clientId: true,
+  legacySiteId: true,
+  legacyGroupId: true,
+} satisfies Prisma.SiteSelect;
+type TSiteBasic = Prisma.SiteGetPayload<{
+  select: typeof SITE_BASIC_SELECT;
+}>;
+
+const TAG_BASIC_SELECT = {
+  id: true,
+  legacyTagId: true,
+  serialNumber: true,
+} satisfies Prisma.TagSelect;
+type TTagBasic = Prisma.TagGetPayload<{
+  select: typeof TAG_BASIC_SELECT;
+}>;
+
+const ASSET_BASIC_SELECT = {
+  id: true,
+  legacyAssetId: true,
+} satisfies Prisma.AssetSelect;
+type TAssetBasic = Prisma.AssetGetPayload<{
+  select: typeof ASSET_BASIC_SELECT;
+}>;
+
+const PRODUCT_BASIC_SELECT = {
+  id: true,
+  legacyProductId: true,
+  productCategory: {
+    select: {
+      id: true,
+      legacyCategoryId: true,
+      name: true,
+      shortName: true,
+    },
+  },
+  manufacturer: {
+    select: {
+      id: true,
+      legacyManufacturerId: true,
+    },
+  },
+} satisfies Prisma.ProductSelect;
+type TProductBasic = Prisma.ProductGetPayload<{
+  select: typeof PRODUCT_BASIC_SELECT;
+}>;
+
+const PRODUCT_CATEGORY_BASIC_SELECT = {
+  id: true,
+  legacyCategoryId: true,
+  name: true,
+} satisfies Prisma.ProductCategorySelect;
+type TProductCategoryBasic = Prisma.ProductCategoryGetPayload<{
+  select: typeof PRODUCT_CATEGORY_BASIC_SELECT;
+}>;
+
+const MANUFACTURER_BASIC_SELECT = {
+  id: true,
+  legacyManufacturerId: true,
+} satisfies Prisma.ManufacturerSelect;
+type TManufacturerBasic = Prisma.ManufacturerGetPayload<{
+  select: typeof MANUFACTURER_BASIC_SELECT;
+}>;

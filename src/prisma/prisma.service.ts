@@ -192,7 +192,7 @@ export class PrismaService
       // Build base extension that all subsequent extensions will build upon.
       const extendedPrisma = prisma.$extends({
         client: {
-          $viewContext: 'admin',
+          $viewContext: 'admin' as const,
           $currentUser: () => options.person,
           $mode: mode ?? 'request',
         },
