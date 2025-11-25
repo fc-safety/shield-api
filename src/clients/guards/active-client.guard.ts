@@ -36,6 +36,9 @@ export class ActiveClientGuard implements CanActivate {
     const user = this.cls.get('user');
 
     if (!user) {
+      this.logger.warn(
+        'ActiveClientGuard executed before user was set in CLS.',
+      );
       return false;
     }
 

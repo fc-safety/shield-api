@@ -124,6 +124,8 @@ export class ClientsService {
     });
 
     if (clientResult) {
+      // Cache the result for 1 hour.
+      this.cache.set(cacheKey, clientResult.status, 60 * 60 * 1000);
       return clientResult.status;
     }
 
