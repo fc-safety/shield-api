@@ -1,8 +1,10 @@
 import { CacheModule } from '@nestjs/cache-manager';
-import { Global, Module } from '@nestjs/common';
+import { forwardRef, Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ClsModule } from 'nestjs-cls';
+import { ClientsModule } from 'src/clients/clients/clients.module';
+import { ActiveClientGuard } from 'src/clients/guards/active-client.guard';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { KeycloakModule } from './keycloak/keycloak.module';
@@ -24,6 +26,7 @@ import { PoliciesGuard } from './policies.guard';
       },
     }),
     KeycloakModule,
+    forwardRef(() => ClientsModule),
   ],
   providers: [
     {
@@ -33,6 +36,10 @@ import { PoliciesGuard } from './policies.guard';
     {
       provide: APP_GUARD,
       useClass: PoliciesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ActiveClientGuard,
     },
     AuthService,
   ],

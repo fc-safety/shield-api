@@ -1,3 +1,4 @@
+import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { RolesModule } from 'src/admin/roles/roles.module';
 import { AssetsModule } from 'src/assets/assets/assets.module';
@@ -15,8 +16,10 @@ import { ClientsService } from './clients.service';
     KeycloakModule,
     AssetQuestionsModule,
     AssetsModule,
+    CacheModule.register(),
   ],
   controllers: [ClientsController],
   providers: [ClientsService, ClientsScheduler],
+  exports: [ClientsService],
 })
 export class ClientsModule {}
