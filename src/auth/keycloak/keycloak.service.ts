@@ -4,6 +4,7 @@ import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRep
 import { RequestArgs } from '@keycloak/keycloak-admin-client/lib/resources/agent';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import JSON5 from 'json5';
+import EventEmitter from 'node:events';
 import pRetry from 'p-retry';
 import { isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
@@ -139,12 +140,113 @@ type ModifiedKeycloakAdminClient = KeycloakAdminClient & {
 
 @Injectable()
 export class KeycloakService {
+  public readonly events = {
+    users: new EventEmitter<{
+      create: [{ id: string }];
+      update: [{ id: string }];
+      delete: [{ id: string }];
+      addToGroup: [{ id: string; groupId: string }];
+      delFromGroup: [{ id: string; groupId: string }];
+    }>(),
+  };
+
   constructor(
     @Inject(KEYCLOAK_ADMIN_CLIENT)
     public readonly client: ModifiedKeycloakAdminClient,
     private readonly config: ApiConfigService,
   ) {
     this.client.users.resetPasswordEmail = resetPasswordEmail(this.client);
+
+    // Hook into client.users.create() and emit event when it is called.
+    this.client.users.create = new Proxy(this.client.users.create, {
+      apply: (target, thisArg, argumentsList) => {
+        const result = target.apply(thisArg, argumentsList) as ReturnType<
+          typeof target
+        >;
+        result.then((r) => this.events.users.emit('create', r));
+        return result;
+      },
+    });
+
+    // Hoook into client.users.update() and emit event when it is called.
+    this.client.users.update = new Proxy(this.client.users.update, {
+      apply: (
+        target,
+        thisArg,
+        argumentsList: Parameters<typeof this.client.users.update>,
+      ) => {
+        const result = target.apply(thisArg, argumentsList) as ReturnType<
+          typeof target
+        >;
+        result.then((r) =>
+          this.events.users.emit('update', { id: argumentsList[0].id }),
+        );
+        return result;
+      },
+    });
+
+    // Hook into client.users.delete() and emit event when it is called.
+    this.client.users.del = new Proxy(this.client.users.del, {
+      apply: (
+        target,
+        thisArg,
+        argumentsList: Parameters<typeof this.client.users.del>,
+      ) => {
+        const result = target.apply(thisArg, argumentsList) as ReturnType<
+          typeof target
+        >;
+        result.then(
+          (r) =>
+            argumentsList[0] &&
+            this.events.users.emit('delete', { id: argumentsList[0].id }),
+        );
+        return result;
+      },
+    });
+
+    // Hook into client.users.addToGroup() and emit event when it is called.
+    this.client.users.addToGroup = new Proxy(this.client.users.addToGroup, {
+      apply: (
+        target,
+        thisArg,
+        argumentsList: Parameters<typeof this.client.users.addToGroup>,
+      ) => {
+        const result = target.apply(thisArg, argumentsList) as ReturnType<
+          typeof target
+        >;
+        result.then(
+          (r) =>
+            argumentsList[0] &&
+            this.events.users.emit('addToGroup', {
+              id: argumentsList[0].id,
+              groupId: argumentsList[0].groupId,
+            }),
+        );
+        return result;
+      },
+    });
+
+    // Hook into client.users.delFromGroup() and emit event when it is called.
+    this.client.users.delFromGroup = new Proxy(this.client.users.delFromGroup, {
+      apply: (
+        target,
+        thisArg,
+        argumentsList: Parameters<typeof this.client.users.delFromGroup>,
+      ) => {
+        const result = target.apply(thisArg, argumentsList) as ReturnType<
+          typeof target
+        >;
+        result.then(
+          (r) =>
+            argumentsList[0] &&
+            this.events.users.emit('delFromGroup', {
+              id: argumentsList[0].id,
+              groupId: argumentsList[0].groupId,
+            }),
+        );
+        return result;
+      },
+    });
   }
 
   public async getOrCreateManagedRolesGroup<F extends boolean = false>(

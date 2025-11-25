@@ -48,6 +48,7 @@ export class StatelessUser {
   readonly permissions?: TPermission[];
   readonly clientId: string;
   readonly siteId: string;
+  readonly visibility: TVisibility;
 
   constructor(payload: z.infer<typeof keycloakTokenPayloadSchema>) {
     this.idpId = payload.sub;
@@ -59,6 +60,7 @@ export class StatelessUser {
     this.picture = payload.picture;
     this.permissions =
       payload.permissions ?? payload.resource_access?.['shield-api']?.roles;
+    this.visibility = this.getVisibility();
     this.clientId = payload.client_id;
     this.siteId = payload.site_id;
   }
@@ -73,7 +75,7 @@ export class StatelessUser {
     );
   }
 
-  public get visibility(): TVisibility {
+  private getVisibility(): TVisibility {
     if (this.permissions) {
       const visibilityPermissions = new Set<TVisibility>();
       this.permissions

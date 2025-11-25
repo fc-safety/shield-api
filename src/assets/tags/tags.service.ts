@@ -210,7 +210,7 @@ export class TagsService {
     // If the tag is registered to a site, the user must belong to that
     // site.
     if (
-      !MULTI_SITE_VISIBILITIES.includes(userPerson.visibility) &&
+      !userPerson.hasMultiSiteVisibility &&
       !userPerson.allowedSiteIdsStr.includes(tag.siteId) &&
       tag.siteId !== userPerson.siteId
     ) {

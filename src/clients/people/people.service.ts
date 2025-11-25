@@ -1,8 +1,9 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { Cache } from 'cache-manager';
 import { ClsService } from 'nestjs-cls';
+import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import {
   MULTI_CLIENT_VISIBILITIES,
   MULTI_SITE_VISIBILITIES,
@@ -33,15 +34,32 @@ export class UserConfigurationError extends Error {
 }
 
 @Injectable()
-export class PeopleService {
+export class PeopleService implements OnModuleDestroy {
   private prisma: PrismaService | undefined;
   private readonly cacheCheckMap = new Map<string, Promise<unknown>>();
+  private readonly invalidatePersonCache: ({ id }: { id: string }) => void;
 
   constructor(
+    private readonly keycloak: KeycloakService,
     protected readonly cls: ClsService<CommonClsStore>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly moduleRef: ModuleRef,
-  ) {}
+  ) {
+    this.invalidatePersonCache = ({ id }) => {
+      this.cache.del(getPersonCacheKey({ idpId: id }));
+    };
+
+    // Invalidate the person cache for the user when they are updated or their group membership changes.
+    this.keycloak.events.users.on('update', this.invalidatePersonCache);
+    this.keycloak.events.users.on('addToGroup', this.invalidatePersonCache);
+    this.keycloak.events.users.on('delFromGroup', this.invalidatePersonCache);
+  }
+
+  public onModuleDestroy() {
+    this.keycloak.events.users.off('update', this.invalidatePersonCache);
+    this.keycloak.events.users.off('addToGroup', this.invalidatePersonCache);
+    this.keycloak.events.users.off('delFromGroup', this.invalidatePersonCache);
+  }
 
   public getPrisma() {
     if (!this.prisma) {
@@ -66,7 +84,7 @@ export class PeopleService {
       this.getAllowedSiteIds(user),
     ]);
 
-    const cacheKey = `person:idpId:${user.idpId}`;
+    const cacheKey = getPersonCacheKey(user);
     const createOrUpdatePerson = async () => {
       const prisma = this.getPrisma().bypassRLS();
 
@@ -130,7 +148,7 @@ export class PeopleService {
     invariant(user, 'No user in CLS');
 
     return await this.getFromCacheOrDefault<string>(
-      `clientId:externalId:${user.clientId}`,
+      `clientId:externalId=${user.clientId}`,
       () =>
         this.getPrisma()
           .bypassRLS()
@@ -159,7 +177,7 @@ export class PeopleService {
     invariant(user, 'No user in CLS');
 
     return await this.getFromCacheOrDefault<string>(
-      `siteId:externalId:${user.siteId}`,
+      `siteId:externalId=${user.siteId}`,
       () =>
         this.getPrisma()
           .bypassRLS()
@@ -188,7 +206,7 @@ export class PeopleService {
     invariant(user, 'No user in CLS');
 
     return await this.getFromCacheOrDefault<string>(
-      `allowedSiteIds:externalId:${user.siteId}`,
+      `flattenedSiteIds:externalId=${user.siteId}`,
       () =>
         this.getPrisma()
           .bypassRLS()
@@ -224,6 +242,8 @@ export class PeopleService {
     defaultValue: T | Promise<T> | (() => T | Promise<T>),
     timeout?: number,
   ) {
+    // If the cache key is not in the map, create a new promise to check the cache.
+    // This is to avoid race conditions where multiple requests are made for the same cache key.
     if (!this.cacheCheckMap.has(cacheKey)) {
       const cacheCheckPromise = this.cache
         .get<T>(cacheKey)
@@ -237,9 +257,10 @@ export class PeopleService {
           const value: T = await valueOrPromise;
           await this.cache.set(cacheKey, value, timeout);
 
-          this.cacheCheckMap.delete(cacheKey);
-
           return value;
+        })
+        .finally(() => {
+          this.cacheCheckMap.delete(cacheKey);
         });
 
       this.cacheCheckMap.set(cacheKey, cacheCheckPromise);
@@ -251,4 +272,8 @@ export class PeopleService {
 
 function invariant<T>(condition: T, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function getPersonCacheKey(person: Pick<StatelessUser, 'idpId'>) {
+  return `person:idpId=${person.idpId}`;
 }
