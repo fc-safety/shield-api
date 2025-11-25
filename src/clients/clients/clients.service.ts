@@ -1,9 +1,12 @@
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Cache } from 'cache-manager';
 import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import pRetry from 'p-retry';
@@ -11,11 +14,12 @@ import { RolesService } from 'src/admin/roles/roles.service';
 import { AssetsService } from 'src/assets/assets/assets.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CommonClsStore } from 'src/common/types';
-import { as404OrThrow } from 'src/common/utils';
+import { as404OrThrow, isNil } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import {
   AssetQuestionResponseType,
   AssetQuestionType,
+  ClientStatus,
   InspectionStatus,
   Prisma,
 } from 'src/generated/prisma/client';
@@ -46,6 +50,7 @@ export class ClientsService {
     private readonly keycloakService: KeycloakService,
     private readonly assetQuestionsService: AssetQuestionsService,
     private readonly assetsService: AssetsService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   /**
@@ -98,6 +103,33 @@ export class ClientsService {
       default:
         return 'Yes';
     }
+  }
+
+  private invalidateClientStatusCache(clientExternalId: string) {
+    const cacheKey = buildClientStatusCacheKey(clientExternalId);
+    this.cache.del(cacheKey);
+  }
+
+  public async getClientStatus(clientExternalId: string) {
+    const cacheKey = buildClientStatusCacheKey(clientExternalId);
+    const cachedValue = await this.cache.get<ClientStatus>(cacheKey);
+
+    if (!isNil(cachedValue)) {
+      return cachedValue;
+    }
+
+    const clientResult = await this.prisma.bypassRLS().client.findUnique({
+      where: { externalId: clientExternalId },
+      select: { status: true },
+    });
+
+    if (clientResult) {
+      // Cache the result for 1 hour.
+      this.cache.set(cacheKey, clientResult.status, 60 * 60 * 1000);
+      return clientResult.status;
+    }
+
+    return null;
   }
 
   async create(createClientDto: CreateClientDto) {
@@ -184,7 +216,7 @@ export class ClientsService {
 
   async update(id: string, updateClientDto: UpdateClientDto) {
     const prisma = await this.prisma.build();
-    return prisma.$transaction(async (tx) =>
+    const result = await prisma.$transaction(async (tx) =>
       tx.client
         .update({
           where: { id },
@@ -192,6 +224,8 @@ export class ClientsService {
         })
         .catch(as404OrThrow),
     );
+    this.invalidateClientStatusCache(result.externalId);
+    return result;
   }
 
   async remove(id: string) {
@@ -215,6 +249,8 @@ export class ClientsService {
       await Promise.all(
         users.map((user) => this.usersService.remove(user.id, client)),
       );
+
+      this.invalidateClientStatusCache(client.externalId);
 
       return result;
     });
@@ -1051,4 +1087,8 @@ class ParentChildIdMap<T extends { id: string }, U extends { id: string }> {
     );
     children.forEach((child) => this.childById.set(child.id, child));
   }
+}
+
+function buildClientStatusCacheKey(clientExternalId: string) {
+  return `clientStatus:externalId=${clientExternalId}`;
 }

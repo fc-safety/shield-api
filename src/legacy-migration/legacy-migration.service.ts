@@ -922,6 +922,7 @@ export class LegacyMigrationService implements OnModuleDestroy {
         where: {
           name: genericProductName,
           productCategoryId: productCategory.id,
+          clientId: newClient.id,
         },
         select: PRODUCT_BASIC_SELECT,
       });
@@ -1081,15 +1082,30 @@ export class LegacyMigrationService implements OnModuleDestroy {
     let productCategory = await prismaTx.productCategory
       .findMany({
         where: {
-          OR: [
+          AND: [
             {
-              legacyCategoryId: legacyProductCategory.cat_id,
+              // Make sure to only match product categories that are either global or belong to the current client.
+              OR: [
+                {
+                  clientId: null,
+                },
+                {
+                  clientId: newClient.id,
+                },
+              ],
             },
             {
-              shortName: {
-                equals: legacyProductCategory.cat_nic?.trim() ?? '',
-                mode: 'insensitive',
-              },
+              OR: [
+                {
+                  legacyCategoryId: legacyProductCategory.cat_id,
+                },
+                {
+                  shortName: {
+                    equals: legacyProductCategory.cat_nic?.trim() ?? '',
+                    mode: 'insensitive',
+                  },
+                },
+              ],
             },
           ],
         },
@@ -1382,6 +1398,7 @@ const PRODUCT_CATEGORY_BASIC_SELECT = {
   id: true,
   legacyCategoryId: true,
   name: true,
+  clientId: true,
 } satisfies Prisma.ProductCategorySelect;
 type TProductCategoryBasic = Prisma.ProductCategoryGetPayload<{
   select: typeof PRODUCT_CATEGORY_BASIC_SELECT;
