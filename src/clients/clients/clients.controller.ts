@@ -36,6 +36,7 @@ export class ClientsController {
     return this.clientsService.findAll(queryClientDto);
   }
 
+  @CheckIsAuthenticated()
   @Get('my-organization')
   findMyOrganization() {
     return this.clientsService.findUserOrganization();
