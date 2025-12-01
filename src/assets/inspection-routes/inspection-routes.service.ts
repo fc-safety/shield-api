@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -28,9 +29,6 @@ export class InspectionRoutesService {
         include: {
           site: true,
           inspectionRoutePoints: {
-            include: {
-              asset: true,
-            },
             orderBy: {
               order: 'asc',
             },
@@ -42,20 +40,26 @@ export class InspectionRoutesService {
 
   async findOne(id: string) {
     const prisma = await this.prisma.forUser();
-    return prisma.inspectionRoute.findUnique({
-      where: { id },
-      include: {
-        site: true,
-        inspectionRoutePoints: {
-          include: {
-            asset: true,
-          },
-          orderBy: {
-            order: 'asc',
+    return prisma.inspectionRoute
+      .findUniqueOrThrow({
+        where: { id },
+        include: {
+          site: true,
+          inspectionRoutePoints: {
+            include: {
+              asset: {
+                include: {
+                  tag: true,
+                },
+              },
+            },
+            orderBy: {
+              order: 'asc',
+            },
           },
         },
-      },
-    });
+      })
+      .catch(as404OrThrow);
   }
 
   async update(id: string, updateInspectionRouteDto: UpdateInspectionRouteDto) {

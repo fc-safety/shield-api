@@ -133,7 +133,10 @@ export class LegacyMigrationService implements OnModuleDestroy {
 
       await this.prisma.bypassRLS().$transaction(
         async (tx) => {
-          const dataHandlers: DataHandlers = { prismaTx: tx, legacyDb };
+          const dataHandlers: DataHandlers = {
+            prismaTx: tx as PrismaTxClient,
+            legacyDb,
+          };
 
           // MIGRATE CLIENT
           const { newClient } = await this.migrateClient(
@@ -688,6 +691,123 @@ export class LegacyMigrationService implements OnModuleDestroy {
       return { legacyPrimaryKeyToNewAssetMap: new Map() };
     }
 
+    /** Maps new site ID to site object for quick lookup. */
+    const newSiteIdMap = new Map<string, TSiteBasic>(
+      [...legacyPrimaryKeyToNewSiteMap.values()].map((value) => [
+        value.id,
+        value,
+      ]),
+    );
+    /** Maps new site ID to the site's default route. */
+    const defaultInspectionRoutesBySiteId = new Map<
+      string,
+      TInspectionRouteBasic
+    >();
+    const assetIdToInspectionRoutePointMap = new Map<
+      string,
+      TInspectionRoutePointBasic
+    >();
+    const getOrCreateDefaultInspectionRoute = async (siteId: string) => {
+      // Check membership first since this will be the most common case.
+      if (defaultInspectionRoutesBySiteId.has(siteId)) {
+        return defaultInspectionRoutesBySiteId.get(siteId)!;
+      }
+
+      // Load existing routes if none have been loaded yet.
+      if (defaultInspectionRoutesBySiteId.size === 0) {
+        const existingRoutes = await prismaTx.inspectionRoute.findMany({
+          where: {
+            clientId: newClient.id,
+          },
+          select: {
+            ...INSPECTION_ROUTE_BASIC_SELECT,
+            inspectionRoutePoints: {
+              select: INSPECTION_ROUTE_POINT_BASIC_SELECT,
+            },
+          },
+        });
+
+        for (const route of existingRoutes) {
+          // Make sure we're only considering default routes.
+          if (!route.name.includes('Default')) {
+            continue;
+          }
+
+          // Add the route to the map for future lookups.
+          defaultInspectionRoutesBySiteId.set(route.siteId, route);
+          for (const point of route.inspectionRoutePoints) {
+            assetIdToInspectionRoutePointMap.set(point.assetId, {
+              id: point.id,
+              inspectionRouteId: route.id,
+              assetId: point.assetId,
+            });
+          }
+        }
+      }
+
+      // Check membership again now that we've loaded existing routes.
+      if (defaultInspectionRoutesBySiteId.has(siteId)) {
+        return defaultInspectionRoutesBySiteId.get(siteId)!;
+      }
+
+      // If no route is found, create a new one.
+      const ownerSite = newSiteIdMap.get(siteId);
+      const newDefaultRoute = await prismaTx.inspectionRoute.create({
+        data: {
+          name: ownerSite ? `${ownerSite.name} Default` : 'Default',
+          site: {
+            connect: {
+              id: siteId,
+            },
+          },
+          client: {
+            connect: {
+              id: newClient.id,
+            },
+          },
+        },
+        select: INSPECTION_ROUTE_BASIC_SELECT,
+      });
+
+      // Add the new route to map for future lookups.
+      defaultInspectionRoutesBySiteId.set(siteId, newDefaultRoute);
+
+      // Return the new route.
+      return newDefaultRoute;
+    };
+
+    /** Migrates a legacy assets "tour" order to a new inspection route point for the
+     * site's default inspection route.
+     */
+    const migrateRouteAssignment = async ({
+      assetId,
+      siteId,
+      order,
+    }: {
+      assetId: string;
+      siteId: string;
+      order: number;
+    }) => {
+      const existingPoint = assetIdToInspectionRoutePointMap.get(assetId);
+      if (existingPoint) {
+        return existingPoint;
+      }
+
+      const defaultRoute = await getOrCreateDefaultInspectionRoute(siteId);
+
+      const newPoint = await prismaTx.inspectionRoutePoint.create({
+        data: {
+          assetId,
+          inspectionRouteId: defaultRoute.id,
+          order,
+        },
+        select: INSPECTION_ROUTE_POINT_BASIC_SELECT,
+      });
+
+      assetIdToInspectionRoutePointMap.set(assetId, newPoint);
+      return newPoint;
+    };
+
     const alreadyMigratedAssets = await prismaTx.asset.findMany({
       select: ASSET_BASIC_SELECT,
       where: {
@@ -714,10 +834,17 @@ export class LegacyMigrationService implements OnModuleDestroy {
 
       // If the asset has already been migrated, skip it.
       if (legacyIdToNewAssetMap.has(legacyAsset.a_id)) {
-        legacyPrimaryKeyToNewAssetMap.set(
-          legacyAsset.a_no,
-          legacyIdToNewAssetMap.get(legacyAsset.a_id)!,
-        );
+        const newAsset = legacyIdToNewAssetMap.get(legacyAsset.a_id)!;
+        legacyPrimaryKeyToNewAssetMap.set(legacyAsset.a_no, newAsset);
+
+        if (legacyAsset.a_sort !== null) {
+          await migrateRouteAssignment({
+            assetId: newAsset.id,
+            siteId: newAsset.siteId,
+            order: legacyAsset.a_sort,
+          });
+        }
+
         continue;
       }
 
@@ -772,6 +899,9 @@ export class LegacyMigrationService implements OnModuleDestroy {
           placement: legacyAsset.a_placement ?? '',
           serialNumber: legacyAsset.a_serial ?? '',
           name: assetName,
+          createdOn: legacyAsset.a_date_insert ?? new Date(),
+          // The legacy system considers an asset "setup" when it is first created.
+          setupOn: legacyAsset.a_date_insert ?? new Date(),
           product: {
             connect: {
               id: product.id,
@@ -797,6 +927,15 @@ export class LegacyMigrationService implements OnModuleDestroy {
         },
         select: ASSET_BASIC_SELECT,
       });
+
+      if (legacyAsset.a_sort !== null) {
+        await migrateRouteAssignment({
+          assetId: asset.id,
+          siteId: asset.siteId,
+          order: legacyAsset.a_sort,
+        });
+      }
+
       legacyPrimaryKeyToNewAssetMap.set(legacyAsset.a_no, asset);
       assetsMigrated++;
     }
@@ -1280,27 +1419,57 @@ export class LegacyMigrationService implements OnModuleDestroy {
 
     const serialNumber = legacyTag.t_serial.toString().padStart(7, '0');
 
-    let tag = await prismaTx.tag.findFirst({
-      where: {
-        OR: [
-          {
-            legacyTagId: legacyTag.t_id,
-          },
-          {
-            serialNumber,
-            siteId: newSite.id,
-            clientId: newSite.clientId,
-          },
-        ],
-      },
-      select: TAG_BASIC_SELECT,
-    });
+    let tag = await prismaTx.tag
+      .findMany({
+        where: {
+          OR: [
+            {
+              legacyTagId: legacyTag.t_id,
+            },
+            {
+              serialNumber,
+            },
+          ],
+        },
+        select: TAG_BASIC_SELECT,
+      })
+      .then((candidates) => {
+        // Only consider candidates who are either unassigned or assigned to the same client
+        // and site as the new site.
+        const validCandidates = candidates.filter(
+          (candidate) =>
+            (candidate.clientId === null ||
+              candidate.clientId === newSite.clientId) &&
+            (candidate.siteId === null || candidate.siteId === newSite.id),
+        );
+        const first = validCandidates.at(0);
+        for (const candidate of validCandidates) {
+          if (candidate.legacyTagId === legacyTag.t_id) {
+            // If the tag is found by the legacy ID, return it.
+            return candidate;
+          }
+        }
+
+        // If no tag is found by the legacy ID, return the first one found by the serial number.
+        return first;
+      });
 
     if (!tag) {
       tag = await prismaTx.tag.create({
         data: {
           legacyTagId: legacyTag.t_id,
           serialNumber,
+          clientId: newSite.clientId,
+          siteId: newSite.id,
+        },
+        select: TAG_BASIC_SELECT,
+      });
+    } else if (tag.clientId === null || tag.siteId === null) {
+      tag = await prismaTx.tag.update({
+        where: {
+          id: tag.id,
+        },
+        data: {
           clientId: newSite.clientId,
           siteId: newSite.id,
         },
@@ -1347,6 +1516,7 @@ type TClientBasic = Prisma.ClientGetPayload<{
 
 const SITE_BASIC_SELECT = {
   id: true,
+  name: true,
   clientId: true,
   legacySiteId: true,
   legacyGroupId: true,
@@ -1359,6 +1529,8 @@ const TAG_BASIC_SELECT = {
   id: true,
   legacyTagId: true,
   serialNumber: true,
+  clientId: true,
+  siteId: true,
 } satisfies Prisma.TagSelect;
 type TTagBasic = Prisma.TagGetPayload<{
   select: typeof TAG_BASIC_SELECT;
@@ -1367,6 +1539,7 @@ type TTagBasic = Prisma.TagGetPayload<{
 const ASSET_BASIC_SELECT = {
   id: true,
   legacyAssetId: true,
+  siteId: true,
 } satisfies Prisma.AssetSelect;
 type TAssetBasic = Prisma.AssetGetPayload<{
   select: typeof ASSET_BASIC_SELECT;
@@ -1410,4 +1583,22 @@ const MANUFACTURER_BASIC_SELECT = {
 } satisfies Prisma.ManufacturerSelect;
 type TManufacturerBasic = Prisma.ManufacturerGetPayload<{
   select: typeof MANUFACTURER_BASIC_SELECT;
+}>;
+
+const INSPECTION_ROUTE_BASIC_SELECT = {
+  id: true,
+  name: true,
+  siteId: true,
+} satisfies Prisma.InspectionRouteSelect;
+type TInspectionRouteBasic = Prisma.InspectionRouteGetPayload<{
+  select: typeof INSPECTION_ROUTE_BASIC_SELECT;
+}>;
+
+const INSPECTION_ROUTE_POINT_BASIC_SELECT = {
+  id: true,
+  inspectionRouteId: true,
+  assetId: true,
+} satisfies Prisma.InspectionRoutePointSelect;
+type TInspectionRoutePointBasic = Prisma.InspectionRoutePointGetPayload<{
+  select: typeof INSPECTION_ROUTE_POINT_BASIC_SELECT;
 }>;

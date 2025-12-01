@@ -86,6 +86,8 @@ export interface Asset {
   a_serial: string | null;
   /** Maps to `Product.p_no`. */
   a_p_no: number | null;
+  /** Sort order. Used for inspection route assignments. */
+  a_sort: number | null;
   /** Maps to `ProductCategory.cat_no`. */
   a_cat_no: number | null;
   /** Maps to `Manufacturer.mfg_no`. */
