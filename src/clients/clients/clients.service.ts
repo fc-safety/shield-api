@@ -793,36 +793,38 @@ export class ClientsService {
       for (const assetRow of assetsToRenew) {
         // This fixes a typing bug in prisma type generation. The asset properties will not be null,
         // but sometimes prisma thinks they could be.
-        if (!assetRow.id || !assetRow.siteId || !assetRow.serialNumber) {
+        const {
+          id: assetId,
+          siteId: assetSiteId,
+          serialNumber: assetSerialNumber,
+        } = assetRow;
+        if (
+          assetId === null ||
+          assetSiteId === null ||
+          assetSerialNumber === null
+        ) {
           continue;
         }
-        const asset: Prisma.AssetGetPayload<{
-          select: {
-            id: true;
-            siteId: true;
-            serialNumber: true;
-          };
-        }> = {
-          id: assetRow.id,
-          siteId: assetRow.siteId,
-          serialNumber: assetRow.serialNumber,
-        };
 
         const inspectionData = await this.generateRandomDemoInspection({
-          asset,
+          asset: {
+            id: assetId,
+            siteId: assetSiteId,
+            serialNumber: assetSerialNumber,
+          },
           validInspectors,
           clientId: client.id,
         });
         if (!inspectionData) continue;
         try {
           await this.createInspection(tx, inspectionData);
-          succeededAssetIds.push(asset.id);
+          succeededAssetIds.push(assetId);
         } catch (error) {
           this.logger.warn(
-            `Failed to create inspection for asset ${asset.id}:`,
+            `Failed to create inspection for asset ${assetId}:`,
             error,
           );
-          failedAssetIds.push(asset.id);
+          failedAssetIds.push(assetId);
         }
       }
     });
