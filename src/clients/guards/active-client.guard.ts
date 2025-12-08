@@ -8,6 +8,11 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ClsService } from 'nestjs-cls';
 import { IS_PUBLIC_KEY } from 'src/auth/auth.guard';
+import {
+  CHECK_PUBLIC_POLICIES_KEY,
+  PolicyHandler,
+  PublicPolicyHandlerContext,
+} from 'src/auth/policies.guard';
 import { CommonClsStore } from 'src/common/types';
 import { isNil } from 'src/common/utils';
 import { ClientStatus } from 'src/generated/prisma/enums';
@@ -29,7 +34,15 @@ export class ActiveClientGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (isPublic) {
+    const publicPolicyHandlers =
+      this.reflector.getAllAndOverride<
+        PolicyHandler<PublicPolicyHandlerContext>[]
+      >(CHECK_PUBLIC_POLICIES_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) || [];
+
+    if (isPublic || publicPolicyHandlers.length > 0) {
       return true;
     }
 
