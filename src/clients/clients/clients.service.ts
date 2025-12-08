@@ -790,7 +790,24 @@ export class ClientsService {
     );
 
     await prisma.$transaction(async (tx) => {
-      for (const asset of assetsToRenew) {
+      for (const assetRow of assetsToRenew) {
+        // This fixes a typing bug in prisma type generation. The asset properties will not be null,
+        // but sometimes prisma thinks they could be.
+        if (!assetRow.id || !assetRow.siteId || !assetRow.serialNumber) {
+          continue;
+        }
+        const asset: Prisma.AssetGetPayload<{
+          select: {
+            id: true;
+            siteId: true;
+            serialNumber: true;
+          };
+        }> = {
+          id: assetRow.id,
+          siteId: assetRow.siteId,
+          serialNumber: assetRow.serialNumber,
+        };
+
         const inspectionData = await this.generateRandomDemoInspection({
           asset,
           validInspectors,

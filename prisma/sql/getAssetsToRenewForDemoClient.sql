@@ -1,7 +1,16 @@
 -- @param {String} $1:clientId? The client ID (optional)
 
 SELECT
-    a.*
+    a."id",
+    a."siteId",
+    a."serialNumber",
+    a."inspectionCycle",
+    a."setupOn",
+    a."tagId",
+    a."active",
+    a."clientId",
+    a."createdOn",
+    a."modifiedOn"
 FROM "Asset" a
 JOIN "Client" c ON a."clientId" = c."id"
 LEFT JOIN (
