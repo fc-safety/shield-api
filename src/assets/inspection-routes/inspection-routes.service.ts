@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
-import { Prisma } from 'src/generated/prisma/client';
+import { InspectionSessionStatus, Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInspectionRoutePointDto } from './dto/create-inspection-route-point.dto';
 import { CreateInspectionRouteDto } from './dto/create-inspection-route.dto';
@@ -45,6 +45,19 @@ export class InspectionRoutesService {
         where: { id },
         include: {
           site: true,
+          inspectionSessions: {
+            where: {
+              status: InspectionSessionStatus.PENDING,
+            },
+            include: {
+              lastInspector: true,
+              completedInspectionRoutePoints: true,
+            },
+            orderBy: {
+              createdOn: 'desc',
+            },
+            take: 1,
+          },
           inspectionRoutePoints: {
             include: {
               asset: {
