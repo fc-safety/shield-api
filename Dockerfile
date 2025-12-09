@@ -2,6 +2,7 @@
 FROM node:24 AS builder
 
 ARG DATABASE_URL
+ARG SENTRY_AUTH_TOKEN
 
 # Create app directory
 WORKDIR /usr/src/app
