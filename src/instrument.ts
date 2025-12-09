@@ -1,9 +1,24 @@
 import * as Sentry from '@sentry/nestjs';
 
+// Initialize Sentry for error tracking and monitoring
 Sentry.init({
-  dsn: 'https://eb6b74337b6655d78417b881cd519d9c@o4510505981116416.ingest.us.sentry.io/4510506176479232',
-  // Setting this option to true will send default PII data to Sentry.
-  // For example, automatic IP address collection on events
-  sendDefaultPii: true,
+  // DSN (Data Source Name) - identifies which Sentry project to send events to
+  // This should be configured via environment variable to support different environments
+  dsn: process.env.SENTRY_DSN,
+
+  // Environment identifier for this deployment (dev/staging/production)
   environment: process.env.SENTRY_ENVIRONMENT ?? 'local',
+
+  // Send PII (Personally Identifiable Information) with error reports
+  // This includes IP addresses and potentially user information from context
+  // Enabled to help with debugging and correlating errors with specific users/sessions
+  // Ensure this complies with your privacy policy and data protection requirements
+  sendDefaultPii: true,
 });
+
+// Warn if Sentry is not configured in production
+if (!process.env.SENTRY_DSN && process.env.NODE_ENV === 'production') {
+  console.warn(
+    'SENTRY_DSN environment variable not set - error tracking is disabled',
+  );
+}

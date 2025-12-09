@@ -14,6 +14,9 @@ function buildSiteStatusCacheKey(siteExternalId: string) {
 
 @Injectable()
 export class SitesService {
+  // Cache TTL for site status: 1 hour in milliseconds
+  private readonly SITE_STATUS_CACHE_TTL_MS = 60 * 60 * 1000;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
@@ -43,7 +46,7 @@ export class SitesService {
 
     if (siteResult) {
       // Cache the result for 1 hour.
-      this.cache.set(cacheKey, siteResult.active, 60 * 60 * 1000);
+      this.cache.set(cacheKey, siteResult.active, this.SITE_STATUS_CACHE_TTL_MS);
       return siteResult.active;
     }
 
@@ -116,8 +119,10 @@ export class SitesService {
   }
 
   async remove(id: string) {
-    return this.prisma
-      .forContext()
-      .then((prisma) => prisma.site.delete({ where: { id } }));
+    const prisma = await this.prisma.forContext();
+    const result = await prisma.site.delete({ where: { id } });
+    // Invalidate cache to ensure deleted site status is not cached
+    this.invalidateSiteStatusCache(result.externalId);
+    return result;
   }
 }
