@@ -7,6 +7,7 @@ import { CreateSiteSchema } from './create-site.dto';
 const UpdateSiteSchema = CreateSiteSchema.partial()
   .omit({ address: true, subsites: true })
   .extend({
+    active: z.boolean(),
     address: z.object({
       update: createAddressSchema.partial(),
     }),

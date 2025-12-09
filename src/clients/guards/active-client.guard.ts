@@ -17,6 +17,7 @@ import { CommonClsStore } from 'src/common/types';
 import { isNil } from 'src/common/utils';
 import { ClientStatus } from 'src/generated/prisma/enums';
 import { ClientsService } from '../clients/clients.service';
+import { SitesService } from '../sites/sites.service';
 
 @Injectable()
 export class ActiveClientGuard implements CanActivate {
@@ -26,6 +27,7 @@ export class ActiveClientGuard implements CanActivate {
     private reflector: Reflector,
     private cls: ClsService<CommonClsStore>,
     private clientsService: ClientsService,
+    private sitesService: SitesService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -56,12 +58,22 @@ export class ActiveClientGuard implements CanActivate {
     }
 
     const clientExternalId = user.clientId;
+    const siteExternalId = user.siteId;
 
-    const isActive = await this.isClientActive(clientExternalId);
-    if (!isActive) {
+    const isClientActive = await this.isClientActive(clientExternalId);
+    if (!isClientActive) {
       throw new ForbiddenException({
         message: 'Client is not active. Please contact support.',
         error: 'client_not_active',
+        statusCode: 403,
+      });
+    }
+
+    const isSiteActive = await this.isSiteActive(siteExternalId);
+    if (!isSiteActive) {
+      throw new ForbiddenException({
+        message: 'Site is not active. Please contact support.',
+        error: 'site_not_active',
         statusCode: 403,
       });
     }
@@ -78,5 +90,14 @@ export class ActiveClientGuard implements CanActivate {
     // Consider both ACTIVE and LEGACY as active for now. This allows for a transitional
     // period for legacy clients to be migrated to the new system.
     return status === ClientStatus.ACTIVE || status === ClientStatus.LEGACY;
+  }
+
+  private async isSiteActive(siteExternalId: string) {
+    const isActive = await this.sitesService.getSiteStatus(siteExternalId);
+    if (isNil(isActive)) {
+      return false;
+    }
+
+    return isActive;
   }
 }
