@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ClsModule } from 'nestjs-cls';
 import { ClientsModule } from 'src/clients/clients/clients.module';
 import { ActiveClientGuard } from 'src/clients/guards/active-client.guard';
+import { SitesModule } from 'src/clients/sites/sites.module';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 import { KeycloakModule } from './keycloak/keycloak.module';
@@ -27,6 +28,7 @@ import { PoliciesGuard } from './policies.guard';
     }),
     KeycloakModule,
     forwardRef(() => ClientsModule),
+    forwardRef(() => SitesModule),
   ],
   providers: [
     {

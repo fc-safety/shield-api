@@ -15,6 +15,7 @@ import { z } from 'zod';
 const BaseQuerySiteFiltersSchema = z
   .object({
     id: prismaStringFilter(z.string()),
+    active: prismaBoolFilter(z.stringbool()),
     createdOn: prismaDateTimeFilter(z.iso.datetime()),
     modifiedOn: prismaDateTimeFilter(z.iso.datetime()),
     externalId: prismaStringFilter(z.string()),

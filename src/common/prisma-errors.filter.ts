@@ -1,4 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, Logger } from '@nestjs/common';
+import { SentryExceptionCaptured } from '@sentry/nestjs';
 import { Response } from 'express';
 import { Prisma } from 'src/generated/prisma/client';
 
@@ -6,6 +7,7 @@ import { Prisma } from 'src/generated/prisma/client';
 export class PrismaErrorsFilter implements ExceptionFilter {
   logger = new Logger(PrismaErrorsFilter.name);
 
+  @SentryExceptionCaptured()
   catch(exception: any, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();

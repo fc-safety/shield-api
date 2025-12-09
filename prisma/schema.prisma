@@ -607,6 +607,7 @@ model Site {
   legacyGroupId                     String?
   createdOn                         DateTime                           @default(now()) @db.Timestamptz()
   modifiedOn                        DateTime                           @updatedAt @db.Timestamptz()
+  active                            Boolean                            @default(true)
   name                              String
   address                           Address                            @relation(fields: [addressId], references: [id])
   addressId                         String                             @unique
