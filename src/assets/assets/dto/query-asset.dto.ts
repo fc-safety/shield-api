@@ -19,6 +19,7 @@ const BaseQueryAssetFiltersSchema = z
     site: z
       .object({
         id: prismaStringFilter(z.string()),
+        active: prismaBoolFilter(z.stringbool()),
       })
       .partial(),
     client: z

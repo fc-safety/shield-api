@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import {
   buildFixedQuerySchema,
+  prismaBoolFilter,
   prismaDateTimeFilter,
   PrismaOrderEmum,
   prismaStringFilter,
@@ -15,6 +16,11 @@ const QueryInspectionRouteFiltersSchema = z
     name: prismaStringFilter(z.string()),
     siteId: prismaStringFilter(z.string()),
     clientId: prismaStringFilter(z.string()),
+    site: z
+      .object({
+        active: prismaBoolFilter(z.stringbool()),
+      })
+      .partial(),
   })
   .partial();
 

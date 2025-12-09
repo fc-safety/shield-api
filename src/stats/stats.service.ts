@@ -71,6 +71,9 @@ export class StatsService {
           where: {
             active: true,
             siteId,
+            site: {
+              active: true,
+            },
           },
           include: {
             inspections: {
