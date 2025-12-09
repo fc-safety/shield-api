@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build",
+    "build": "nest build && npm run sentry:sourcemaps",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -21,7 +21,8 @@
     "email:dev": "email dev --dir src/notifications/templates",
     "db:generate": "prisma generate --sql",
     "db:generate:watch": "prisma generate --sql --watch",
-    "db:format": "prisma format"
+    "db:format": "prisma format",
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org fc-safety --project shield-api ./dist && sentry-cli sourcemaps upload --org fc-safety --project shield-api ./dist"
   },
   "dependencies": {
     "@keycloak/keycloak-admin-client": "^26.4.5",
@@ -45,6 +46,8 @@
     "@prisma/client": "^7.1.0",
     "@react-email/components": "1.0.1",
     "@react-email/render": "^2.0.0",
+    "@sentry/cli": "^2.58.2",
+    "@sentry/nestjs": "^10.29.0",
     "axios": "^1.13.2",
     "bullmq": "^5.63.2",
     "cache-manager": "^7.2.5",
