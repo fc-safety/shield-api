@@ -13,6 +13,7 @@ import pRetry from 'p-retry';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { AssetsService } from 'src/assets/assets/assets.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
+import { CustomQueryFilter } from 'src/auth/keycloak/types';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow, isNil } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
@@ -781,6 +782,9 @@ export class ClientsService {
     }
 
     const validInspectors = await this.getValidDemoInspectors(client);
+    if (validInspectors.length === 0) {
+      this.logger.warn(`No valid inspectors found for client ${client.name}`);
+    }
 
     const succeededAssetIds: string[] = [];
     const failedAssetIds: string[] = [];
@@ -789,45 +793,48 @@ export class ClientsService {
       getAssetsToRenewForDemoClient(client.id),
     );
 
-    await prisma.$transaction(async (tx) => {
-      for (const assetRow of assetsToRenew) {
-        // This fixes a typing bug in prisma type generation. The asset properties will not be null,
-        // but sometimes prisma thinks they could be.
-        const {
-          id: assetId,
-          siteId: assetSiteId,
-          serialNumber: assetSerialNumber,
-        } = assetRow;
-        if (
-          assetId === null ||
-          assetSiteId === null ||
-          assetSerialNumber === null
-        ) {
-          continue;
-        }
-
-        const inspectionData = await this.generateRandomDemoInspection({
-          asset: {
+    await prisma.$transaction(
+      async (tx) => {
+        for (const assetRow of assetsToRenew) {
+          // This fixes a typing bug in prisma type generation. The asset properties will not be null,
+          // but sometimes prisma thinks they could be.
+          const {
             id: assetId,
             siteId: assetSiteId,
             serialNumber: assetSerialNumber,
-          },
-          validInspectors,
-          clientId: client.id,
-        });
-        if (!inspectionData) continue;
-        try {
-          await this.createInspection(tx, inspectionData);
-          succeededAssetIds.push(assetId);
-        } catch (error) {
-          this.logger.warn(
-            `Failed to create inspection for asset ${assetId}:`,
-            error,
-          );
-          failedAssetIds.push(assetId);
+          } = assetRow;
+          if (
+            assetId === null ||
+            assetSiteId === null ||
+            assetSerialNumber === null
+          ) {
+            continue;
+          }
+
+          const inspectionData = await this.generateRandomDemoInspection({
+            asset: {
+              id: assetId,
+              siteId: assetSiteId,
+              serialNumber: assetSerialNumber,
+            },
+            validInspectors,
+            clientId: client.id,
+          });
+          if (!inspectionData) continue;
+          try {
+            await this.createInspection(tx, inspectionData);
+            succeededAssetIds.push(assetId);
+          } catch (error) {
+            this.logger.error(
+              `Failed to create inspection for asset ${assetId}:`,
+              error,
+            );
+            failedAssetIds.push(assetId);
+          }
         }
-      }
-    });
+      },
+      { timeout: MAX_TX_TIMEOUT_MS_DEMO_INSPECTIONS_GENERATION },
+    );
 
     return {
       succeededAssetIds,
@@ -866,30 +873,31 @@ export class ClientsService {
       allowedSiteExternalIds = allowedSites.map((s) => s.externalId);
     }
 
+    const queryFilters: CustomQueryFilter[] = [
+      {
+        q: {
+          key: 'client_id',
+          op: 'eq',
+          value: client.externalId,
+        },
+      },
+    ];
+
+    if (!hasMultiSiteVisibility) {
+      queryFilters.push({
+        q: {
+          key: 'site_id',
+          op: 'in',
+          value: allowedSiteExternalIds,
+        } as const,
+      });
+    }
+
     // Get all Keycloak users for this client to select inspectors from
     const keycloakUsersResponse =
       await this.keycloakService.findUsersByAttribute({
         filter: {
-          AND: [
-            {
-              q: {
-                key: 'client_id',
-                op: 'eq',
-                value: client.externalId,
-              },
-            },
-            ...(!hasMultiSiteVisibility
-              ? [
-                  {
-                    q: {
-                      key: 'site_id',
-                      op: 'in',
-                      value: allowedSiteExternalIds,
-                    } as const,
-                  },
-                ]
-              : []),
-          ],
+          AND: queryFilters,
         },
         limit: 500,
         offset: 0,
