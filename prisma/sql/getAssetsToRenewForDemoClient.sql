@@ -22,5 +22,4 @@ WHERE (i."createdOn" IS NULL OR i."createdOn" < NOW() - (INTERVAL '1 day' * COAL
 AND a."active" = TRUE
 AND ($1::text IS NULL OR a."clientId" = $1::text)
 AND c."demoMode" = TRUE
-AND a."tagId" IS NULL
-AND a."setupOn" IS NOT NULL;
+AND a."tagId" IS NULL;
