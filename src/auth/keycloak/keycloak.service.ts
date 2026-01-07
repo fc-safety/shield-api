@@ -163,7 +163,12 @@ export class KeycloakService {
         const result = target.apply(thisArg, argumentsList) as ReturnType<
           typeof target
         >;
-        result.then((r) => this.events.users.emit('create', r));
+        result.then(
+          (r) => this.events.users.emit('create', r),
+          () => {
+            // Error already propogated to caller, just silence in detached chain.
+          },
+        );
         return result;
       },
     });
@@ -178,8 +183,11 @@ export class KeycloakService {
         const result = target.apply(thisArg, argumentsList) as ReturnType<
           typeof target
         >;
-        result.then((r) =>
-          this.events.users.emit('update', { id: argumentsList[0].id }),
+        result.then(
+          (r) => this.events.users.emit('update', { id: argumentsList[0].id }),
+          () => {
+            // Error already propogated to caller, just silence in detached chain.
+          },
         );
         return result;
       },
@@ -199,6 +207,9 @@ export class KeycloakService {
           (r) =>
             argumentsList[0] &&
             this.events.users.emit('delete', { id: argumentsList[0].id }),
+          () => {
+            // Error already propogated to caller, just silence in detached chain.
+          },
         );
         return result;
       },
@@ -221,6 +232,9 @@ export class KeycloakService {
               id: argumentsList[0].id,
               groupId: argumentsList[0].groupId,
             }),
+          () => {
+            // Error already propogated to caller, just silence in detached chain.
+          },
         );
         return result;
       },
@@ -243,6 +257,9 @@ export class KeycloakService {
               id: argumentsList[0].id,
               groupId: argumentsList[0].groupId,
             }),
+          () => {
+            // Error already propogated to caller, just silence in detached chain.
+          },
         );
         return result;
       },

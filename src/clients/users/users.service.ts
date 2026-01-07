@@ -1,5 +1,7 @@
+import { NetworkError as KeycloakNetworkError } from '@keycloak/keycloak-admin-client';
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -68,23 +70,30 @@ export class UsersService {
       ['user_legacy_id', createUserDto.legacyUserId],
     );
 
-    await this.keycloak.client.users.create({
-      enabled: createUserDto.active ?? true,
-      firstName: createUserDto.firstName,
-      lastName: createUserDto.lastName,
-      username: createUserDto.email,
-      email: createUserDto.email,
-      emailVerified: true,
-      attributes,
-      credentials: createUserDto.password
-        ? [
-            {
-              type: 'password',
-              value: createUserDto.password,
-            },
-          ]
-        : undefined,
-    });
+    await this.keycloak.client.users
+      .create({
+        enabled: createUserDto.active ?? true,
+        firstName: createUserDto.firstName,
+        lastName: createUserDto.lastName,
+        username: createUserDto.email,
+        email: createUserDto.email,
+        emailVerified: true,
+        attributes,
+        credentials: createUserDto.password
+          ? [
+              {
+                type: 'password',
+                value: createUserDto.password,
+              },
+            ]
+          : undefined,
+      })
+      .catch((e) => {
+        if (e instanceof KeycloakNetworkError && e.response.status === 409) {
+          throw new ConflictException(e.message);
+        }
+        throw e;
+      });
     return this.findOne(newId, client, bypassRLS);
   }
 
@@ -161,21 +170,28 @@ export class UsersService {
       ['user_legacy_id', updateUserDto.legacyUserId],
     );
 
-    return this.keycloak.client.users.update(
-      {
-        id: keycloakUser.id,
-      },
-      {
-        enabled: updateUserDto.active ?? keycloakUser.enabled,
-        firstName: updateUserDto.firstName ?? keycloakUser.firstName,
-        lastName: updateUserDto.lastName ?? keycloakUser.lastName,
-        username:
-          (usernameIsEmail ? updateUserDto.email : updateUserDto.username) ??
-          keycloakUser.username,
-        email: updateUserDto.email ?? keycloakUser.email,
-        attributes,
-      },
-    );
+    return this.keycloak.client.users
+      .update(
+        {
+          id: keycloakUser.id,
+        },
+        {
+          enabled: updateUserDto.active ?? keycloakUser.enabled,
+          firstName: updateUserDto.firstName ?? keycloakUser.firstName,
+          lastName: updateUserDto.lastName ?? keycloakUser.lastName,
+          username:
+            (usernameIsEmail ? updateUserDto.email : updateUserDto.username) ??
+            keycloakUser.username,
+          email: updateUserDto.email ?? keycloakUser.email,
+          attributes,
+        },
+      )
+      .catch((e) => {
+        if (e instanceof KeycloakNetworkError && e.response.status === 409) {
+          throw new ConflictException(e.message);
+        }
+        throw e;
+      });
   }
 
   async remove(
