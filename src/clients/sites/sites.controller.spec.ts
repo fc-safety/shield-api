@@ -5,10 +5,20 @@ import { SitesService } from './sites.service';
 describe('SitesController', () => {
   let controller: SitesController;
 
+  const mockSitesService = {
+    create: jest.fn(),
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SitesController],
-      providers: [SitesService],
+      providers: [
+        { provide: SitesService, useValue: mockSitesService },
+      ],
     }).compile();
 
     controller = module.get<SitesController>(SitesController);

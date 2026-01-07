@@ -4,6 +4,7 @@ import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
+import { AssetsService } from 'src/assets/assets/assets.service';
 import { UsersService } from '../users/users.service';
 import { ClientsService } from './clients.service';
 import { GenerateDemoInspectionsDto } from './dto/generate-demo-inspections.dto';
@@ -17,14 +18,33 @@ describe('ClientsService', () => {
   beforeEach(async () => {
     mockPrismaService = {
       txForAdminOrUser: jest.fn(),
+      build: jest.fn(),
     };
 
     mockAssetQuestionsService = {
       findByAsset: jest.fn(),
+      checkAssetConfiguration: jest.fn().mockResolvedValue({
+        isConfigurationMet: true,
+        unansweredSetupQuestions: [],
+        checkResults: [],
+      }),
     };
 
     mockKeycloakService = {
       findUsersByAttribute: jest.fn(),
+    };
+
+    const mockAssetsService = {
+      findOne: jest.fn(),
+      testAlertRules: jest.fn(),
+      handleSetMetadataFromConfigs: jest.fn().mockResolvedValue(undefined),
+      handleAlertTriggers: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const mockCacheManager = {
+      get: jest.fn(),
+      set: jest.fn(),
+      del: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -36,6 +56,8 @@ describe('ClientsService', () => {
         { provide: ClsService, useValue: { get: jest.fn() } },
         { provide: KeycloakService, useValue: mockKeycloakService },
         { provide: AssetQuestionsService, useValue: mockAssetQuestionsService },
+        { provide: AssetsService, useValue: mockAssetsService },
+        { provide: 'CACHE_MANAGER', useValue: mockCacheManager },
       ],
     }).compile();
 
@@ -55,9 +77,11 @@ describe('ClientsService', () => {
             demoMode: false,
           }),
         },
+        $currentUser: jest.fn().mockReturnValue({ hasMultiSiteVisibility: true }),
+        $mode: 'user',
       };
 
-      mockPrismaService.txForAdminOrUser.mockImplementation((fn: any) => fn(mockTx));
+      mockPrismaService.build.mockResolvedValue(mockTx);
 
       await expect(
         service.generateInspectionsForDemoClient(
@@ -126,7 +150,7 @@ describe('ClientsService', () => {
         },
       ];
 
-      const mockTx = {
+      const mockInnerTx = {
         client: {
           findUniqueOrThrow: jest.fn().mockResolvedValue(mockClient),
         },
@@ -152,7 +176,14 @@ describe('ClientsService', () => {
         },
       };
 
-      mockPrismaService.txForAdminOrUser.mockImplementation((fn: any) => fn(mockTx));
+      const mockTx = {
+        ...mockInnerTx,
+        $currentUser: jest.fn().mockReturnValue({ hasMultiSiteVisibility: true, allowedSiteIdsStr: '' }),
+        $mode: 'user',
+        $transaction: jest.fn().mockImplementation((callback) => callback(mockInnerTx)),
+      };
+
+      mockPrismaService.build.mockResolvedValue(mockTx);
       mockKeycloakService.findUsersByAttribute.mockResolvedValue(mockKeycloakUsers);
       
       // Mock different responses for setup vs inspection questions
@@ -175,24 +206,24 @@ describe('ClientsService', () => {
       expect(result.inspectorsUsed).toBe(1);
 
       // Verify asset was set up
-      expect(mockTx.asset.update).toHaveBeenCalledWith({
-        where: { id: 'asset-1' },
-        data: { setupOn: expect.any(Date) },
-      });
+      expect(mockInnerTx.asset.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'asset-1' },
+          data: expect.objectContaining({ setupOn: expect.any(Date) }),
+        })
+      );
 
-      // Verify setup questions were answered
-      expect(mockTx.assetQuestionResponse.createMany).toHaveBeenCalled();
-      const setupResponsesCall = mockTx.assetQuestionResponse.createMany.mock.calls[0][0];
-      expect(setupResponsesCall.data).toHaveLength(2);
-      expect(setupResponsesCall.data[0]).toMatchObject({
+      // Verify setup questions were answered via the asset update call's setupQuestionResponses
+      const updateCall = mockInnerTx.asset.update.mock.calls[0][0];
+      expect(updateCall.data.setupQuestionResponses.createMany.data).toHaveLength(2);
+      expect(updateCall.data.setupQuestionResponses.createMany.data[0]).toMatchObject({
         assetQuestionId: 'question-1',
-        assetId: 'asset-1',
-        value: expect.any(Boolean),
+        value: expect.any(String),
       });
 
       // Verify inspections were created with responses
-      expect(mockTx.inspection.create).toHaveBeenCalled();
-      const inspectionCreateCalls = mockTx.inspection.create.mock.calls;
+      expect(mockInnerTx.inspection.create).toHaveBeenCalled();
+      const inspectionCreateCalls = mockInnerTx.inspection.create.mock.calls;
       
       // Check that at least some inspections have responses
       const inspectionsWithResponses = inspectionCreateCalls.filter(
