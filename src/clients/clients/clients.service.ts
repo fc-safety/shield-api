@@ -134,9 +134,31 @@ export class ClientsService {
   }
 
   async create(createClientDto: CreateClientDto) {
-    return this.prisma
-      .build()
-      .then((prisma) => prisma.client.create({ data: createClientDto }));
+    const prisma = await this.prisma.build();
+
+    return prisma.$transaction(async (tx) => {
+      // Create the client
+      const client = await tx.client.create({ data: createClientDto });
+
+      // Create a default HQ site with the same phone number and address as the client
+      await tx.site.create({
+        data: {
+          name: 'HQ',
+          primary: true,
+          phoneNumber: createClientDto.phoneNumber,
+          address: {
+            create: createClientDto.address.create,
+          },
+          client: {
+            connect: {
+              id: client.id,
+            },
+          },
+        },
+      });
+
+      return client;
+    });
   }
 
   async findAll(queryClientDto: QueryClientDto) {
