@@ -1,4 +1,9 @@
-import { ArgumentsHost, Catch, ExceptionFilter, Logger } from '@nestjs/common';
+import {
+  type ArgumentsHost,
+  Catch,
+  type ExceptionFilter,
+  Logger,
+} from '@nestjs/common';
 import { SentryExceptionCaptured } from '@sentry/nestjs';
 import { Response } from 'express';
 import { Prisma } from 'src/generated/prisma/client';

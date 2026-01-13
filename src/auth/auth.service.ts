@@ -2,7 +2,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { init as cuid2Init } from '@paralleldrive/cuid2';
-import { Cache } from 'cache-manager';
+import type { Cache } from 'cache-manager';
 import crypto from 'crypto';
 import { isBefore } from 'date-fns';
 import { IncomingMessage } from 'http';

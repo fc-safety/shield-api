@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CheckPolicies } from 'src/auth/policies.guard';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
-import { NotificationTemplateId } from './lib/templates';
+import type { NotificationTemplateId } from './lib/templates';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
