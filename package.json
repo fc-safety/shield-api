@@ -120,10 +120,10 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
+    "setupFilesAfterEnv": [
+      "<rootDir>/../test/jest-setup.ts"
+    ],
     "moduleNameMapper": {
-      "^src/generated/prisma/client$": "<rootDir>/../test/__mocks__/generated/prisma/client.ts",
-      "^src/generated/prisma/enums$": "<rootDir>/../test/__mocks__/generated/prisma/enums.ts",
-      "^src/generated/prisma/sql$": "<rootDir>/../test/__mocks__/generated/prisma/sql.ts",
       "^src/(.*)$": "<rootDir>/$1",
       "^@keycloak/keycloak-admin-client$": "<rootDir>/../test/__mocks__/@keycloak/keycloak-admin-client.ts",
       "^@keycloak/keycloak-admin-client/(.*)$": "<rootDir>/../test/__mocks__/@keycloak/keycloak-admin-client.ts",

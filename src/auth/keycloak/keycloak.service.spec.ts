@@ -54,4 +54,62 @@ describe('KeycloakService', () => {
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
+
+  describe('user event proxies error handling', () => {
+    it('should not cause unhandled rejections when proxied user methods fail', async () => {
+      let unhandledRejection: Error | null = null;
+
+      const rejectionHandler = (reason: Error) => {
+        unhandledRejection = reason;
+      };
+      process.on('unhandledRejection', rejectionHandler);
+
+      // Test all proxied methods
+      const proxiedMethods = [
+        {
+          name: 'create',
+          mock: mockKeycloakAdminClient.users.create,
+          call: () => service.client.users.create({} as any),
+        },
+        {
+          name: 'update',
+          mock: mockKeycloakAdminClient.users.update,
+          call: () => service.client.users.update({ id: 'test' }, {} as any),
+        },
+        {
+          name: 'del',
+          mock: mockKeycloakAdminClient.users.del,
+          call: () => service.client.users.del({ id: 'test' }),
+        },
+        {
+          name: 'addToGroup',
+          mock: mockKeycloakAdminClient.users.addToGroup,
+          call: () =>
+            service.client.users.addToGroup({ id: 'test', groupId: 'group' }),
+        },
+        {
+          name: 'delFromGroup',
+          mock: mockKeycloakAdminClient.users.delFromGroup,
+          call: () =>
+            service.client.users.delFromGroup({ id: 'test', groupId: 'group' }),
+        },
+      ];
+
+      for (const { name, mock, call } of proxiedMethods) {
+        const testError = new Error(`Keycloak ${name} failed`);
+        mock.mockRejectedValueOnce(testError);
+
+        // Call method and catch the error (as the caller would)
+        await expect(call()).rejects.toThrow(testError);
+
+        // Give time for any unhandled rejections to surface
+        await new Promise((resolve) => setImmediate(resolve));
+
+        // If error handlers are missing, this will fail
+        expect(unhandledRejection).toBeNull();
+      }
+
+      process.off('unhandledRejection', rejectionHandler);
+    });
+  });
 });
