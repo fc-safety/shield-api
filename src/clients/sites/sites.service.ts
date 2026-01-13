@@ -46,7 +46,11 @@ export class SitesService {
 
     if (siteResult) {
       // Cache the result for 1 hour.
-      this.cache.set(cacheKey, siteResult.active, this.SITE_STATUS_CACHE_TTL_MS);
+      this.cache.set(
+        cacheKey,
+        siteResult.active,
+        this.SITE_STATUS_CACHE_TTL_MS,
+      );
       return siteResult.active;
     }
 

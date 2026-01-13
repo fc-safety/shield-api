@@ -107,17 +107,29 @@
     "moduleFileExtensions": [
       "js",
       "json",
-      "ts"
+      "ts",
+      "tsx"
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)sx?$": "ts-jest"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "setupFilesAfterEnv": [
+      "<rootDir>/../test/jest-setup.ts"
+    ],
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1",
+      "^@keycloak/keycloak-admin-client$": "<rootDir>/../test/__mocks__/@keycloak/keycloak-admin-client.ts",
+      "^@keycloak/keycloak-admin-client/(.*)$": "<rootDir>/../test/__mocks__/@keycloak/keycloak-admin-client.ts",
+      "^@paralleldrive/cuid2$": "<rootDir>/../test/__mocks__/@paralleldrive/cuid2.ts",
+      "^p-retry$": "<rootDir>/../test/__mocks__/p-retry.ts",
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    }
   }
 }
