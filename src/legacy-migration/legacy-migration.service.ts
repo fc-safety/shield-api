@@ -157,16 +157,11 @@ export class LegacyMigrationService implements OnModuleDestroy {
           );
 
           // MIGRATE ASSETS
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { legacyPrimaryKeyToNewAssetMap } = await this.migrateAssets(
-            dataHandlers,
-            wsHandlers,
-            {
-              newClient,
-              legacyClient,
-              legacyPrimaryKeyToNewSiteMap,
-            },
-          );
+          const {} = await this.migrateAssets(dataHandlers, wsHandlers, {
+            newClient,
+            legacyClient,
+            legacyPrimaryKeyToNewSiteMap,
+          });
 
           emitEvent('alert', {
             type: 'info',
@@ -673,8 +668,7 @@ export class LegacyMigrationService implements OnModuleDestroy {
     { legacyPrimaryKeyToNewAssetMap: Map<number, TAssetBasic> }
   > = async (dataHandlers: DataHandlers, wsHandlers: WsHandlers, context) => {
     const { legacyDb, prismaTx } = dataHandlers;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { emitEvent, prompt } = wsHandlers;
+    const { emitEvent } = wsHandlers;
     const { newClient, legacyClient, legacyPrimaryKeyToNewSiteMap } = context;
 
     const legacyAssets = await legacyDb.query<LegacyModels.Asset[]>(

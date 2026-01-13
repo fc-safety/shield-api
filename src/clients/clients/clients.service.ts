@@ -6,11 +6,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Cache } from 'cache-manager';
+import type { Cache } from 'cache-manager';
 import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import pRetry from 'p-retry';
-import { RolesService } from 'src/admin/roles/roles.service';
 import { AssetsService } from 'src/assets/assets/assets.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
@@ -46,7 +45,6 @@ export class ClientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
-    private readonly rolesService: RolesService,
     private readonly cls: ClsService<CommonClsStore>,
     private readonly keycloakService: KeycloakService,
     private readonly assetQuestionsService: AssetQuestionsService,
@@ -449,11 +447,6 @@ export class ClientsService {
       const users = await this.usersService
         .findAll(query, existingClient)
         .then((users) => users.results);
-      const roles = await this.rolesService.getRoles();
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const _roleNameMap = new Map<string, string>(
-        roles.map((role) => [role.name, role.id]),
-      );
 
       const newUserIds: string[] = [];
 
