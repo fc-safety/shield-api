@@ -20,9 +20,7 @@ describe('RolesController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RolesController],
-      providers: [
-        { provide: RolesService, useValue: mockRolesService },
-      ],
+      providers: [{ provide: RolesService, useValue: mockRolesService }],
     }).compile();
 
     controller = module.get<RolesController>(RolesController);

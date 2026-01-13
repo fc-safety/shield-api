@@ -77,7 +77,9 @@ describe('ClientsService', () => {
             demoMode: false,
           }),
         },
-        $currentUser: jest.fn().mockReturnValue({ hasMultiSiteVisibility: true }),
+        $currentUser: jest
+          .fn()
+          .mockReturnValue({ hasMultiSiteVisibility: true }),
         $mode: 'user',
       };
 
@@ -178,26 +180,38 @@ describe('ClientsService', () => {
 
       const mockTx = {
         ...mockInnerTx,
-        $currentUser: jest.fn().mockReturnValue({ hasMultiSiteVisibility: true, allowedSiteIdsStr: '' }),
+        $currentUser: jest.fn().mockReturnValue({
+          hasMultiSiteVisibility: true,
+          allowedSiteIdsStr: '',
+        }),
         $mode: 'user',
-        $transaction: jest.fn().mockImplementation((callback) => callback(mockInnerTx)),
+        $transaction: jest
+          .fn()
+          .mockImplementation((callback) => callback(mockInnerTx)),
       };
 
       mockPrismaService.build.mockResolvedValue(mockTx);
-      mockKeycloakService.findUsersByAttribute.mockResolvedValue(mockKeycloakUsers);
-      
+      mockKeycloakService.findUsersByAttribute.mockResolvedValue(
+        mockKeycloakUsers,
+      );
+
       // Mock different responses for setup vs inspection questions
-      mockAssetQuestionsService.findByAsset.mockImplementation((assetId, type) => {
-        if (type === 'SETUP') {
-          return Promise.resolve(mockSetupQuestions);
-        } else if (type === 'INSPECTION') {
-          return Promise.resolve(mockInspectionQuestions);
-        }
-        return Promise.resolve([]);
-      });
+      mockAssetQuestionsService.findByAsset.mockImplementation(
+        (assetId, type) => {
+          if (type === 'SETUP') {
+            return Promise.resolve(mockSetupQuestions);
+          } else if (type === 'INSPECTION') {
+            return Promise.resolve(mockInspectionQuestions);
+          }
+          return Promise.resolve([]);
+        },
+      );
 
       const result = await service.generateInspectionsForDemoClient(
-        GenerateDemoInspectionsDto.create({ clientId: 'client-1', monthsBack: 12 }),
+        GenerateDemoInspectionsDto.create({
+          clientId: 'client-1',
+          monthsBack: 12,
+        }),
       );
 
       expect(result).toHaveProperty('message');
@@ -210,13 +224,17 @@ describe('ClientsService', () => {
         expect.objectContaining({
           where: { id: 'asset-1' },
           data: expect.objectContaining({ setupOn: expect.any(Date) }),
-        })
+        }),
       );
 
       // Verify setup questions were answered via the asset update call's setupQuestionResponses
       const updateCall = mockInnerTx.asset.update.mock.calls[0][0];
-      expect(updateCall.data.setupQuestionResponses.createMany.data).toHaveLength(2);
-      expect(updateCall.data.setupQuestionResponses.createMany.data[0]).toMatchObject({
+      expect(
+        updateCall.data.setupQuestionResponses.createMany.data,
+      ).toHaveLength(2);
+      expect(
+        updateCall.data.setupQuestionResponses.createMany.data[0],
+      ).toMatchObject({
         assetQuestionId: 'question-1',
         value: expect.any(String),
       });
@@ -224,16 +242,17 @@ describe('ClientsService', () => {
       // Verify inspections were created with responses
       expect(mockInnerTx.inspection.create).toHaveBeenCalled();
       const inspectionCreateCalls = mockInnerTx.inspection.create.mock.calls;
-      
+
       // Check that at least some inspections have responses
       const inspectionsWithResponses = inspectionCreateCalls.filter(
-        call => call[0].data.responses?.createMany?.data?.length > 0
+        (call) => call[0].data.responses?.createMany?.data?.length > 0,
       );
       expect(inspectionsWithResponses.length).toBeGreaterThan(0);
-      
+
       // Verify the structure of inspection responses
       if (inspectionsWithResponses.length > 0) {
-        const responseData = inspectionsWithResponses[0][0].data.responses.createMany.data;
+        const responseData =
+          inspectionsWithResponses[0][0].data.responses.createMany.data;
         expect(responseData).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
@@ -241,7 +260,7 @@ describe('ClientsService', () => {
               value: expect.anything(),
               responderId: 'person-1',
             }),
-          ])
+          ]),
         );
       }
     });

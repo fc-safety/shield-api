@@ -25,7 +25,9 @@ describe('PrismaService', () => {
   };
 
   const mockPrismaAdapter = {
-    getConnectionUrl: jest.fn().mockReturnValue('postgresql://localhost:5432/test'),
+    getConnectionUrl: jest
+      .fn()
+      .mockReturnValue('postgresql://localhost:5432/test'),
   };
 
   beforeEach(async () => {

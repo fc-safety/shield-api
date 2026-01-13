@@ -20,7 +20,10 @@ describe('ProductRequestsController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProductRequestsController],
       providers: [
-        { provide: ProductRequestsService, useValue: mockProductRequestsService },
+        {
+          provide: ProductRequestsService,
+          useValue: mockProductRequestsService,
+        },
       ],
     }).compile();
 

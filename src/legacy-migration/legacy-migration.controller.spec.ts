@@ -13,7 +13,10 @@ describe('LegacyMigrationController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [LegacyMigrationController],
       providers: [
-        { provide: LegacyMigrationService, useValue: mockLegacyMigrationService },
+        {
+          provide: LegacyMigrationService,
+          useValue: mockLegacyMigrationService,
+        },
       ],
     }).compile();
 

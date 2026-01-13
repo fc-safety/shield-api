@@ -212,7 +212,10 @@ export const mockReflector = {
 };
 
 // Provider factory helpers
-export const createMockProvider = (token: string | symbol | Function, mock: unknown): Provider => ({
+export const createMockProvider = (
+  token: string | symbol | Function,
+  mock: unknown,
+): Provider => ({
   provide: token,
   useValue: mock,
 });

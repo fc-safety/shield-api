@@ -612,7 +612,7 @@ ORDER BY metadata_value
 
   async handleSetMetadataFromConfigs(
     tx: PrismaTxClient,
-    asset: Prisma.AssetGetPayload<{}>,
+    asset: Prisma.AssetGetPayload<object>,
     responses: {
       assetQuestion: Prisma.AssetQuestionGetPayload<{
         include: {

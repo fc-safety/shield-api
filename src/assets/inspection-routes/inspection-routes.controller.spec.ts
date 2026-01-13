@@ -24,7 +24,10 @@ describe('InspectionRoutesController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InspectionRoutesController],
       providers: [
-        { provide: InspectionRoutesService, useValue: mockInspectionRoutesService },
+        {
+          provide: InspectionRoutesService,
+          useValue: mockInspectionRoutesService,
+        },
       ],
     }).compile();
 

@@ -12,9 +12,7 @@ describe('SupportController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SupportController],
-      providers: [
-        { provide: SupportService, useValue: mockSupportService },
-      ],
+      providers: [{ provide: SupportService, useValue: mockSupportService }],
     }).compile();
 
     controller = module.get<SupportController>(SupportController);

@@ -14,7 +14,10 @@ describe('LegacyMigrationGateway', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LegacyMigrationGateway,
-        { provide: LegacyMigrationService, useValue: mockLegacyMigrationService },
+        {
+          provide: LegacyMigrationService,
+          useValue: mockLegacyMigrationService,
+        },
       ],
     }).compile();
 

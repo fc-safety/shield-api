@@ -12,9 +12,7 @@ describe('LandingController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [LandingController],
-      providers: [
-        { provide: LandingService, useValue: mockLandingService },
-      ],
+      providers: [{ provide: LandingService, useValue: mockLandingService }],
     }).compile();
 
     controller = module.get<LandingController>(LandingController);

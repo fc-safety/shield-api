@@ -18,7 +18,10 @@ describe('VaultOwnershipsController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VaultOwnershipsController],
       providers: [
-        { provide: VaultOwnershipsService, useValue: mockVaultOwnershipsService },
+        {
+          provide: VaultOwnershipsService,
+          useValue: mockVaultOwnershipsService,
+        },
       ],
     }).compile();
 

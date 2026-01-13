@@ -29,8 +29,14 @@ describe('NotificationsService', () => {
         NotificationsService,
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: ApiConfigService, useValue: mockApiConfigService },
-        { provide: getQueueToken(QUEUE_NAMES.SEND_NOTIFICATIONS), useValue: mockQueue },
-        { provide: getQueueToken(QUEUE_NAMES.CLIENT_NOTIFICATIONS), useValue: mockQueue },
+        {
+          provide: getQueueToken(QUEUE_NAMES.SEND_NOTIFICATIONS),
+          useValue: mockQueue,
+        },
+        {
+          provide: getQueueToken(QUEUE_NAMES.CLIENT_NOTIFICATIONS),
+          useValue: mockQueue,
+        },
       ],
     }).compile();
 

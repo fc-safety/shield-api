@@ -7,7 +7,10 @@ export const createId = (): string => {
   return `mock-cuid-${counter}`;
 };
 
-export const init = (options?: { length?: number; fingerprint?: string }): (() => string) => {
+export const init = (options?: {
+  length?: number;
+  fingerprint?: string;
+}): (() => string) => {
   return createId;
 };
 

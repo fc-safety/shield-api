@@ -22,7 +22,11 @@ jest.mock('@prisma/client/runtime/client', () => {
         code,
         clientVersion,
         meta,
-      }: { code: string; clientVersion: string; meta?: Record<string, unknown> },
+      }: {
+        code: string;
+        clientVersion: string;
+        meta?: Record<string, unknown>;
+      },
     ) {
       super(message);
       this.code = code;

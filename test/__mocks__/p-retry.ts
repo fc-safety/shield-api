@@ -2,7 +2,9 @@
 
 interface RetryOptions {
   retries?: number;
-  onFailedAttempt?: (error: Error & { attemptNumber: number; retriesLeft: number }) => void;
+  onFailedAttempt?: (
+    error: Error & { attemptNumber: number; retriesLeft: number },
+  ) => void;
   shouldRetry?: (error: Error) => boolean;
 }
 

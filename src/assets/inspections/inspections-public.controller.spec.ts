@@ -16,7 +16,10 @@ describe('InspectionsPublicController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [InspectionsPublicController],
       providers: [
-        { provide: InspectionsPublicService, useValue: mockInspectionsPublicService },
+        {
+          provide: InspectionsPublicService,
+          useValue: mockInspectionsPublicService,
+        },
       ],
     }).compile();
 

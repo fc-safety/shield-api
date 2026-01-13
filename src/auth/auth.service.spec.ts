@@ -16,7 +16,8 @@ describe('AuthService', () => {
 
   const mockApiConfigService = {
     get: jest.fn().mockImplementation((key: string) => {
-      if (key === 'AUTH_JWKS_URI') return 'https://example.com/.well-known/jwks.json';
+      if (key === 'AUTH_JWKS_URI')
+        return 'https://example.com/.well-known/jwks.json';
       return 'test-value';
     }),
   };

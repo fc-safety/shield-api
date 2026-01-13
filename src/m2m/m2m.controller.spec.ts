@@ -13,9 +13,7 @@ describe('M2mController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [M2mController],
-      providers: [
-        { provide: M2mService, useValue: mockM2mService },
-      ],
+      providers: [{ provide: M2mService, useValue: mockM2mService }],
     }).compile();
 
     controller = module.get<M2mController>(M2mController);

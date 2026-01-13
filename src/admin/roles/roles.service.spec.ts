@@ -27,7 +27,9 @@ describe('RolesService', () => {
       setConfig: jest.fn(),
       auth: jest.fn(),
     },
-    getOrCreateManagedRolesGroup: jest.fn().mockResolvedValue({ id: 'group-id' }),
+    getOrCreateManagedRolesGroup: jest
+      .fn()
+      .mockResolvedValue({ id: 'group-id' }),
   };
 
   const mockApiConfigService = {

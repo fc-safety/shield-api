@@ -15,9 +15,7 @@ describe('AlertsController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AlertsController],
-      providers: [
-        { provide: AlertsService, useValue: mockAlertsService },
-      ],
+      providers: [{ provide: AlertsService, useValue: mockAlertsService }],
     }).compile();
 
     controller = module.get<AlertsController>(AlertsController);
