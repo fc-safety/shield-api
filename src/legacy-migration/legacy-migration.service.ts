@@ -103,7 +103,9 @@ export class LegacyMigrationService implements OnModuleDestroy {
       };
     }
 
-    return await this.authService.validateCustomToken<{}>(token);
+    return await this.authService.validateCustomToken<Record<string, never>>(
+      token,
+    );
   }
 
   async processMigration(wsHandlers: WsHandlers) {
@@ -155,6 +157,7 @@ export class LegacyMigrationService implements OnModuleDestroy {
           );
 
           // MIGRATE ASSETS
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { legacyPrimaryKeyToNewAssetMap } = await this.migrateAssets(
             dataHandlers,
             wsHandlers,
@@ -670,6 +673,7 @@ export class LegacyMigrationService implements OnModuleDestroy {
     { legacyPrimaryKeyToNewAssetMap: Map<number, TAssetBasic> }
   > = async (dataHandlers: DataHandlers, wsHandlers: WsHandlers, context) => {
     const { legacyDb, prismaTx } = dataHandlers;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { emitEvent, prompt } = wsHandlers;
     const { newClient, legacyClient, legacyPrimaryKeyToNewSiteMap } = context;
 

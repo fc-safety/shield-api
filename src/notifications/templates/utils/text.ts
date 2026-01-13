@@ -87,7 +87,8 @@ const calculateColumnWidths = (
   return columnWidths;
 };
 
-const formatRow = (row: object, columnWidths: Record<string, number>) => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const formatRow = (row: object, _columnWidths: Record<string, number>) => {
   return Object.values(row).join(' | ');
 };
 

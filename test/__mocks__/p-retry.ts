@@ -10,7 +10,8 @@ interface RetryOptions {
 
 const pRetry = async <T>(
   fn: (attemptNumber: number) => Promise<T> | T,
-  options?: RetryOptions,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _options?: RetryOptions,
 ): Promise<T> => {
   // Just execute the function once without retrying in tests
   return fn(1);

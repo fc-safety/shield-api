@@ -195,7 +195,7 @@ export class AuthService {
       } else {
         throw new Error('Invalid token');
       }
-    } catch (e) {
+    } catch {
       return {
         isValid: false,
         error: 'Invalid token',
@@ -228,7 +228,7 @@ export class AuthService {
         isValid: true,
         payload: this.decodeTokenPart(payload) as T,
       };
-    } catch (e) {
+    } catch {
       return {
         isValid: false,
         error: 'Invalid token',

@@ -213,6 +213,7 @@ export const mockReflector = {
 
 // Provider factory helpers
 export const createMockProvider = (
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   token: string | symbol | Function,
   mock: unknown,
 ): Provider => ({

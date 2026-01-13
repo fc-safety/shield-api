@@ -7,7 +7,8 @@ export const createId = (): string => {
   return `mock-cuid-${counter}`;
 };
 
-export const init = (options?: {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const init = (_options?: {
   length?: number;
   fingerprint?: string;
 }): (() => string) => {
