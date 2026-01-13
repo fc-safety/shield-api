@@ -473,6 +473,7 @@ export class AssetQuestionsService {
     });
 
     return questions.map((q) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { variants, ...question } = q;
 
       // TODO: This is beginning of support for variants.

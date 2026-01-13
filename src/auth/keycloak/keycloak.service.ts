@@ -184,7 +184,7 @@ export class KeycloakService {
           typeof target
         >;
         result.then(
-          (r) => this.events.users.emit('update', { id: argumentsList[0].id }),
+          () => this.events.users.emit('update', { id: argumentsList[0].id }),
           () => {
             // Error already propogated to caller, just silence in detached chain.
           },
@@ -204,7 +204,7 @@ export class KeycloakService {
           typeof target
         >;
         result.then(
-          (r) =>
+          () =>
             argumentsList[0] &&
             this.events.users.emit('delete', { id: argumentsList[0].id }),
           () => {
@@ -226,7 +226,7 @@ export class KeycloakService {
           typeof target
         >;
         result.then(
-          (r) =>
+          () =>
             argumentsList[0] &&
             this.events.users.emit('addToGroup', {
               id: argumentsList[0].id,
@@ -251,7 +251,7 @@ export class KeycloakService {
           typeof target
         >;
         result.then(
-          (r) =>
+          () =>
             argumentsList[0] &&
             this.events.users.emit('delFromGroup', {
               id: argumentsList[0].id,
