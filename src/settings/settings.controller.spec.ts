@@ -5,10 +5,15 @@ import { SettingsService } from './settings.service';
 describe('SettingsController', () => {
   let controller: SettingsController;
 
+  const mockSettingsService = {
+    getGlobalSettings: jest.fn(),
+    updateGlobalSettings: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SettingsController],
-      providers: [SettingsService],
+      providers: [{ provide: SettingsService, useValue: mockSettingsService }],
     }).compile();
 
     controller = module.get<SettingsController>(SettingsController);

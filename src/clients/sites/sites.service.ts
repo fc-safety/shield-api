@@ -1,6 +1,6 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable } from '@nestjs/common';
-import { Cache } from 'cache-manager';
+import type { Cache } from 'cache-manager';
 import { as404OrThrow, isNil } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -46,7 +46,11 @@ export class SitesService {
 
     if (siteResult) {
       // Cache the result for 1 hour.
-      this.cache.set(cacheKey, siteResult.active, this.SITE_STATUS_CACHE_TTL_MS);
+      this.cache.set(
+        cacheKey,
+        siteResult.active,
+        this.SITE_STATUS_CACHE_TTL_MS,
+      );
       return siteResult.active;
     }
 

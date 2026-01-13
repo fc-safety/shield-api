@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query, Res } from '@nestjs/common';
 import { format } from 'date-fns';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { CheckIsAuthenticated } from 'src/auth/policies.guard';
 import { streamToCsv } from 'src/common/stream-utils';
 import { BaseCannedReportsQueryDto } from './dto/base-canned-reports-query.dto';

@@ -6,11 +6,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Cache } from 'cache-manager';
+import type { Cache } from 'cache-manager';
 import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import pRetry from 'p-retry';
-import { RolesService } from 'src/admin/roles/roles.service';
 import { AssetsService } from 'src/assets/assets/assets.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
@@ -46,7 +45,6 @@ export class ClientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
-    private readonly rolesService: RolesService,
     private readonly cls: ClsService<CommonClsStore>,
     private readonly keycloakService: KeycloakService,
     private readonly assetQuestionsService: AssetQuestionsService,
@@ -58,7 +56,7 @@ export class ClientsService {
    * Generate realistic responses for asset questions based on their type
    */
   private generateQuestionResponse(
-    question: Prisma.AssetQuestionGetPayload<{}>,
+    question: Prisma.AssetQuestionGetPayload<Record<string, never>>,
     context: { assetSerialNumber?: string; isSetup?: boolean },
   ): any {
     switch (question.valueType) {
@@ -134,9 +132,31 @@ export class ClientsService {
   }
 
   async create(createClientDto: CreateClientDto) {
-    return this.prisma
-      .build()
-      .then((prisma) => prisma.client.create({ data: createClientDto }));
+    const prisma = await this.prisma.build();
+
+    return prisma.$transaction(async (tx) => {
+      // Create the client
+      const client = await tx.client.create({ data: createClientDto });
+
+      // Create a default HQ site with the same phone number and address as the client
+      await tx.site.create({
+        data: {
+          name: 'HQ',
+          primary: true,
+          phoneNumber: createClientDto.phoneNumber,
+          address: {
+            create: createClientDto.address.create,
+          },
+          client: {
+            connect: {
+              id: client.id,
+            },
+          },
+        },
+      });
+
+      return client;
+    });
   }
 
   async findAll(queryClientDto: QueryClientDto) {
@@ -291,6 +311,7 @@ export class ClientsService {
         phoneNumber,
         homeUrl,
         defaultInspectionCycle,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         address: { id: _oldAddressId, ...address },
         sites,
       } = existingClient;
@@ -320,6 +341,7 @@ export class ClientsService {
           const {
             primary,
             name,
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             address: { id: _oldAddressId, ...address },
             phoneNumber,
           } = site;
@@ -425,10 +447,6 @@ export class ClientsService {
       const users = await this.usersService
         .findAll(query, existingClient)
         .then((users) => users.results);
-      const roles = await this.rolesService.getRoles();
-      const roleNameMap = new Map<string, string>(
-        roles.map((role) => [role.name, role.id]),
-      );
 
       const newUserIds: string[] = [];
 
@@ -948,7 +966,7 @@ export class ClientsService {
         serialNumber: true;
       };
     }>;
-    validInspectors: Prisma.PersonGetPayload<{}>[];
+    validInspectors: Prisma.PersonGetPayload<Record<string, never>>[];
     clientId: string;
     currentDate?: Date;
     onCheckAssetCreatedOn?: (inspectionTime: Date) => Promise<void>;

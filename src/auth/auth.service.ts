@@ -2,7 +2,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { init as cuid2Init } from '@paralleldrive/cuid2';
-import { Cache } from 'cache-manager';
+import type { Cache } from 'cache-manager';
 import crypto from 'crypto';
 import { isBefore } from 'date-fns';
 import { IncomingMessage } from 'http';
@@ -195,7 +195,7 @@ export class AuthService {
       } else {
         throw new Error('Invalid token');
       }
-    } catch (e) {
+    } catch {
       return {
         isValid: false,
         error: 'Invalid token',
@@ -228,7 +228,7 @@ export class AuthService {
         isValid: true,
         payload: this.decodeTokenPart(payload) as T,
       };
-    } catch (e) {
+    } catch {
       return {
         isValid: false,
         error: 'Invalid token',

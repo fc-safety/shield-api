@@ -286,6 +286,7 @@ export class PrismaService
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const thisPrismaService = this;
 
     return Prisma.defineExtension((prisma) => {

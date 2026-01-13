@@ -70,6 +70,9 @@ export class UsersService {
       ['user_legacy_id', createUserDto.legacyUserId],
     );
 
+    const initialPassword =
+      createUserDto.password ?? this.generatePassword(24).password;
+
     await this.keycloak.client.users
       .create({
         enabled: createUserDto.active ?? true,
@@ -79,14 +82,15 @@ export class UsersService {
         email: createUserDto.email,
         emailVerified: true,
         attributes,
-        credentials: createUserDto.password
-          ? [
-              {
-                type: 'password',
-                value: createUserDto.password,
-              },
-            ]
-          : undefined,
+        // Make sure user is created with initial password even if it's randomly
+        // generated, else Keycloak won't allow the user to reset the password
+        // on their own.
+        credentials: [
+          {
+            type: 'password',
+            value: initialPassword,
+          },
+        ],
       })
       .catch((e) => {
         if (e instanceof KeycloakNetworkError && e.response.status === 409) {

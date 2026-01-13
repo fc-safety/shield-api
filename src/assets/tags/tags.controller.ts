@@ -13,7 +13,7 @@ import {
   Res,
 } from '@nestjs/common';
 import { format } from 'date-fns';
-import { Response } from 'express';
+import type { Response } from 'express';
 import {
   CheckPolicies,
   CheckResourcePermissions,
