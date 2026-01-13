@@ -124,6 +124,7 @@
       "<rootDir>/../test/jest-setup.ts"
     ],
     "moduleNameMapper": {
+      "^src/generated/prisma/sql$": "<rootDir>/../test/__mocks__/generated/prisma/sql.ts",
       "^src/(.*)$": "<rootDir>/$1",
       "^@keycloak/keycloak-admin-client$": "<rootDir>/../test/__mocks__/@keycloak/keycloak-admin-client.ts",
       "^@keycloak/keycloak-admin-client/(.*)$": "<rootDir>/../test/__mocks__/@keycloak/keycloak-admin-client.ts",
