@@ -258,6 +258,28 @@ The system implements Row Level Security (RLS) using PostgreSQL session variable
 
 These are set via database defaults in Prisma models and enforced through RLS policies.
 
+### Multi-Client Access
+
+Users can access multiple clients via the `x-client-id` header. Each client access has its own site and role (permissions).
+
+**Key models:**
+- `PersonClientAccess` - Maps a person to a client with a specific site and role
+- `Role` - Collection of permissions (can be global or client-specific)
+- `RolePermission` - Individual permission strings
+
+**Request flow:**
+1. `AuthGuard` extracts `x-client-id` header → stores in CLS as `activeClientId`
+2. `ActiveClientGuard` validates access via `PersonClientAccess` table
+3. `PeopleService.getPersonRepresentation()` builds context with switched client/site/permissions
+
+**Key files:**
+- `src/auth/auth.guard.ts` - Extracts header
+- `src/clients/guards/active-client.guard.ts` - Validates access
+- `src/clients/clients/clients.service.ts` - `validateClientAccess()` with caching
+- `src/clients/people/people.service.ts` - Builds PersonRepresentation
+
+See [docs/multi-client-access.md](docs/multi-client-access.md) for full documentation.
+
 ### RLS Authentication Pattern
 
 RLS context is managed in `src/prisma/prisma.service.ts`. For authenticated queries, use the extended Prisma client:
@@ -326,6 +348,22 @@ src/
 - E2E tests: `*.e2e-spec.ts` files in `/test/` directory
 - Uses `@nestjs/testing` with standard NestJS dependency injection patterns
 - Tests should mock external dependencies (Redis, Keycloak, database)
+
+### Documentation
+
+When adding new features or making architectural changes:
+
+1. **Update `CLAUDE.md`** if the change affects how developers work with the codebase (new patterns, conventions, or key services)
+2. **Create/update `docs/*.md`** for significant features that need detailed explanation (design decisions, request flows, API usage)
+3. **Keep documentation concise** - focus on the "why" and "how", not obvious implementation details
+
+Feature documentation in `docs/` should include:
+- Overview and motivation
+- Key models/services involved
+- Request flow or architecture diagrams (as text)
+- Design decisions with rationale
+- API usage examples
+- Related files for quick reference
 
 ### Legacy System Integration
 

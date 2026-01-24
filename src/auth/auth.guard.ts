@@ -73,6 +73,12 @@ export class AuthGuard implements CanActivate {
       this.cls.set('user', user);
     }
 
+    // Extract active client from x-client-id header for multi-client access
+    const activeClientId = request.headers['x-client-id'];
+    if (activeClientId && typeof activeClientId === 'string') {
+      this.cls.set('activeClientId', activeClientId);
+    }
+
     return true;
   }
 }
