@@ -44,7 +44,6 @@ export class RolesController {
   }
 
   @Get(':id')
-  @Get()
   @CheckPolicies(
     ({ user }) => user.can('create', 'users') || user.can('update', 'users'),
   )
