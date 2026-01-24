@@ -142,7 +142,10 @@ export class CreatePlanDto extends createZodDto(createPlanSchema) {}
 Workaround - use a type alias and apply validation directly in the controller:
 ```typescript
 // In DTO file
-export const createEntrySchema = z.discriminatedUnion('category', [...]);
+export const createEntrySchema = z.discriminatedUnion('category', [
+  z.object({ category: z.literal('A'), fieldA: z.string() }),
+  z.object({ category: z.literal('B'), fieldB: z.number() }),
+]);
 export type CreateEntryDto = z.infer<typeof createEntrySchema>;
 
 // In controller
