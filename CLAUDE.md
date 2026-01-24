@@ -13,7 +13,7 @@ Shield API is a NestJS-based safety inspection management system built with Type
 When using Serena MCP tools, always activate the project using the Docker path:
 
 ```
-/workspace/legacy-made
+/workspace/shield-api
 ```
 
 **Do NOT use the local macOS path** (`/Users/my-name/Projects/...`). Serena runs in a Docker container and requires the container path.
