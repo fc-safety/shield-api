@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ClsService } from 'nestjs-cls';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { StatelessUser } from 'src/auth/user.schema';
+import { ApiConfigService } from 'src/config/api-config.service';
 import { PeopleService, UserConfigurationError } from './people.service';
 
 describe('PeopleService', () => {
@@ -11,6 +12,7 @@ describe('PeopleService', () => {
   let mockPrismaService: any;
   let mockClsService: any;
   let mockCacheManager: any;
+  let mockConfigService: any;
 
   const mockKeycloakService = {
     events: {
@@ -53,6 +55,10 @@ describe('PeopleService', () => {
       bypassRLS: jest.fn(),
     };
 
+    mockConfigService = {
+      get: jest.fn().mockReturnValue(false), // Default: USE_DATABASE_PERMISSIONS = false
+    };
+
     const mockModuleRef = {
       get: jest.fn().mockReturnValue(mockPrismaService),
     };
@@ -64,6 +70,7 @@ describe('PeopleService', () => {
         { provide: ClsService, useValue: mockClsService },
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
         { provide: ModuleRef, useValue: mockModuleRef },
+        { provide: ApiConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -503,6 +510,174 @@ describe('PeopleService', () => {
         const result = await service.getPersonRepresentation(user);
 
         expect(result.visibility).toBe('self');
+      });
+    });
+
+    describe('with USE_DATABASE_PERMISSIONS enabled', () => {
+      beforeEach(() => {
+        mockConfigService.get.mockReturnValue(true);
+      });
+
+      it('should use database permissions when PersonClientAccess exists with isPrimary=true', async () => {
+        const user = createMockUser();
+        mockClsService.get.mockImplementation((key: string) => {
+          if (key === 'user') return user;
+          if (key === 'activeClientId') return undefined;
+          return undefined;
+        });
+
+        mockPrismaService.bypassRLS.mockReturnValue({
+          client: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'primary-client-internal',
+            }),
+          },
+          site: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+            }),
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+              subsites: [],
+            }),
+          },
+          person: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'person-internal-id',
+            }),
+            update: jest.fn().mockResolvedValue({
+              id: 'person-internal-id',
+            }),
+          },
+          personClientAccess: {
+            findFirst: jest.fn().mockResolvedValue({
+              personId: 'person-internal-id',
+              clientId: 'primary-client-internal',
+              isPrimary: true,
+              role: {
+                permissions: [
+                  { permission: 'visibility:global' },
+                  { permission: 'read:assets' },
+                  { permission: 'create:assets' },
+                ],
+              },
+            }),
+          },
+        });
+
+        const result = await service.getPersonRepresentation(user);
+
+        expect(result.visibility).toBe('global');
+        expect(result.permissions).toEqual([
+          'visibility:global',
+          'read:assets',
+          'create:assets',
+        ]);
+        expect(result.hasMultiClientVisibility).toBe(true);
+        expect(result.hasMultiSiteVisibility).toBe(true);
+      });
+
+      it('should fall back to JWT permissions when no PersonClientAccess with isPrimary=true', async () => {
+        const user = createMockUser({
+          visibility: 'client-sites',
+          permissions: ['visibility:client-sites', 'read:assets'],
+        });
+        mockClsService.get.mockImplementation((key: string) => {
+          if (key === 'user') return user;
+          if (key === 'activeClientId') return undefined;
+          return undefined;
+        });
+
+        mockPrismaService.bypassRLS.mockReturnValue({
+          client: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'primary-client-internal',
+            }),
+          },
+          site: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+            }),
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+              subsites: [],
+            }),
+          },
+          person: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'person-internal-id',
+            }),
+            update: jest.fn().mockResolvedValue({
+              id: 'person-internal-id',
+            }),
+          },
+          personClientAccess: {
+            findFirst: jest.fn().mockResolvedValue(null),
+          },
+        });
+
+        const result = await service.getPersonRepresentation(user);
+
+        // Should fall back to JWT visibility
+        expect(result.visibility).toBe('client-sites');
+        // Permissions should be undefined when falling back to JWT
+        expect(result.permissions).toBeUndefined();
+      });
+
+      it('should override JWT visibility with database visibility', async () => {
+        const user = createMockUser({
+          visibility: 'single-site', // JWT says single-site
+          permissions: ['visibility:single-site', 'read:assets'],
+        });
+        mockClsService.get.mockImplementation((key: string) => {
+          if (key === 'user') return user;
+          if (key === 'activeClientId') return undefined;
+          return undefined;
+        });
+
+        mockPrismaService.bypassRLS.mockReturnValue({
+          client: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'primary-client-internal',
+            }),
+          },
+          site: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+            }),
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+              subsites: [],
+            }),
+          },
+          person: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'person-internal-id',
+            }),
+            update: jest.fn().mockResolvedValue({
+              id: 'person-internal-id',
+            }),
+          },
+          personClientAccess: {
+            findFirst: jest.fn().mockResolvedValue({
+              personId: 'person-internal-id',
+              clientId: 'primary-client-internal',
+              isPrimary: true,
+              role: {
+                permissions: [
+                  { permission: 'visibility:super-admin' }, // DB says super-admin
+                  { permission: 'read:assets' },
+                ],
+              },
+            }),
+          },
+        });
+
+        const result = await service.getPersonRepresentation(user);
+
+        // Should use database visibility, not JWT
+        expect(result.visibility).toBe('super-admin');
+        expect(result.hasMultiClientVisibility).toBe(true);
       });
     });
   });

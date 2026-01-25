@@ -67,6 +67,12 @@ export const configSchema = z.object({
   LEGACY_DB_PASSWORD: z.string().optional(),
   LEGACY_DB_NAME: z.string().optional(),
   LEGACY_DB_PORT: z.coerce.number().default(3306),
+
+  // Feature Flags
+  USE_DATABASE_PERMISSIONS: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 export type Config = z.infer<typeof configSchema>;

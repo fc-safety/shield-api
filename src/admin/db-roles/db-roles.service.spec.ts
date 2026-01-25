@@ -1,3 +1,4 @@
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -6,16 +7,24 @@ import { DbRolesService } from './db-roles.service';
 describe('DbRolesService', () => {
   let service: DbRolesService;
   let mockPrismaService: any;
+  let mockCacheManager: any;
 
   beforeEach(async () => {
     mockPrismaService = {
       bypassRLS: jest.fn(),
     };
 
+    mockCacheManager = {
+      get: jest.fn().mockResolvedValue(undefined),
+      set: jest.fn(),
+      del: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DbRolesService,
         { provide: PrismaService, useValue: mockPrismaService },
+        { provide: CACHE_MANAGER, useValue: mockCacheManager },
       ],
     }).compile();
 
@@ -79,7 +88,10 @@ describe('DbRolesService', () => {
         },
       });
 
-      const result = await service.createRole({ name: 'New Role', isSystem: false });
+      const result = await service.createRole({
+        name: 'New Role',
+        isSystem: false,
+      });
 
       expect(result).toEqual(mockRole);
     });
@@ -193,6 +205,83 @@ describe('DbRolesService', () => {
       });
 
       expect(result).toEqual(mockRole);
+    });
+
+    it('should invalidate cache after adding permissions', async () => {
+      mockPrismaService.bypassRLS.mockReturnValue({
+        role: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'role-1' }),
+        },
+        rolePermission: {
+          findMany: jest.fn().mockResolvedValue([]),
+          createMany: jest.fn(),
+        },
+      });
+
+      jest.spyOn(service, 'getRole').mockResolvedValue({ id: 'role-1' } as any);
+
+      await service.addPermissions('role-1', {
+        permissions: ['read:assets'],
+      });
+
+      expect(mockCacheManager.del).toHaveBeenCalledWith(
+        'role-permissions:role-1',
+      );
+    });
+  });
+
+  describe('getRolePermissions', () => {
+    it('should return cached permissions if available', async () => {
+      const cachedPermissions = ['read:assets', 'write:assets'];
+      mockCacheManager.get.mockResolvedValue(cachedPermissions);
+
+      const result = await service.getRolePermissions('role-1');
+
+      expect(result).toEqual(cachedPermissions);
+      expect(mockPrismaService.bypassRLS).not.toHaveBeenCalled();
+    });
+
+    it('should fetch from database and cache if not cached', async () => {
+      mockCacheManager.get.mockResolvedValue(undefined);
+      mockPrismaService.bypassRLS.mockReturnValue({
+        rolePermission: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([
+              { permission: 'read:assets' },
+              { permission: 'write:assets' },
+            ]),
+        },
+      });
+
+      const result = await service.getRolePermissions('role-1');
+
+      expect(result).toEqual(['read:assets', 'write:assets']);
+      expect(mockCacheManager.set).toHaveBeenCalledWith(
+        'role-permissions:role-1',
+        ['read:assets', 'write:assets'],
+        60 * 60 * 1000,
+      );
+    });
+  });
+
+  describe('removePermission', () => {
+    it('should invalidate cache after removing permission', async () => {
+      mockPrismaService.bypassRLS.mockReturnValue({
+        role: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'role-1' }),
+        },
+        rolePermission: {
+          findFirst: jest.fn().mockResolvedValue({ id: 'perm-1' }),
+          delete: jest.fn(),
+        },
+      });
+
+      await service.removePermission('role-1', 'read:assets');
+
+      expect(mockCacheManager.del).toHaveBeenCalledWith(
+        'role-permissions:role-1',
+      );
     });
   });
 });

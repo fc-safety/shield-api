@@ -1,16 +1,61 @@
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { Cache } from 'cache-manager';
+import { TPermission } from 'src/auth/permissions';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AddPermissionsDto } from './dto/add-permissions.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 
+const ROLE_PERMISSIONS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
 @Injectable()
 export class DbRolesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) {}
+
+  /**
+   * Get permissions for a role (cached).
+   * Used by PeopleService for permission lookups.
+   */
+  async getRolePermissions(roleId: string): Promise<TPermission[]> {
+    const cacheKey = `role-permissions:${roleId}`;
+
+    // Check cache first
+    const cachedValue = await this.cache.get<TPermission[]>(cacheKey);
+    if (cachedValue) {
+      return cachedValue;
+    }
+
+    // Fetch from database
+    const prisma = this.prisma.bypassRLS();
+    const permissions = await prisma.rolePermission.findMany({
+      where: { roleId },
+      select: { permission: true },
+    });
+
+    const result = permissions.map((p) => p.permission as TPermission);
+
+    // Cache the result
+    await this.cache.set(cacheKey, result, ROLE_PERMISSIONS_CACHE_TTL);
+
+    return result;
+  }
+
+  /**
+   * Invalidate the cached permissions for a role.
+   */
+  private async invalidateRolePermissionsCache(roleId: string): Promise<void> {
+    const cacheKey = `role-permissions:${roleId}`;
+    await this.cache.del(cacheKey);
+  }
 
   /**
    * List all roles, optionally filtered by clientId.
@@ -195,6 +240,9 @@ export class DbRolesService {
     await prisma.role.delete({
       where: { id },
     });
+
+    // Invalidate cache
+    await this.invalidateRolePermissionsCache(id);
   }
 
   /**
@@ -231,6 +279,9 @@ export class DbRolesService {
           permission,
         })),
       });
+
+      // Invalidate cache
+      await this.invalidateRolePermissionsCache(id);
     }
 
     // Return updated role
@@ -266,5 +317,8 @@ export class DbRolesService {
     await prisma.rolePermission.delete({
       where: { id: existingPermission.id },
     });
+
+    // Invalidate cache
+    await this.invalidateRolePermissionsCache(roleId);
   }
 }

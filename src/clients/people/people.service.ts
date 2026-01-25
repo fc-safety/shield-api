@@ -7,12 +7,14 @@ import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import {
   MULTI_CLIENT_VISIBILITIES,
   MULTI_SITE_VISIBILITIES,
+  TPermission,
   TVisibility,
   VISIBILITY_VALUES,
 } from 'src/auth/permissions';
 import { StatelessUser } from 'src/auth/user.schema';
 import { CommonClsStore } from 'src/common/types';
 import { isNil } from 'src/common/utils';
+import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -25,6 +27,8 @@ export interface PersonRepresentation {
   visibility: TVisibility;
   hasMultiClientVisibility: boolean;
   hasMultiSiteVisibility: boolean;
+  /** Permissions from database role (when USE_DATABASE_PERMISSIONS is enabled) */
+  permissions?: TPermission[];
 }
 
 export class UserConfigurationError extends Error {
@@ -45,6 +49,7 @@ export class PeopleService implements OnModuleDestroy {
     protected readonly cls: ClsService<CommonClsStore>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly moduleRef: ModuleRef,
+    private readonly config: ApiConfigService,
   ) {
     this.invalidatePersonCache = ({ id }) => {
       this.cache.del(getPersonCacheKey({ idpId: id }));
@@ -113,22 +118,42 @@ export class PeopleService implements OnModuleDestroy {
     const allowedSiteIdsStr = await this.getAllowedSiteIds(user);
     const cacheKey = getPersonCacheKey(user);
 
+    // Check if we should use database permissions instead of JWT
+    const useDatabasePermissions = this.config.get('USE_DATABASE_PERMISSIONS');
+
     return this.getFromCacheOrDefault<PersonRepresentation>(
       cacheKey,
-      async () => ({
-        id: personId,
-        siteId: primarySiteId,
-        clientId: primaryClientId,
-        idpId: user.idpId,
-        visibility: user.visibility,
-        allowedSiteIdsStr,
-        hasMultiClientVisibility: MULTI_CLIENT_VISIBILITIES.includes(
-          user.visibility,
-        ),
-        hasMultiSiteVisibility: MULTI_SITE_VISIBILITIES.includes(
-          user.visibility,
-        ),
-      }),
+      async () => {
+        let visibility = user.visibility;
+        let permissions: TPermission[] | undefined;
+
+        // If database permissions are enabled, try to load from PersonClientAccess
+        if (useDatabasePermissions) {
+          const dbPermissions = await this.getPrimaryClientPermissions(
+            personId,
+            primaryClientId,
+          );
+
+          if (dbPermissions) {
+            permissions = dbPermissions;
+            visibility = this.extractVisibilityFromPermissions(dbPermissions);
+          }
+          // If no PersonClientAccess exists, fall back to JWT permissions
+        }
+
+        return {
+          id: personId,
+          siteId: primarySiteId,
+          clientId: primaryClientId,
+          idpId: user.idpId,
+          visibility,
+          allowedSiteIdsStr,
+          hasMultiClientVisibility:
+            MULTI_CLIENT_VISIBILITIES.includes(visibility),
+          hasMultiSiteVisibility: MULTI_SITE_VISIBILITIES.includes(visibility),
+          permissions,
+        };
+      },
       60 * 60 * 1000, // 1 hour
     );
   }
@@ -224,10 +249,11 @@ export class PeopleService implements OnModuleDestroy {
           access.siteId,
         );
 
-        // Extract visibility from role permissions
-        const visibility = this.extractVisibilityFromPermissions(
-          access.role.permissions.map((p) => p.permission),
+        // Extract permissions from role
+        const permissions = access.role.permissions.map(
+          (p) => p.permission as TPermission,
         );
+        const visibility = this.extractVisibilityFromPermissions(permissions);
 
         return {
           id: personId,
@@ -239,6 +265,7 @@ export class PeopleService implements OnModuleDestroy {
           hasMultiClientVisibility:
             MULTI_CLIENT_VISIBILITIES.includes(visibility),
           hasMultiSiteVisibility: MULTI_SITE_VISIBILITIES.includes(visibility),
+          permissions,
         };
       },
       60 * 60 * 1000, // 1 hour
@@ -248,7 +275,9 @@ export class PeopleService implements OnModuleDestroy {
   /**
    * Extracts the visibility level from a list of permission strings.
    */
-  private extractVisibilityFromPermissions(permissions: string[]): TVisibility {
+  private extractVisibilityFromPermissions(
+    permissions: (string | TPermission)[],
+  ): TVisibility {
     const visibilityPermissions = permissions
       .filter((p) => p.startsWith('visibility:'))
       .map((p) => p.replace('visibility:', '') as TVisibility);
@@ -261,6 +290,43 @@ export class PeopleService implements OnModuleDestroy {
     }
 
     return 'self';
+  }
+
+  /**
+   * Gets permissions from PersonClientAccess for a user's primary client.
+   * Used when USE_DATABASE_PERMISSIONS is enabled.
+   */
+  private async getPrimaryClientPermissions(
+    personId: string,
+    clientId: string,
+  ): Promise<TPermission[] | null> {
+    const cacheKey = `person-primary-permissions:${personId}:${clientId}`;
+
+    return this.getFromCacheOrDefault<TPermission[] | null>(
+      cacheKey,
+      async () => {
+        const prisma = this.getPrisma().bypassRLS();
+
+        // Look for PersonClientAccess with isPrimary=true
+        const access = await prisma.personClientAccess.findFirst({
+          where: {
+            personId,
+            clientId,
+            isPrimary: true,
+          },
+          include: {
+            role: { include: { permissions: true } },
+          },
+        });
+
+        if (!access) {
+          return null;
+        }
+
+        return access.role.permissions.map((p) => p.permission as TPermission);
+      },
+      60 * 60 * 1000, // 1 hour
+    );
   }
 
   /**
