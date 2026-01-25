@@ -406,7 +406,7 @@ export class PeopleService implements OnModuleDestroy {
   }
 
   private async getFromCacheOrDefault<
-    T extends string | number | boolean | object,
+    T extends string | number | boolean | object | null,
   >(
     cacheKey: string,
     defaultValue: T | Promise<T> | (() => T | Promise<T>),

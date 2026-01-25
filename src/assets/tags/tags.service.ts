@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
@@ -81,9 +82,13 @@ export class TagsService {
   }
 
   async findOneForInspection(externalId: string) {
-    const prisma = await this.prisma.build();
-    return prisma.tag
-      .findUniqueOrThrow({
+    // Get current user context for validation and error handling
+    const currentUser = (await this.prisma.forUser()).$currentUser();
+
+    // Bypass RLS for initial tag lookup - access is validated at app level below
+    const tag = await this.prisma
+      .bypassRLS()
+      .tag.findUniqueOrThrow({
         where: { externalId },
         include: {
           client: true,
@@ -128,13 +133,80 @@ export class TagsService {
           },
         },
       })
-      .catch(
-        this.findAndThrowReasonForTagError(
-          { externalId },
-          prisma.$currentUser(),
-        ),
-      )
+      .catch(this.findAndThrowReasonForTagError({ externalId }, currentUser))
       .catch(as404OrThrow);
+
+    // Validate user has access to the tag's client (multi-client access)
+    if (tag.client) {
+      await this.validateUserAccessToTagClient(tag.client.externalId);
+    }
+
+    return tag;
+  }
+
+  /**
+   * Validates that the current user has access to the given client.
+   * Checks both primary client (from JWT) and secondary access (via PersonClientAccess).
+   * Throws ForbiddenException if user lacks access.
+   */
+  private async validateUserAccessToTagClient(
+    clientExternalId: string,
+  ): Promise<void> {
+    const user = this.cls.get('user');
+    if (!user) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    // Check if it's the user's primary client
+    if (user.clientId === clientExternalId) {
+      return;
+    }
+
+    // Check PersonClientAccess for secondary client access
+    const access = await this.prisma.bypassRLS().personClientAccess.findFirst({
+      where: {
+        person: { idpId: user.idpId },
+        client: { externalId: clientExternalId },
+      },
+    });
+
+    if (!access) {
+      throw new ForbiddenException({
+        message:
+          'You do not have access to this tag. Please contact your administrator if you believe this is an error.',
+        error: 'client_access_denied',
+        statusCode: 403,
+      });
+    }
+  }
+
+  /**
+   * Checks if the user has access to a client (by internal client ID).
+   * Returns true if it's the user's primary client or if they have PersonClientAccess.
+   */
+  private async checkUserHasClientAccess(
+    userPrimaryClientId: string,
+    tagClientId: string,
+  ): Promise<boolean> {
+    // Check if it's the user's primary client
+    if (userPrimaryClientId === tagClientId) {
+      return true;
+    }
+
+    // Check PersonClientAccess for secondary client access
+    const user = this.cls.get('user');
+    if (!user) {
+      return false;
+    }
+
+    const access = await this.prisma.bypassRLS().personClientAccess.findFirst({
+      where: {
+        person: { idpId: user.idpId },
+        clientId: tagClientId,
+      },
+    });
+
+    return !!access;
   }
 
   async findOneForAssetSetup(externalId: string) {
@@ -196,11 +268,22 @@ export class TagsService {
       return tag;
     }
 
-    // If the tag is registered to a client, the user must belong to that
-    // client.
+    // If the tag is registered to a client, the user must have access to that client
+    // (either primary or via PersonClientAccess)
     const userPerson = (await this.prisma.forUser()).$currentUser();
-    if (!userPerson || userPerson.clientId !== tag.clientId) {
-      throw new BadRequestException('Tag is not registered to your client.');
+    if (!userPerson) {
+      throw new BadRequestException('Unable to determine user context.');
+    }
+
+    // Check if user has access to the tag's client
+    const hasClientAccess = await this.checkUserHasClientAccess(
+      userPerson.clientId,
+      tag.clientId,
+    );
+    if (!hasClientAccess) {
+      throw new BadRequestException(
+        'You do not have access to the client this tag is registered with.',
+      );
     }
 
     if (tag.siteId === null) {
@@ -636,9 +719,17 @@ export class TagsService {
         // Try to check against the current user (if present). If the user is present along
         // with the client and site IDs, alert the user as to why they are unable to access the tag.
         if (currentUser) {
-          if (clientId && currentUser.clientId !== clientId) {
+          // Check if user has access via PersonClientAccess (multi-client)
+          const hasClientAccess = clientId
+            ? await this.checkUserHasClientAccess(
+                currentUser.clientId,
+                clientId,
+              )
+            : true;
+
+          if (clientId && !hasClientAccess) {
             throw new BadRequestException(
-              'Tag is not registered to your client. Please contact your administrator if you think this is a mistake.',
+              'You do not have access to the client this tag is registered with. Please contact your administrator if you think this is a mistake.',
             );
           }
           if (

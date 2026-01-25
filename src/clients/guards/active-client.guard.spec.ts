@@ -9,10 +9,10 @@ import { ActiveClientGuard } from './active-client.guard';
 
 describe('ActiveClientGuard', () => {
   let guard: ActiveClientGuard;
-  let mockClientsService: jest.Mocked<Partial<ClientsService>>;
-  let mockSitesService: jest.Mocked<Partial<SitesService>>;
-  let mockClsService: jest.Mocked<Partial<ClsService>>;
-  let mockReflector: jest.Mocked<Partial<Reflector>>;
+  let mockClientsService: any;
+  let mockSitesService: any;
+  let mockClsService: any;
+  let mockReflector: any;
 
   const createMockExecutionContext = (): ExecutionContext =>
     ({

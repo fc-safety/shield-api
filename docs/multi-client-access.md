@@ -283,13 +283,57 @@ Uses the client/site from the user's `PersonClientAccess` for that client.
 }
 ```
 
+## Tag Reading (Multi-Client)
+
+When scanning a tag, the system needs to check if the user has access to the tag's client:
+
+1. **Bypass RLS** for initial tag lookup (so we can find the tag regardless of client)
+2. **Check access** after finding the tag - verify user has access to tag's client
+3. **Return appropriate error** if user lacks access
+
+```typescript
+// In TagsService.findOneForInspection()
+const tag = await prisma.tag.findUniqueOrThrow({ where: { externalId } });
+
+// Check if user has access to this tag's client
+const hasAccess = await this.checkUserAccessToClient(user.idpId, tag.client.externalId);
+if (!hasAccess) {
+  throw new ForbiddenException({
+    message: 'You do not have access to this tag.',
+    error: 'client_access_denied',
+  });
+}
+```
+
+## API Endpoints
+
+### Client Access (`/client-access`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/client-access/me` | List my accessible clients |
+| GET | `/client-access/persons/:personId` | List person's client access (admin) |
+| POST | `/client-access/persons/:personId` | Grant client access (admin) |
+| PATCH | `/client-access/:id` | Update access entry (admin) |
+| DELETE | `/client-access/:id` | Revoke access (admin) |
+
+### Database Roles (`/db-roles`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/db-roles` | List roles (optionally by clientId) |
+| GET | `/db-roles/:id` | Get role with permissions |
+| POST | `/db-roles` | Create role |
+| PATCH | `/db-roles/:id` | Update role |
+| DELETE | `/db-roles/:id` | Delete role (if not system) |
+| POST | `/db-roles/:id/permissions` | Add permissions to role |
+| DELETE | `/db-roles/:id/permissions/:permission` | Remove permission |
+
 ## Future Enhancements
 
-1. **API Endpoints**: CRUD operations for managing `PersonClientAccess` and `Role`
-2. **Cache Invalidation**: Clear cache when access is granted/revoked
-3. **Tag Reading Exception**: Bypass RLS for tags, check access at app level
-4. **Permission Migration**: Move existing Keycloak groups to database roles
-5. **UI Integration**: Client selector dropdown in the application
+1. **Permission Migration**: Move existing Keycloak groups to database roles
+2. **UI Integration**: Client selector dropdown in the application
+3. **Redis Pub/Sub**: Cross-instance cache invalidation
 
 ## Related Files
 
@@ -301,3 +345,6 @@ Uses the client/site from the user's `PersonClientAccess` for that client.
 | `src/clients/guards/active-client.guard.ts` | Validates client access |
 | `src/clients/clients/clients.service.ts` | `validateClientAccess()` method |
 | `src/clients/people/people.service.ts` | Builds PersonRepresentation with switching |
+| `src/assets/tags/tags.service.ts` | Multi-client tag access check |
+| `src/clients/client-access/` | Client access management API |
+| `src/admin/db-roles/` | Database roles management API |

@@ -4,13 +4,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ClsService } from 'nestjs-cls';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { StatelessUser } from 'src/auth/user.schema';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { PeopleService, UserConfigurationError } from './people.service';
 
 describe('PeopleService', () => {
   let service: PeopleService;
   let mockPrismaService: any;
-  let mockClsService: jest.Mocked<Partial<ClsService>>;
+  let mockClsService: any;
   let mockCacheManager: any;
 
   const mockKeycloakService = {
