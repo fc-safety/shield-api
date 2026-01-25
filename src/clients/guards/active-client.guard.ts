@@ -57,8 +57,31 @@ export class ActiveClientGuard implements CanActivate {
       return false;
     }
 
-    const clientExternalId = user.clientId;
-    const siteExternalId = user.siteId;
+    // Check if user is switching to a different client via x-client-id header
+    const activeClientId = this.cls.get('activeClientId');
+    let clientExternalId = user.clientId;
+    let siteExternalId = user.siteId;
+
+    if (activeClientId && activeClientId !== user.clientId) {
+      // User is requesting a different client - validate access via PersonClientAccess
+      const accessSiteExternalId =
+        await this.clientsService.validateClientAccess(
+          user.idpId,
+          activeClientId,
+        );
+
+      if (!accessSiteExternalId) {
+        throw new ForbiddenException({
+          message: 'You do not have access to the requested client.',
+          error: 'client_access_denied',
+          statusCode: 403,
+        });
+      }
+
+      // Use the switched client and its associated site
+      clientExternalId = activeClientId;
+      siteExternalId = accessSiteExternalId;
+    }
 
     const isClientActive = await this.isClientActive(clientExternalId);
     if (!isClientActive) {

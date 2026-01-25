@@ -565,6 +565,8 @@ model Client {
   demoMode                          Boolean                            @default(false)
   sites                             Site[]
   people                            Person[]
+  personClientAccess                PersonClientAccess[]
+  roles                             Role[]
   assets                            Asset[]
   consumables                       Consumable[]
   inspections                       Inspection[]
@@ -621,6 +623,7 @@ model Site {
   productRequests                   ProductRequest[]
   tags                              Tag[]
   people                            Person[]
+  personClientAccess                PersonClientAccess[]
   inspections                       Inspection[]
   inspectionRoutes                  InspectionRoute[]
   inspectionSessions                InspectionSession[]
@@ -659,6 +662,7 @@ model Person {
   assetQuestionResponses  AssetQuestionResponse[]
   vaultOwnerships         VaultOwnership[]
   alertsResolved          Alert[]
+  clientAccess            PersonClientAccess[]
   site                    Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   siteId                  String
   client                  Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -667,6 +671,55 @@ model Person {
   @@index([legacyUsername])
   @@index([clientId])
   @@index([clientId, siteId])
+}
+
+// Multi-Client Access & Database-Managed Permissions
+
+model Role {
+  id                 String               @id @default(cuid(2))
+  createdOn          DateTime             @default(now()) @db.Timestamptz()
+  modifiedOn         DateTime             @updatedAt @db.Timestamptz()
+  name               String
+  description        String?
+  isSystem           Boolean              @default(false)
+  permissions        RolePermission[]
+  personClientAccess PersonClientAccess[]
+  client             Client?              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId           String?
+
+  @@unique([name, clientId])
+  @@index([clientId])
+}
+
+model RolePermission {
+  id         String   @id @default(cuid(2))
+  createdOn  DateTime @default(now()) @db.Timestamptz()
+  permission String
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId     String
+
+  @@unique([roleId, permission])
+  @@index([roleId])
+}
+
+model PersonClientAccess {
+  id         String   @id @default(cuid(2))
+  createdOn  DateTime @default(now()) @db.Timestamptz()
+  modifiedOn DateTime @updatedAt @db.Timestamptz()
+  isPrimary  Boolean  @default(false)
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId   String
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId     String
+  role       Role     @relation(fields: [roleId], references: [id])
+  roleId     String
+
+  @@unique([personId, clientId])
+  @@index([personId])
+  @@index([clientId])
+  @@index([siteId])
 }
 
 // Products

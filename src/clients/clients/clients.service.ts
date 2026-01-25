@@ -131,6 +131,43 @@ export class ClientsService {
     return null;
   }
 
+  /**
+   * Validates that a user has access to a specific client via PersonClientAccess.
+   * Returns the site external ID from the access entry if valid, null otherwise.
+   *
+   * @param idpId - The identity provider ID (Keycloak sub) of the user
+   * @param clientExternalId - The external ID of the client to check access for
+   * @returns The site external ID from PersonClientAccess, or null if no access
+   */
+  public async validateClientAccess(
+    idpId: string,
+    clientExternalId: string,
+  ): Promise<string | null> {
+    const cacheKey = `client-access:${idpId}:${clientExternalId}`;
+    const cachedValue = await this.cache.get<string | null>(cacheKey);
+
+    if (cachedValue !== undefined) {
+      return cachedValue;
+    }
+
+    const access = await this.prisma.bypassRLS().personClientAccess.findFirst({
+      where: {
+        person: { idpId },
+        client: { externalId: clientExternalId },
+      },
+      select: {
+        site: { select: { externalId: true } },
+      },
+    });
+
+    const siteExternalId = access?.site.externalId ?? null;
+
+    // Cache the result for 1 hour
+    this.cache.set(cacheKey, siteExternalId, 60 * 60 * 1000);
+
+    return siteExternalId;
+  }
+
   async create(createClientDto: CreateClientDto) {
     const prisma = await this.prisma.build();
 
