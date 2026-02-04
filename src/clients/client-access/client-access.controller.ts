@@ -8,7 +8,7 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
-import { CheckPolicies } from 'src/auth/policies.guard';
+import { CheckIsAuthenticated, CheckPolicies } from 'src/auth/policies.guard';
 import { ClientAccessService } from './client-access.service';
 import { CreateClientAccessDto } from './dto/create-client-access.dto';
 import { UpdateClientAccessDto } from './dto/update-client-access.dto';
@@ -21,6 +21,7 @@ export class ClientAccessController {
    * Get the current user's accessible clients.
    */
   @Get('me')
+  @CheckIsAuthenticated()
   async getMyClientAccess() {
     return this.clientAccessService.getMyClientAccess();
   }
@@ -29,7 +30,7 @@ export class ClientAccessController {
    * Get a person's client access entries (admin only).
    */
   @Get('persons/:personId')
-  @CheckPolicies(({ user }) => user.isSuperAdmin())
+  @CheckPolicies(({ user }) => user.isSystemAdmin())
   async getPersonClientAccess(@Param('personId') personId: string) {
     return this.clientAccessService.getPersonClientAccess(personId);
   }
@@ -38,7 +39,7 @@ export class ClientAccessController {
    * Grant client access to a person (admin only).
    */
   @Post('persons/:personId')
-  @CheckPolicies(({ user }) => user.isSuperAdmin())
+  @CheckPolicies(({ user }) => user.isSystemAdmin())
   async grantClientAccess(
     @Param('personId') personId: string,
     @Body() dto: CreateClientAccessDto,
@@ -50,7 +51,7 @@ export class ClientAccessController {
    * Update a client access entry (admin only).
    */
   @Patch(':id')
-  @CheckPolicies(({ user }) => user.isSuperAdmin())
+  @CheckPolicies(({ user }) => user.isSystemAdmin())
   async updateClientAccess(
     @Param('id') id: string,
     @Body() dto: UpdateClientAccessDto,
@@ -63,7 +64,7 @@ export class ClientAccessController {
    */
   @Delete(':id')
   @HttpCode(204)
-  @CheckPolicies(({ user }) => user.isSuperAdmin())
+  @CheckPolicies(({ user }) => user.isSystemAdmin())
   async revokeClientAccess(@Param('id') id: string) {
     return this.clientAccessService.revokeClientAccess(id);
   }

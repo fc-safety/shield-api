@@ -2,9 +2,10 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ModuleRef } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClsService } from 'nestjs-cls';
+import { RoleScope, TScope } from 'src/auth/scope';
+import { TCapability } from 'src/auth/capabilities';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { StatelessUser } from 'src/auth/user.schema';
-import { ApiConfigService } from 'src/config/api-config.service';
 import { PeopleService, UserConfigurationError } from './people.service';
 
 describe('PeopleService', () => {
@@ -12,7 +13,6 @@ describe('PeopleService', () => {
   let mockPrismaService: any;
   let mockClsService: any;
   let mockCacheManager: any;
-  let mockConfigService: any;
 
   const mockKeycloakService = {
     events: {
@@ -25,7 +25,19 @@ describe('PeopleService', () => {
     findUserById: jest.fn(),
   };
 
-  const createMockUser = (overrides: Partial<StatelessUser> = {}) =>
+  const createMockUser = (
+    overrides: Partial<{
+      idpId: string;
+      email: string;
+      username: string;
+      givenName: string;
+      familyName: string;
+      clientId: string;
+      siteId: string;
+      scope: TScope;
+      capabilities: TCapability[];
+    }> = {},
+  ) =>
     ({
       idpId: 'keycloak-user-123',
       email: 'test@example.com',
@@ -34,8 +46,8 @@ describe('PeopleService', () => {
       familyName: 'User',
       clientId: 'primary-client-ext',
       siteId: 'primary-site-ext',
-      visibility: 'client-sites' as const,
-      permissions: ['visibility:client-sites', 'read:assets'],
+      scope: RoleScope.CLIENT,
+      capabilities: ['manage-assets'] as TCapability[],
       ...overrides,
     }) as StatelessUser;
 
@@ -55,10 +67,6 @@ describe('PeopleService', () => {
       bypassRLS: jest.fn(),
     };
 
-    mockConfigService = {
-      get: jest.fn().mockReturnValue(false), // Default: USE_DATABASE_PERMISSIONS = false
-    };
-
     const mockModuleRef = {
       get: jest.fn().mockReturnValue(mockPrismaService),
     };
@@ -70,7 +78,6 @@ describe('PeopleService', () => {
         { provide: ClsService, useValue: mockClsService },
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
         { provide: ModuleRef, useValue: mockModuleRef },
-        { provide: ApiConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -115,6 +122,17 @@ describe('PeopleService', () => {
               id: 'person-internal-id',
             }),
           },
+          personClientAccess: {
+            findFirst: jest.fn().mockResolvedValue({
+              personId: 'person-internal-id',
+              clientId: 'primary-client-internal',
+              isPrimary: true,
+              role: {
+                scope: RoleScope.CLIENT,
+                capabilities: ['manage-assets'],
+              },
+            }),
+          },
         });
 
         const result = await service.getPersonRepresentation(user);
@@ -124,9 +142,9 @@ describe('PeopleService', () => {
             id: 'person-internal-id',
             clientId: 'primary-client-internal',
             siteId: 'primary-site-internal',
-            visibility: 'client-sites',
-            hasMultiClientVisibility: false,
-            hasMultiSiteVisibility: true,
+            scope: RoleScope.CLIENT,
+            hasMultiClientScope: false,
+            hasMultiSiteScope: true,
           }),
         );
       });
@@ -162,6 +180,17 @@ describe('PeopleService', () => {
             findUnique: jest.fn().mockResolvedValue(null),
             create: mockCreate,
           },
+          personClientAccess: {
+            findFirst: jest.fn().mockResolvedValue({
+              personId: 'new-person-id',
+              clientId: 'primary-client-internal',
+              isPrimary: true,
+              role: {
+                scope: RoleScope.CLIENT,
+                capabilities: ['manage-assets'],
+              },
+            }),
+          },
         });
 
         const result = await service.getPersonRepresentation(user);
@@ -176,6 +205,47 @@ describe('PeopleService', () => {
               lastName: 'User',
             }),
           }),
+        );
+      });
+
+      it('should throw UserConfigurationError when no role is assigned', async () => {
+        const user = createMockUser();
+        mockClsService.get.mockImplementation((key: string) => {
+          if (key === 'user') return user;
+          if (key === 'activeClientId') return undefined;
+          return undefined;
+        });
+
+        mockPrismaService.bypassRLS.mockReturnValue({
+          client: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'primary-client-internal',
+            }),
+          },
+          site: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+            }),
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+              subsites: [],
+            }),
+          },
+          person: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'person-internal-id',
+            }),
+            update: jest.fn().mockResolvedValue({
+              id: 'person-internal-id',
+            }),
+          },
+          personClientAccess: {
+            findFirst: jest.fn().mockResolvedValue(null),
+          },
+        });
+
+        await expect(service.getPersonRepresentation(user)).rejects.toThrow(
+          UserConfigurationError,
         );
       });
     });
@@ -226,10 +296,8 @@ describe('PeopleService', () => {
               client: { id: 'secondary-client-internal' },
               site: { id: 'switched-site-internal' },
               role: {
-                permissions: [
-                  { permission: 'visibility:single-site' },
-                  { permission: 'read:assets' },
-                ],
+                scope: RoleScope.SITE,
+                capabilities: ['perform-inspections'],
               },
             }),
           },
@@ -244,9 +312,9 @@ describe('PeopleService', () => {
             id: 'person-internal-id',
             clientId: 'secondary-client-internal',
             siteId: 'switched-site-internal',
-            visibility: 'single-site',
-            hasMultiClientVisibility: false,
-            hasMultiSiteVisibility: false,
+            scope: RoleScope.SITE,
+            hasMultiClientScope: false,
+            hasMultiSiteScope: false,
           }),
         );
       });
@@ -325,15 +393,23 @@ describe('PeopleService', () => {
             }),
           },
           personClientAccess: {
-            findFirst: jest.fn(),
+            findFirst: jest.fn().mockResolvedValue({
+              personId: 'person-internal-id',
+              clientId: 'primary-client-internal',
+              isPrimary: true,
+              role: {
+                scope: RoleScope.CLIENT,
+                capabilities: ['manage-assets'],
+              },
+            }),
           },
         });
 
         const result = await service.getPersonRepresentation(user);
 
-        // Should use primary client, not query PersonClientAccess
+        // Should use primary client, not query PersonClientAccess for switch
         expect(result.clientId).toBe('primary-client-internal');
-        expect(result.visibility).toBe('client-sites');
+        expect(result.scope).toBe(RoleScope.CLIENT);
       });
 
       it('should include subsites in allowedSiteIdsStr for switched client', async () => {
@@ -389,7 +465,8 @@ describe('PeopleService', () => {
               client: { id: 'secondary-client-internal' },
               site: { id: 'switched-site-internal' },
               role: {
-                permissions: [{ permission: 'visibility:client-sites' }],
+                scope: RoleScope.CLIENT,
+                capabilities: ['manage-assets'],
               },
             }),
           },
@@ -403,8 +480,8 @@ describe('PeopleService', () => {
       });
     });
 
-    describe('visibility extraction from role permissions', () => {
-      it('should extract super-admin visibility from permissions', async () => {
+    describe('scope from role', () => {
+      it('should return GLOBAL scope with multi-client and multi-site access', async () => {
         const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
@@ -443,10 +520,8 @@ describe('PeopleService', () => {
               client: { id: 'secondary-client-internal' },
               site: { id: 'switched-site-internal' },
               role: {
-                permissions: [
-                  { permission: 'visibility:super-admin' },
-                  { permission: 'read:assets' },
-                ],
+                scope: RoleScope.GLOBAL,
+                capabilities: ['manage-assets', 'manage-users'],
               },
             }),
           },
@@ -454,12 +529,12 @@ describe('PeopleService', () => {
 
         const result = await service.getPersonRepresentation(user);
 
-        expect(result.visibility).toBe('super-admin');
-        expect(result.hasMultiClientVisibility).toBe(true);
-        expect(result.hasMultiSiteVisibility).toBe(true);
+        expect(result.scope).toBe(RoleScope.GLOBAL);
+        expect(result.hasMultiClientScope).toBe(true);
+        expect(result.hasMultiSiteScope).toBe(true);
       });
 
-      it('should default to self visibility when no visibility permission in role', async () => {
+      it('should return CLIENT scope with multi-site but not multi-client access', async () => {
         const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
@@ -498,10 +573,8 @@ describe('PeopleService', () => {
               client: { id: 'secondary-client-internal' },
               site: { id: 'switched-site-internal' },
               role: {
-                permissions: [
-                  { permission: 'read:assets' },
-                  { permission: 'create:inspections' },
-                ],
+                scope: RoleScope.CLIENT,
+                capabilities: ['manage-assets'],
               },
             }),
           },
@@ -509,20 +582,16 @@ describe('PeopleService', () => {
 
         const result = await service.getPersonRepresentation(user);
 
-        expect(result.visibility).toBe('self');
-      });
-    });
-
-    describe('with USE_DATABASE_PERMISSIONS enabled', () => {
-      beforeEach(() => {
-        mockConfigService.get.mockReturnValue(true);
+        expect(result.scope).toBe(RoleScope.CLIENT);
+        expect(result.hasMultiClientScope).toBe(false);
+        expect(result.hasMultiSiteScope).toBe(true);
       });
 
-      it('should use database permissions when PersonClientAccess exists with isPrimary=true', async () => {
+      it('should return SITE scope with neither multi-client nor multi-site access', async () => {
         const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
-          if (key === 'activeClientId') return undefined;
+          if (key === 'activeClientId') return 'secondary-client-ext';
           return undefined;
         });
 
@@ -537,7 +606,7 @@ describe('PeopleService', () => {
               id: 'primary-site-internal',
             }),
             findUnique: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
+              id: 'switched-site-internal',
               subsites: [],
             }),
           },
@@ -552,14 +621,13 @@ describe('PeopleService', () => {
           personClientAccess: {
             findFirst: jest.fn().mockResolvedValue({
               personId: 'person-internal-id',
-              clientId: 'primary-client-internal',
-              isPrimary: true,
+              clientId: 'secondary-client-internal',
+              siteId: 'switched-site-internal',
+              client: { id: 'secondary-client-internal' },
+              site: { id: 'switched-site-internal' },
               role: {
-                permissions: [
-                  { permission: 'visibility:global' },
-                  { permission: 'read:assets' },
-                  { permission: 'create:assets' },
-                ],
+                scope: RoleScope.SITE,
+                capabilities: ['perform-inspections'],
               },
             }),
           },
@@ -567,26 +635,24 @@ describe('PeopleService', () => {
 
         const result = await service.getPersonRepresentation(user);
 
-        expect(result.visibility).toBe('global');
-        expect(result.permissions).toEqual([
-          'visibility:global',
-          'read:assets',
-          'create:assets',
-        ]);
-        expect(result.hasMultiClientVisibility).toBe(true);
-        expect(result.hasMultiSiteVisibility).toBe(true);
+        expect(result.scope).toBe(RoleScope.SITE);
+        expect(result.hasMultiClientScope).toBe(false);
+        expect(result.hasMultiSiteScope).toBe(false);
       });
 
-      it('should fall back to JWT permissions when no PersonClientAccess with isPrimary=true', async () => {
-        const user = createMockUser({
-          visibility: 'client-sites',
-          permissions: ['visibility:client-sites', 'read:assets'],
-        });
+      it('should return capabilities from role', async () => {
+        const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
-          if (key === 'activeClientId') return undefined;
+          if (key === 'activeClientId') return 'secondary-client-ext';
           return undefined;
         });
+
+        const expectedCapabilities = [
+          'manage-assets',
+          'manage-users',
+          'view-reports',
+        ] as TCapability[];
 
         mockPrismaService.bypassRLS.mockReturnValue({
           client: {
@@ -599,54 +665,7 @@ describe('PeopleService', () => {
               id: 'primary-site-internal',
             }),
             findUnique: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-              subsites: [],
-            }),
-          },
-          person: {
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'person-internal-id',
-            }),
-            update: jest.fn().mockResolvedValue({
-              id: 'person-internal-id',
-            }),
-          },
-          personClientAccess: {
-            findFirst: jest.fn().mockResolvedValue(null),
-          },
-        });
-
-        const result = await service.getPersonRepresentation(user);
-
-        // Should fall back to JWT visibility
-        expect(result.visibility).toBe('client-sites');
-        // Permissions should be undefined when falling back to JWT
-        expect(result.permissions).toBeUndefined();
-      });
-
-      it('should override JWT visibility with database visibility', async () => {
-        const user = createMockUser({
-          visibility: 'single-site', // JWT says single-site
-          permissions: ['visibility:single-site', 'read:assets'],
-        });
-        mockClsService.get.mockImplementation((key: string) => {
-          if (key === 'user') return user;
-          if (key === 'activeClientId') return undefined;
-          return undefined;
-        });
-
-        mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
+              id: 'switched-site-internal',
               subsites: [],
             }),
           },
@@ -661,13 +680,13 @@ describe('PeopleService', () => {
           personClientAccess: {
             findFirst: jest.fn().mockResolvedValue({
               personId: 'person-internal-id',
-              clientId: 'primary-client-internal',
-              isPrimary: true,
+              clientId: 'secondary-client-internal',
+              siteId: 'switched-site-internal',
+              client: { id: 'secondary-client-internal' },
+              site: { id: 'switched-site-internal' },
               role: {
-                permissions: [
-                  { permission: 'visibility:super-admin' }, // DB says super-admin
-                  { permission: 'read:assets' },
-                ],
+                scope: RoleScope.CLIENT,
+                capabilities: expectedCapabilities,
               },
             }),
           },
@@ -675,9 +694,7 @@ describe('PeopleService', () => {
 
         const result = await service.getPersonRepresentation(user);
 
-        // Should use database visibility, not JWT
-        expect(result.visibility).toBe('super-admin');
-        expect(result.hasMultiClientVisibility).toBe(true);
+        expect(result.capabilities).toEqual(expectedCapabilities);
       });
     });
   });

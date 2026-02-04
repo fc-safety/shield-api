@@ -8,10 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import {
-  CheckPolicies,
-  CheckResourcePermissions,
-} from 'src/auth/policies.guard';
+import { CheckCapability } from 'src/auth/policies.guard';
 import { CreateAssetQuestionDto } from '../asset-questions/dto/create-asset-question.dto';
 import { UpdateAssetQuestionDto } from '../asset-questions/dto/update-asset-question.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -20,7 +17,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
 
 @Controller('products')
-@CheckResourcePermissions('products')
+@CheckCapability('configure-products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
@@ -51,7 +48,6 @@ export class ProductsController {
 
   // Questions
 
-  @CheckPolicies(({ user }) => user.canCreate('asset-questions'))
   @Post(':id/questions')
   addQuestion(
     @Param('id') id: string,
@@ -60,7 +56,6 @@ export class ProductsController {
     return this.productsService.addQuestion(id, createAssetQuestionDto);
   }
 
-  @CheckPolicies(({ user }) => user.canUpdate('asset-questions'))
   @Patch(':id/questions/:questionId')
   updateQuestion(
     @Param('id') id: string,
@@ -74,7 +69,6 @@ export class ProductsController {
     );
   }
 
-  @CheckPolicies(({ user }) => user.canDelete('asset-questions'))
   @Delete(':id/questions/:questionId')
   deleteQuestion(@Param('questionId') questionId: string) {
     return this.productsService.deleteQuestion(questionId);

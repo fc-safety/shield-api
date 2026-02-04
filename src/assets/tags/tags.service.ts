@@ -10,7 +10,6 @@ import crypto from 'crypto';
 import { add, isAfter } from 'date-fns';
 import { ClsService } from 'nestjs-cls';
 import { AuthService, SigningKeyExpiredError } from 'src/auth/auth.service';
-import { MULTI_SITE_VISIBILITIES } from 'src/auth/permissions';
 import { PersonRepresentation } from 'src/clients/people/people.service';
 import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
@@ -293,7 +292,7 @@ export class TagsService {
     // If the tag is registered to a site, the user must belong to that
     // site.
     if (
-      !userPerson.hasMultiSiteVisibility &&
+      !userPerson.hasMultiSiteScope &&
       !userPerson.allowedSiteIdsStr.includes(tag.siteId) &&
       tag.siteId !== userPerson.siteId
     ) {
@@ -734,7 +733,7 @@ export class TagsService {
           }
           if (
             siteId &&
-            !MULTI_SITE_VISIBILITIES.includes(currentUser.visibility) &&
+            !currentUser.hasMultiSiteScope &&
             !currentUser.allowedSiteIdsStr.split(',').includes(siteId) &&
             siteId !== currentUser.siteId
           ) {

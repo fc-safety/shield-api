@@ -1,9 +1,11 @@
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, TestingModule } from '@nestjs/testing';
-import { RolesService } from './roles.service';
+import { ClsService } from 'nestjs-cls';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { ClsService } from 'nestjs-cls';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { RedisService } from 'src/redis/redis.service';
+import { RolesService } from './roles.service';
 
 describe('RolesService', () => {
   let service: RolesService;
@@ -49,6 +51,35 @@ describe('RolesService', () => {
     }),
   };
 
+  const mockPrismaService = {
+    bypassRLS: jest.fn().mockReturnValue({
+      role: {
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+      rolePermission: {
+        findMany: jest.fn(),
+        create: jest.fn(),
+        createMany: jest.fn(),
+        deleteMany: jest.fn(),
+        delete: jest.fn(),
+      },
+      client: {
+        findUnique: jest.fn(),
+      },
+    }),
+  };
+
+  const mockCacheManager = {
+    get: jest.fn(),
+    set: jest.fn(),
+    del: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,6 +88,8 @@ describe('RolesService', () => {
         { provide: ApiConfigService, useValue: mockApiConfigService },
         { provide: ClsService, useValue: mockClsService },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: CACHE_MANAGER, useValue: mockCacheManager },
       ],
     }).compile();
 

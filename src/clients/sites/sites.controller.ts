@@ -8,18 +8,19 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import { CheckCapability, CheckScope } from 'src/auth/policies.guard';
 import { CreateSiteDto } from './dto/create-site.dto';
 import { QuerySiteDto } from './dto/query-site.dto';
 import { UpdateSiteDto } from './dto/update-site.dto';
 import { SitesService } from './sites.service';
 
 @Controller('sites')
-@CheckResourcePermissions('sites')
+@CheckScope('CLIENT')
 export class SitesController {
   constructor(private readonly sitesService: SitesService) {}
 
   @Post()
+  @CheckCapability('manage-users')
   create(@Body() createSiteDto: CreateSiteDto) {
     return this.sitesService.create(createSiteDto);
   }
@@ -35,11 +36,13 @@ export class SitesController {
   }
 
   @Patch(':id')
+  @CheckCapability('manage-users')
   update(@Param('id') id: string, @Body() updateSiteDto: UpdateSiteDto) {
     return this.sitesService.update(id, updateSiteDto);
   }
 
   @Delete(':id')
+  @CheckCapability('manage-users')
   remove(@Param('id') id: string) {
     return this.sitesService.remove(id);
   }

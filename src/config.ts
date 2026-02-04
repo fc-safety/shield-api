@@ -70,9 +70,11 @@ export const configSchema = z.object({
 
   // Feature Flags
   USE_DATABASE_PERMISSIONS: z
-    .string()
-    .optional()
-    .transform((v) => v === 'true'),
+    .stringbool({
+      truthy: ['true', '1'],
+      falsy: ['false', '0'],
+    })
+    .optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

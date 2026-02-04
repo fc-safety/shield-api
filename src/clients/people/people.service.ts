@@ -3,18 +3,16 @@ import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import type { Cache } from 'cache-manager';
 import { ClsService } from 'nestjs-cls';
+import { TCapability } from 'src/auth/capabilities';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import {
-  MULTI_CLIENT_VISIBILITIES,
-  MULTI_SITE_VISIBILITIES,
-  TPermission,
-  TVisibility,
-  VISIBILITY_VALUES,
-} from 'src/auth/permissions';
-import { StatelessUser } from 'src/auth/user.schema';
+  scopeAllowsAllClientSites,
+  scopeAllowsMultipleClients,
+  TScope,
+} from 'src/auth/scope';
+import { StatelessUserData } from 'src/auth/user.schema';
 import { CommonClsStore } from 'src/common/types';
 import { isNil } from 'src/common/utils';
-import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -24,11 +22,12 @@ export interface PersonRepresentation {
   siteId: string;
   allowedSiteIdsStr: string; // Comma delimited
   clientId: string;
-  visibility: TVisibility;
-  hasMultiClientVisibility: boolean;
-  hasMultiSiteVisibility: boolean;
-  /** Permissions from database role (when USE_DATABASE_PERMISSIONS is enabled) */
-  permissions?: TPermission[];
+  scope: TScope;
+  capabilities: TCapability[];
+  /** Whether user's scope allows access to multiple clients (GLOBAL or SYSTEM) */
+  hasMultiClientScope: boolean;
+  /** Whether user's scope allows access to all sites in client (CLIENT or above) */
+  hasMultiSiteScope: boolean;
 }
 
 export class UserConfigurationError extends Error {
@@ -49,7 +48,6 @@ export class PeopleService implements OnModuleDestroy {
     protected readonly cls: ClsService<CommonClsStore>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly moduleRef: ModuleRef,
-    private readonly config: ApiConfigService,
   ) {
     this.invalidatePersonCache = ({ id }) => {
       this.cache.del(getPersonCacheKey({ idpId: id }));
@@ -74,7 +72,9 @@ export class PeopleService implements OnModuleDestroy {
     return this.prisma!;
   }
 
-  public async getPersonRepresentation(userInput?: StatelessUser) {
+  public async getPersonRepresentation(
+    userInput?: StatelessUserData,
+  ): Promise<PersonRepresentation> {
     const user = userInput ?? this.cls.get('user');
     invariant(user, 'No user in CLS');
 
@@ -114,44 +114,36 @@ export class PeopleService implements OnModuleDestroy {
       return switchedContext;
     }
 
-    // Standard flow - use primary client/site from JWT
-    const allowedSiteIdsStr = await this.getAllowedSiteIds(user);
+    // Standard flow - get role from PersonClientAccess for primary client
     const cacheKey = getPersonCacheKey(user);
-
-    // Check if we should use database permissions instead of JWT
-    const useDatabasePermissions = this.config.get('USE_DATABASE_PERMISSIONS');
 
     return this.getFromCacheOrDefault<PersonRepresentation>(
       cacheKey,
       async () => {
-        let visibility = user.visibility;
-        let permissions: TPermission[] | undefined;
+        const roleData = await this.getPrimaryClientRole(
+          personId,
+          primaryClientId,
+        );
 
-        // If database permissions are enabled, try to load from PersonClientAccess
-        if (useDatabasePermissions) {
-          const dbPermissions = await this.getPrimaryClientPermissions(
-            personId,
-            primaryClientId,
+        if (!roleData) {
+          // No PersonClientAccess exists - user has no role/access configured
+          throw new UserConfigurationError(
+            'Your account does not have a role assigned. Please contact your administrator.',
           );
-
-          if (dbPermissions) {
-            permissions = dbPermissions;
-            visibility = this.extractVisibilityFromPermissions(dbPermissions);
-          }
-          // If no PersonClientAccess exists, fall back to JWT permissions
         }
+
+        const allowedSiteIdsStr = await this.getAllowedSiteIds(user);
 
         return {
           id: personId,
+          idpId: user.idpId,
           siteId: primarySiteId,
           clientId: primaryClientId,
-          idpId: user.idpId,
-          visibility,
+          scope: roleData.scope,
+          capabilities: roleData.capabilities,
           allowedSiteIdsStr,
-          hasMultiClientVisibility:
-            MULTI_CLIENT_VISIBILITIES.includes(visibility),
-          hasMultiSiteVisibility: MULTI_SITE_VISIBILITIES.includes(visibility),
-          permissions,
+          hasMultiClientScope: scopeAllowsMultipleClients(roleData.scope),
+          hasMultiSiteScope: scopeAllowsAllClientSites(roleData.scope),
         };
       },
       60 * 60 * 1000, // 1 hour
@@ -163,7 +155,7 @@ export class PeopleService implements OnModuleDestroy {
    * Returns the person's internal ID.
    */
   private async ensurePersonExists(
-    user: StatelessUser,
+    user: StatelessUserData,
     clientId: string,
     siteId: string,
   ): Promise<string> {
@@ -236,7 +228,7 @@ export class PeopleService implements OnModuleDestroy {
           include: {
             client: { select: { id: true } },
             site: { select: { id: true } },
-            role: { include: { permissions: true } },
+            role: { select: { scope: true, capabilities: true } },
           },
         });
 
@@ -249,23 +241,19 @@ export class PeopleService implements OnModuleDestroy {
           access.siteId,
         );
 
-        // Extract permissions from role
-        const permissions = access.role.permissions.map(
-          (p) => p.permission as TPermission,
-        );
-        const visibility = this.extractVisibilityFromPermissions(permissions);
+        const scope = access.role.scope;
+        const capabilities = access.role.capabilities as TCapability[];
 
         return {
           id: personId,
           idpId: null, // Not needed for RLS context
           siteId: access.siteId,
           clientId: access.clientId,
-          visibility,
+          scope,
+          capabilities,
           allowedSiteIdsStr,
-          hasMultiClientVisibility:
-            MULTI_CLIENT_VISIBILITIES.includes(visibility),
-          hasMultiSiteVisibility: MULTI_SITE_VISIBILITIES.includes(visibility),
-          permissions,
+          hasMultiClientScope: scopeAllowsMultipleClients(scope),
+          hasMultiSiteScope: scopeAllowsAllClientSites(scope),
         };
       },
       60 * 60 * 1000, // 1 hour
@@ -273,49 +261,33 @@ export class PeopleService implements OnModuleDestroy {
   }
 
   /**
-   * Extracts the visibility level from a list of permission strings.
+   * Gets scope and capabilities from PersonClientAccess for a user's primary client.
    */
-  private extractVisibilityFromPermissions(
-    permissions: (string | TPermission)[],
-  ): TVisibility {
-    const visibilityPermissions = permissions
-      .filter((p) => p.startsWith('visibility:'))
-      .map((p) => p.replace('visibility:', '') as TVisibility);
-
-    // Return the most permissive visibility level
-    for (const visibility of VISIBILITY_VALUES) {
-      if (visibilityPermissions.includes(visibility)) {
-        return visibility;
-      }
-    }
-
-    return 'self';
-  }
-
-  /**
-   * Gets permissions from PersonClientAccess for a user's primary client.
-   * Used when USE_DATABASE_PERMISSIONS is enabled.
-   */
-  private async getPrimaryClientPermissions(
+  private async getPrimaryClientRole(
     personId: string,
     clientId: string,
-  ): Promise<TPermission[] | null> {
-    const cacheKey = `person-primary-permissions:${personId}:${clientId}`;
+  ): Promise<{ scope: TScope; capabilities: TCapability[] } | null> {
+    const cacheKey = `person-primary-role:${personId}:${clientId}`;
 
-    return this.getFromCacheOrDefault<TPermission[] | null>(
+    return this.getFromCacheOrDefault<{
+      scope: TScope;
+      capabilities: TCapability[];
+    } | null>(
       cacheKey,
       async () => {
         const prisma = this.getPrisma().bypassRLS();
 
-        // Look for PersonClientAccess with isPrimary=true
+        // Look for PersonClientAccess with isPrimary=true, or any access for this client
         const access = await prisma.personClientAccess.findFirst({
           where: {
             personId,
             clientId,
-            isPrimary: true,
+          },
+          orderBy: {
+            isPrimary: 'desc', // Prefer isPrimary=true
           },
           include: {
-            role: { include: { permissions: true } },
+            role: { select: { scope: true, capabilities: true } },
           },
         });
 
@@ -323,7 +295,10 @@ export class PeopleService implements OnModuleDestroy {
           return null;
         }
 
-        return access.role.permissions.map((p) => p.permission as TPermission);
+        return {
+          scope: access.role.scope,
+          capabilities: access.role.capabilities as TCapability[],
+        };
       },
       60 * 60 * 1000, // 1 hour
     );
@@ -379,7 +354,7 @@ export class PeopleService implements OnModuleDestroy {
     );
   }
 
-  public async getUserClientId(userInput?: StatelessUser) {
+  public async getUserClientId(userInput?: StatelessUserData) {
     const user = userInput ?? this.cls.get('user');
     invariant(user, 'No user in CLS');
 
@@ -408,7 +383,7 @@ export class PeopleService implements OnModuleDestroy {
     ); // 1 hour
   }
 
-  public async getUserSiteId(userInput?: StatelessUser) {
+  public async getUserSiteId(userInput?: StatelessUserData) {
     const user = userInput ?? this.cls.get('user');
     invariant(user, 'No user in CLS');
 
@@ -437,7 +412,7 @@ export class PeopleService implements OnModuleDestroy {
     ); // 1 hour
   }
 
-  public async getAllowedSiteIds(userInput?: StatelessUser) {
+  public async getAllowedSiteIds(userInput?: StatelessUserData) {
     const user = userInput ?? this.cls.get('user');
     invariant(user, 'No user in CLS');
 
@@ -510,6 +485,6 @@ function invariant<T>(condition: T, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function getPersonCacheKey(person: Pick<StatelessUser, 'idpId'>) {
+function getPersonCacheKey(person: Pick<StatelessUserData, 'idpId'>) {
   return `person:idpId=${person.idpId}`;
 }

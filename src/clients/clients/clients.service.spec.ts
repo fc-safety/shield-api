@@ -78,9 +78,7 @@ describe('ClientsService', () => {
             demoMode: false,
           }),
         },
-        $currentUser: jest
-          .fn()
-          .mockReturnValue({ hasMultiSiteVisibility: true }),
+        $currentUser: jest.fn().mockReturnValue({ hasMultiSiteScope: true }),
         $mode: 'user',
       };
 
@@ -182,7 +180,7 @@ describe('ClientsService', () => {
       const mockTx = {
         ...mockInnerTx,
         $currentUser: jest.fn().mockReturnValue({
-          hasMultiSiteVisibility: true,
+          hasMultiSiteScope: true,
           allowedSiteIdsStr: '',
         }),
         $mode: 'user',

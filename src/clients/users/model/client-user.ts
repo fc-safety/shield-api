@@ -1,6 +1,5 @@
 import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
-import { Role, ValidatedGroupRepresentation } from 'src/admin/roles/model/role';
-import { isNil } from 'src/common/utils';
+import { Role } from 'src/admin/roles/model/role';
 import { z } from 'zod';
 
 export interface ClientUser {
@@ -19,7 +18,10 @@ export interface ClientUser {
   clientExternalId: string;
   /** @deprecated Use roles array instead. Returns first role for backward compatibility. */
   roleName?: string;
-  roles: Pick<Role, 'id' | 'name' | 'permissions' | 'notificationGroups'>[];
+  roles: Pick<
+    Role,
+    'id' | 'name' | 'scope' | 'capabilities' | 'notificationGroups'
+  >[];
   position?: string;
 }
 
@@ -45,19 +47,14 @@ export const validateKeycloakUser = (
 ): user is ValidatedUserRepresentation =>
   keycloakUserSchema.safeParse(user).success;
 
+/**
+ * Converts a Keycloak user representation and roles from database to ClientUser.
+ * Roles are now loaded from the database via PersonClientAccess, not Keycloak groups.
+ */
 export const keycloakUserAsClientUser = (
   user: ValidatedUserRepresentation,
-  allRoleGroups: ValidatedGroupRepresentation[],
-  convertGroupToRole: (group: ValidatedGroupRepresentation) => Role,
+  roles: Role[],
 ): ClientUser => {
-  const groupsByPathMap = new Map(allRoleGroups.map((g) => [g.path ?? '', g]));
-  // Extract all role groups (not just the first one)
-  const roles =
-    user.groups
-      ?.map((path) => groupsByPathMap.get(path))
-      .filter((group): group is NonNullable<typeof group> => !isNil(group))
-      .map((g) => convertGroupToRole(g)) ?? [];
-
   return {
     id: user.attributes.user_id[0],
     createdOn: user.attributes.user_created_at[0],
@@ -75,7 +72,8 @@ export const keycloakUserAsClientUser = (
     roles: roles.map((r) => ({
       id: r.id,
       name: r.name,
-      permissions: r.permissions,
+      scope: r.scope,
+      capabilities: r.capabilities,
       notificationGroups: r.notificationGroups,
     })),
     // Backward compatibility: return first role or undefined

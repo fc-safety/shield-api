@@ -1,16 +1,13 @@
 import { z } from 'zod';
-import {
-  ActionableResource,
-  getResourcePermission,
-  isValidPermission,
-  TAction,
-  TPermission,
-  TResource,
-  TVisibility,
-  VISIBILITY,
-  VISIBILITY_VALUES,
-} from './permissions';
+import { isValidCapability, TCapability } from './capabilities';
+import { isScopeAtLeast, RoleScope, TScope } from './scope';
 
+/**
+ * Schema for JWT token payload from the identity provider.
+ *
+ * Note: Permissions/capabilities are NOT loaded from the JWT anymore.
+ * They come from the database via PersonClientAccess.role.
+ */
 export const keycloakTokenPayloadSchema = z.object({
   sub: z.string(),
   email: z.string(),
@@ -19,24 +16,40 @@ export const keycloakTokenPayloadSchema = z.object({
   given_name: z.string().optional(),
   family_name: z.string().optional(),
   picture: z.string().optional(),
-  resource_access: z
-    .record(
-      z.string(),
-      z.object({
-        roles: z
-          .array(z.string())
-          .transform((roles) => roles.filter(isValidPermission)),
-      }),
-    )
-    .optional(),
-  permissions: z
-    .array(z.string())
-    .transform((roles) => roles.filter(isValidPermission))
-    .optional(),
   client_id: z.string().default('unknown'),
   site_id: z.string().default('unknown'),
 });
 
+export type TokenPayload = z.infer<typeof keycloakTokenPayloadSchema>;
+
+/**
+ * Interface for user data used to construct StatelessUser.
+ * This is populated from either JWT + database lookup or directly from PersonRepresentation.
+ */
+export interface StatelessUserData {
+  idpId: string;
+  email: string;
+  username: string;
+  name?: string;
+  givenName?: string;
+  familyName?: string;
+  picture?: string;
+  clientId: string;
+  siteId: string;
+  scope: TScope;
+  capabilities: TCapability[];
+}
+
+/**
+ * Represents an authenticated user with their capabilities and scope.
+ *
+ * This is a stateless representation that can be serialized/deserialized
+ * and passed through the request context.
+ *
+ * Key concepts:
+ * - **Scope**: Determines HOW MUCH data the user can access (GLOBAL, CLIENT, SITE, etc.)
+ * - **Capabilities**: Determine WHAT ACTIONS the user can perform (manage-assets, perform-inspections, etc.)
+ */
 export class StatelessUser {
   readonly idpId: string;
   readonly email: string;
@@ -45,103 +58,99 @@ export class StatelessUser {
   readonly givenName?: string;
   readonly familyName?: string;
   readonly picture?: string;
-  readonly permissions?: TPermission[];
   readonly clientId: string;
   readonly siteId: string;
-  readonly visibility: TVisibility;
+  readonly scope: TScope;
+  readonly capabilities: TCapability[];
 
-  constructor(payload: z.infer<typeof keycloakTokenPayloadSchema>) {
-    this.idpId = payload.sub;
-    this.email = payload.email;
-    this.username = payload.preferred_username;
-    this.name = payload.name;
-    this.givenName = payload.given_name;
-    this.familyName = payload.family_name;
-    this.picture = payload.picture;
-    this.permissions =
-      payload.permissions ?? payload.resource_access?.['shield-api']?.roles;
-    this.visibility = this.getVisibility();
-    this.clientId = payload.client_id;
-    this.siteId = payload.site_id;
+  constructor(data: StatelessUserData) {
+    this.idpId = data.idpId;
+    this.email = data.email;
+    this.username = data.username;
+    this.name = data.name;
+    this.givenName = data.givenName;
+    this.familyName = data.familyName;
+    this.picture = data.picture;
+    this.clientId = data.clientId;
+    this.siteId = data.siteId;
+    this.scope = data.scope;
+    this.capabilities = data.capabilities.filter(isValidCapability);
   }
 
-  public isSuperAdmin() {
-    return !!this.permissions?.includes(VISIBILITY.SUPER_ADMIN);
+  /**
+   * Check if user has SYSTEM scope (system admin access).
+   */
+  public isSystemAdmin(): boolean {
+    return this.scope === RoleScope.SYSTEM || this.scope === RoleScope.GLOBAL;
   }
 
-  public isGlobalAdmin() {
-    return (
-      this.isSuperAdmin() || !!this.permissions?.includes(VISIBILITY.GLOBAL)
-    );
+  /**
+   * Check if user has at least GLOBAL scope (can access all clients).
+   */
+  public isGlobalAdmin(): boolean {
+    return isScopeAtLeast(this.scope, RoleScope.GLOBAL);
   }
 
-  private getVisibility(): TVisibility {
-    if (this.permissions) {
-      const visibilityPermissions = new Set<TVisibility>();
-      this.permissions
-        .filter((p) => p.startsWith('visibility:'))
-        .forEach((p) =>
-          visibilityPermissions.add(
-            p.replace('visibility:', '') as TVisibility,
-          ),
-        );
-
-      // Return the most permissive visibility level.
-      for (const visibility of VISIBILITY_VALUES) {
-        if (visibilityPermissions.has(visibility)) {
-          return visibility;
-        }
-      }
-    }
-
-    return 'self';
+  /**
+   * Check if user has at least CLIENT scope (can access all sites in their client).
+   */
+  public isClientAdmin(): boolean {
+    return isScopeAtLeast(this.scope, RoleScope.CLIENT);
   }
 
-  public hasPermissions(
-    permissions: TPermission[],
-    mode: 'any' | 'all' = 'all',
-  ) {
-    if (mode === 'any') {
-      return permissions.some((p) => this.permissions?.includes(p) ?? false);
-    } else {
-      return permissions.every((p) => this.permissions?.includes(p) ?? false);
-    }
+  /**
+   * Check if user's scope is at least as permissive as the required scope.
+   *
+   * @example
+   * user.scopeAllows(RoleScope.CLIENT) // true if user has CLIENT, GLOBAL, or SYSTEM scope
+   */
+  public scopeAllows(required: TScope): boolean {
+    return isScopeAtLeast(this.scope, required);
   }
 
-  public hasPermission(permission: TPermission) {
-    return this.permissions?.includes(permission) ?? false;
+  /**
+   * Check if user has a specific capability.
+   */
+  public hasCapability(capability: TCapability): boolean {
+    return this.capabilities.includes(capability);
   }
 
-  public can<A extends TAction>(action: A, resource: ActionableResource<A>) {
-    const hasExact = this.hasPermission(
-      getResourcePermission(action, resource),
-    );
-    if (['create', 'update', 'read', 'delete'].includes(action)) {
-      return hasExact || this.canManage(resource);
-    }
-    return hasExact;
+  /**
+   * Check if user has any of the specified capabilities.
+   */
+  public hasAnyCapability(capabilities: TCapability[]): boolean {
+    return capabilities.some((c) => this.capabilities.includes(c));
   }
 
-  public canManage(resource: ActionableResource<'manage'>) {
-    return this.can('manage', resource);
-  }
-
-  public canCreate(resource: ActionableResource<'create'>) {
-    return this.canManage(resource) || this.can('create', resource);
-  }
-
-  public canRead(resource: TResource) {
-    return this.canManage(resource) || this.can('read', resource);
-  }
-
-  public canUpdate(resource: TResource) {
-    return this.canManage(resource) || this.can('update', resource);
-  }
-
-  public canDelete(resource: TResource) {
-    return this.canManage(resource) || this.can('delete', resource);
+  /**
+   * Check if user has all of the specified capabilities.
+   */
+  public hasAllCapabilities(capabilities: TCapability[]): boolean {
+    return capabilities.every((c) => this.capabilities.includes(c));
   }
 }
 
-export const buildUserFromToken = (payload: unknown) =>
-  new StatelessUser(keycloakTokenPayloadSchema.parse(payload));
+/**
+ * Build a minimal user from a JWT token payload.
+ *
+ * Note: This creates a user with NO capabilities and SELF scope.
+ * The actual capabilities and scope should be loaded from the database
+ * via PersonClientAccess and merged in by the auth layer.
+ */
+export const buildUserFromToken = (payload: unknown): StatelessUserData => {
+  const parsed = keycloakTokenPayloadSchema.parse(payload);
+  return {
+    idpId: parsed.sub,
+    email: parsed.email,
+    username: parsed.preferred_username,
+    name: parsed.name,
+    givenName: parsed.given_name,
+    familyName: parsed.family_name,
+    picture: parsed.picture,
+    clientId: parsed.client_id,
+    siteId: parsed.site_id,
+    // Default to no access - will be populated from database
+    scope: RoleScope.SELF,
+    capabilities: [],
+  };
+};

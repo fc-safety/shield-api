@@ -14,10 +14,7 @@ import {
 } from '@nestjs/common';
 import { format } from 'date-fns';
 import type { Response } from 'express';
-import {
-  CheckPolicies,
-  CheckResourcePermissions,
-} from 'src/auth/policies.guard';
+import { CheckAnyCapability, CheckCapability } from 'src/auth/policies.guard';
 import { streamToCsv, streamToNdJson } from 'src/common/stream-utils';
 import { INSPECTION_TOKEN_HEADER } from '../inspections/constants/headers';
 import { BulkGenerateSignedTagUrlDto } from './dto/bulk-generate-signed-tag-url.dto';
@@ -29,11 +26,12 @@ import { UpdateTagDto } from './dto/update-tag.dto';
 import { TagsService } from './tags.service';
 
 @Controller('tags')
-@CheckResourcePermissions('tags')
+@CheckAnyCapability('manage-assets', 'perform-inspections', 'program-tags')
 export class TagsController {
   constructor(private readonly tagsService: TagsService) {}
 
   @Post()
+  @CheckCapability('manage-assets')
   create(@Body() createTagDto: CreateTagDto) {
     return this.tagsService.create(createTagDto);
   }
@@ -64,17 +62,19 @@ export class TagsController {
   }
 
   @Patch(':id')
+  @CheckCapability('manage-assets')
   update(@Param('id') id: string, @Body() updateTagDto: UpdateTagDto) {
     return this.tagsService.update(id, updateTagDto);
   }
 
   @Delete(':id')
+  @CheckCapability('manage-assets')
   remove(@Param('id') id: string) {
     return this.tagsService.remove(id);
   }
 
   @HttpCode(HttpStatus.OK)
-  @CheckPolicies(({ user }) => user.can('program', 'tags'))
+  @CheckCapability('program-tags')
   @Post('generate-signed-url')
   generateSignedUrlSingle(
     @Body() generateSignedTagUrlDto: GenerateSignedTagUrlDto,
@@ -83,7 +83,7 @@ export class TagsController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @CheckPolicies(({ user }) => user.can('program', 'tags'))
+  @CheckCapability('program-tags')
   @Post('bulk-generate-signed-url/json')
   async generateSignedUrlBulkJson(
     @Body() dto: BulkGenerateSignedTagUrlDto,
@@ -96,7 +96,7 @@ export class TagsController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @CheckPolicies(({ user }) => user.can('program', 'tags'))
+  @CheckCapability('program-tags')
   @Post('bulk-generate-signed-url/csv')
   async generateSignedUrlBulkCsv(
     @Body() dto: BulkGenerateSignedTagUrlDto,
@@ -109,7 +109,7 @@ export class TagsController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @CheckPolicies(({ user }) => user.can('register', 'tags'))
+  @CheckCapability('program-tags')
   @Post('register-tag')
   registerTag(
     @Headers(INSPECTION_TOKEN_HEADER) inspectionToken: string,

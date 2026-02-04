@@ -5,7 +5,7 @@ import type { NotificationTemplateId } from './lib/templates';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
-@CheckPolicies(({ user }) => user.isSuperAdmin())
+@CheckPolicies(({ user }) => user.isSystemAdmin())
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 

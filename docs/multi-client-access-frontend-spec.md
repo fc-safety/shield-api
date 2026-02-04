@@ -10,7 +10,7 @@ Users can now belong to multiple clients, each with a different role and site as
 
 1. **Client Switching** - Users can switch between accessible clients via a header
 2. **Client Access Management** - Admins can grant/revoke access to clients for users
-3. **Database Roles** - Permissions are managed via roles stored in the database
+3. **Roles & Permissions** - Permissions are managed via roles (supports both Keycloak and database modes via `USE_DATABASE_PERMISSIONS` flag)
 
 ---
 
@@ -46,6 +46,68 @@ x-client-id: <client-external-id>
 - The `x-client-id` value is the **external ID** of the client (not the internal UUID)
 - When switching clients, your permissions come from the role assigned in your `PersonClientAccess` record for that client
 - Your assigned site for the switched client may differ from your primary site
+
+---
+
+## Current User Endpoint
+
+### Get Current User
+
+Returns the authenticated user's identity and permissions. This combines JWT token data with database-derived role/permissions.
+
+```http
+GET /auth/me
+Authorization: Bearer <token>
+x-client-id: <client-external-id>  (optional)
+```
+
+**Response:** `200 OK`
+```json
+{
+  "idpId": "keycloak-user-uuid",
+  "email": "user@example.com",
+  "username": "jsmith",
+  "name": "John Smith",
+  "givenName": "John",
+  "familyName": "Smith",
+  "picture": "https://example.com/avatar.jpg",
+  "personId": "person-uuid",
+  "clientId": "client-uuid",
+  "siteId": "site-uuid",
+  "scope": "CLIENT",
+  "capabilities": ["read-assets", "write-assets", "read-inspections", "create-inspections"],
+  "hasMultiClientScope": false,
+  "hasMultiSiteScope": true
+}
+```
+
+**Field Descriptions:**
+
+| Field | Source | Description |
+|-------|--------|-------------|
+| `idpId` | JWT | Keycloak user ID |
+| `email` | JWT | User's email address |
+| `username` | JWT | Keycloak username |
+| `name` | JWT | Full display name |
+| `givenName` | JWT | First name |
+| `familyName` | JWT | Last name |
+| `picture` | JWT | Avatar URL (if set) |
+| `personId` | Database | Internal Person record ID |
+| `clientId` | Database | Active client UUID (reflects `x-client-id` if switching) |
+| `siteId` | Database | Active site UUID for current client context |
+| `scope` | Database | Role scope: `SELF`, `SITE`, `CLIENT`, `GLOBAL`, or `SYSTEM` |
+| `capabilities` | Database | Array of capability strings the user has |
+| `hasMultiClientScope` | Computed | `true` if scope is `GLOBAL` or `SYSTEM` |
+| `hasMultiSiteScope` | Computed | `true` if scope is `CLIENT` or higher |
+
+**Usage:**
+
+Call this endpoint after authentication to:
+1. Get user identity info for display (name, email, avatar)
+2. Get the user's current permissions/capabilities for UI authorization
+3. Determine if the user can access multiple clients or sites
+
+When using the `x-client-id` header, the response reflects the switched client's context (clientId, siteId, scope, capabilities).
 
 ---
 
@@ -160,93 +222,170 @@ Authorization: Bearer <token>
 
 ---
 
-## Database Roles Endpoints
+## Roles Endpoints
 
-Base path: `/db-roles`
+Base path: `/roles`
 
-**All endpoints require Super Admin authorization.**
+**All endpoints require Super Admin authorization** (except `GET /roles`, `GET /roles/:id`, `GET /roles/capabilities`, and `GET /roles/scopes` which also allow users with the `manage-users` capability).
 
 ### List Roles
 
 ```http
-GET /db-roles
-GET /db-roles?clientId=<client-uuid>
+GET /roles
 Authorization: Bearer <token>
 ```
-
-**Query Parameters:**
-- `clientId` (optional) - Filter roles by client
 
 **Response:** `200 OK`
 ```json
 [
   {
     "id": "role-uuid",
+    "groupId": "role-uuid",
     "name": "Site Manager",
     "description": "Manage assets and inspections",
-    "isSystem": true,
-    "clientId": null,
+    "scope": "CLIENT",
+    "capabilities": ["perform-inspections", "manage-assets", "resolve-alerts", "view-reports"],
+    "notificationGroups": ["alerts", "inspections"],
     "createdOn": "2024-01-01T00:00:00Z",
-    "permissions": [
-      { "id": "perm-uuid", "permission": "visibility:client-sites" },
-      { "id": "perm-uuid", "permission": "read:assets" },
-      { "id": "perm-uuid", "permission": "create:inspections" }
-    ],
-    "_count": {
-      "personClientAccess": 5
-    }
+    "updatedOn": "2024-01-15T10:00:00Z",
+    "clientAssignable": true,
+    "clientId": null
   }
 ]
 ```
 
 **Notes:**
-- Roles with `clientId: null` are global roles (available to all clients)
-- Roles with a `clientId` are client-specific
-- `isSystem: true` roles cannot be deleted
-- `_count.personClientAccess` shows how many users have this role assigned
+- `clientAssignable: true` roles can be assigned by client admins
+- `clientAssignable: false` roles are only visible/assignable by super admins
+- Roles can be scoped to a specific client via `clientId` field
 
 ### Get Single Role
 
 ```http
-GET /db-roles/:id
+GET /roles/:id
 Authorization: Bearer <token>
 ```
 
-**Response:** `200 OK` - Same structure as list, plus `client` relation if applicable
+**Response:** `200 OK` - Same structure as list
+
+### Get Available Capabilities
+
+```http
+GET /roles/capabilities
+Authorization: Bearer <token>
+```
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "name": "perform-inspections",
+    "label": "Perform Inspections",
+    "description": "Read tags, assets, and questions; create inspection records"
+  },
+  {
+    "name": "manage-assets",
+    "label": "Manage Assets",
+    "description": "Create, edit, and delete assets, consumables, and tags"
+  }
+]
+```
+
+### Get Available Scopes
+
+```http
+GET /roles/scopes
+Authorization: Bearer <token>
+```
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "name": "SYSTEM",
+    "label": "System",
+    "description": "Full system access for internal operations"
+  },
+  {
+    "name": "GLOBAL",
+    "label": "Global (All Clients)",
+    "description": "Access to all clients and all data"
+  },
+  {
+    "name": "CLIENT",
+    "label": "Client (All Sites)",
+    "description": "Access to all sites within the assigned client"
+  },
+  {
+    "name": "SITE_GROUP",
+    "label": "Site Group",
+    "description": "Access to a specific group of sites"
+  },
+  {
+    "name": "SITE",
+    "label": "Single Site",
+    "description": "Access limited to a single site"
+  },
+  {
+    "name": "SELF",
+    "label": "Self Only",
+    "description": "Access limited to own records only"
+  }
+]
+```
+
+### Get Notification Groups
+
+```http
+GET /roles/notification-groups
+Authorization: Bearer <token>
+```
+
+**Response:** `200 OK` - Array of notification group objects
 
 ### Create Role
 
 ```http
-POST /db-roles
+POST /roles
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
   "name": "Custom Inspector",
-  "description": "Read-only access to inspections",
-  "clientId": "client-uuid",
-  "isSystem": false
+  "description": "Inspection and reporting access",
+  "scope": "SITE",
+  "capabilities": ["perform-inspections", "view-reports"],
+  "clientAssignable": true,
+  "notificationGroups": ["alerts"],
+  "clientId": "client-uuid"
 }
 ```
 
 **Fields:**
-- `name` (required) - Role name, must be unique within client scope
+- `name` (required) - Role name, must be unique
 - `description` (optional) - Human-readable description
-- `clientId` (optional) - If omitted, creates a global role
-- `isSystem` (optional, default: false) - System roles cannot be deleted
+- `scope` (optional, default: `SITE`) - Data visibility scope
+- `capabilities` (optional, default: `[]`) - Array of capability strings
+- `clientAssignable` (optional, default: `false`) - Can client admins assign this role?
+- `notificationGroups` (optional) - Array of notification group IDs
+- `clientId` (optional) - Scope role to a specific client
 
 **Response:** `201 Created`
 
 ### Update Role
 
 ```http
-PATCH /db-roles/:id
+PATCH /roles/:id
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
   "name": "Updated Name",
-  "description": "Updated description"
+  "description": "Updated description",
+  "scope": "CLIENT",
+  "capabilities": ["perform-inspections", "manage-assets", "view-reports"],
+  "clientAssignable": false,
+  "notificationGroups": ["alerts", "inspections"]
 }
 ```
 
@@ -255,84 +394,70 @@ Content-Type: application/json
 ### Delete Role
 
 ```http
-DELETE /db-roles/:id
+DELETE /roles/:id
 Authorization: Bearer <token>
 ```
 
 **Validations:**
-- Cannot delete system roles (`isSystem: true`)
-- Cannot delete roles assigned to users (`_count.personClientAccess > 0`)
+- Cannot delete system roles
+- Cannot delete roles assigned to users
 
 **Response:** `204 No Content`
 
-### Add Permissions to Role
+### Update Notification Groups
 
 ```http
-POST /db-roles/:id/permissions
+POST /roles/:id/update-notification-groups
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "permissions": [
-    "read:assets",
-    "create:inspections",
-    "visibility:single-site"
-  ]
+  "notificationGroupIds": ["alerts", "inspections"]
 }
 ```
-
-**Notes:**
-- Duplicate permissions are silently ignored
-- Returns the full updated role with all permissions
-
-**Response:** `200 OK`
-
-### Remove Permission from Role
-
-```http
-DELETE /db-roles/:id/permissions/:permission
-Authorization: Bearer <token>
-```
-
-**Example:** `DELETE /db-roles/abc123/permissions/read:assets`
 
 **Response:** `204 No Content`
 
 ---
 
-## Permission Strings
+## Scope
 
-Permissions follow the format `{category}:{action}`.
+Scope controls **how much data** a user can see. Each role has exactly one scope.
 
-### Visibility Permissions
+| Scope | Description |
+|-------|-------------|
+| `SYSTEM` | Full system access (FC Safety internal operations) |
+| `GLOBAL` | Access to all clients and all data |
+| `CLIENT` | Access to all sites within the assigned client |
+| `SITE_GROUP` | Access to a specific group of sites |
+| `SITE` | Access limited to a single site |
+| `SELF` | Access limited to own records only |
 
-Control data access scope. Each role should have exactly one visibility permission.
+**Scope Hierarchy** (most to least permissive): `SYSTEM` > `GLOBAL` > `CLIENT` > `SITE_GROUP` > `SITE` > `SELF`
 
-| Permission | Description |
-|------------|-------------|
-| `visibility:super-admin` | Full system access across all clients |
-| `visibility:global` | Cross-client visibility |
-| `visibility:client-sites` | All sites within assigned client |
-| `visibility:site-group` | Grouped sites only |
-| `visibility:single-site` | Single site only |
-| `visibility:self` | Own records only |
+---
 
-### Action Permissions
+## Capabilities
 
-Control what operations users can perform. Examples:
+Capabilities control **what actions** a user can perform. Roles can have multiple capabilities.
 
-| Permission | Description |
-|------------|-------------|
-| `read:assets` | View assets |
-| `create:assets` | Create new assets |
-| `update:assets` | Modify assets |
-| `delete:assets` | Remove assets |
-| `read:inspections` | View inspections |
-| `create:inspections` | Perform inspections |
-| `read:alerts` | View alerts |
-| `resolve:alerts` | Mark alerts as resolved |
-| `program:tags` | Program NFC tags |
-| `register:tags` | Register tags to assets |
+| Capability | Label | Description |
+|------------|-------|-------------|
+| `perform-inspections` | Perform Inspections | Read tags, assets, and questions; create inspection records |
+| `submit-requests` | Submit Requests | Create product and supply requests |
+| `manage-assets` | Manage Assets | Create, edit, and delete assets, consumables, and tags |
+| `manage-routes` | Manage Inspection Routes | Create and edit inspection routes and schedules |
+| `resolve-alerts` | Resolve Alerts | Review and resolve alerts from failed inspections |
+| `view-reports` | View Reports | Access compliance reports and statistics |
+| `manage-users` | Manage Users | Create users, assign roles, and send invitations |
+| `configure-products` | Configure Products | Manage product catalog, categories, and questions |
+| `approve-requests` | Approve Requests | Approve or reject product and supply requests |
+| `program-tags` | Program Tags | Generate tag URLs and program NFC tags (global resource) |
+
+**Design Philosophy:**
+- Capabilities are high-level bundles of related operations
+- Unlike CRUD-style permissions (`read:assets`, `create:assets`), capabilities represent what a user can *do*
+- This simplifies role management for administrators
 
 ---
 
@@ -340,18 +465,30 @@ Control what operations users can perform. Examples:
 
 The following system roles are seeded and cannot be deleted:
 
-| Role | Visibility | Description |
-|------|------------|-------------|
-| Super Admin | `super-admin` | Full system access |
-| Global Admin | `global` | Cross-client management |
-| Client Admin | `client-sites` | Full client management |
-| Site Manager | `client-sites` | Site-level management |
-| Inspector | `single-site` | Perform inspections |
-| Viewer | `single-site` | Read-only access |
+| Role | Scope | Capabilities | Client Assignable |
+|------|-------|--------------|-------------------|
+| Super Admin | `SYSTEM` | All capabilities | No |
+| Client Admin | `CLIENT` | perform-inspections, submit-requests, manage-assets, manage-routes, resolve-alerts, view-reports, manage-users, approve-requests, program-tags | Yes |
+| Site Manager | `CLIENT` | perform-inspections, submit-requests, manage-assets, manage-routes, resolve-alerts, view-reports, program-tags | Yes |
+| Inspector | `SITE` | perform-inspections, submit-requests | Yes |
+| Viewer | `SITE` | view-reports | Yes |
+| Product Manager | `GLOBAL` | configure-products | No |
+| Tag Programmer | `GLOBAL` | program-tags | No |
+
+**Notes:**
+- "Client Assignable" roles can be assigned by client admins to their users
+- Roles with `GLOBAL` or `SYSTEM` scope can only be assigned by Super Admins
 
 ---
 
 ## Frontend Implementation Notes
+
+### Initial App Load
+
+1. After authentication, call `GET /auth/me` to get user identity and permissions
+2. Store user info for display (name, email, avatar)
+3. Store capabilities for UI authorization (show/hide features based on permissions)
+4. Check `hasMultiClientScope` and/or call `GET /client-access/me` to determine if client switching is available
 
 ### Client Switcher Component
 
@@ -359,28 +496,36 @@ The following system roles are seeded and cannot be deleted:
 2. Display a client picker if user has multiple entries
 3. Store selected client's `externalId`
 4. Include `x-client-id: <externalId>` header on all API requests when switched
+5. After switching, call `GET /auth/me` again to refresh permissions for the new client context
 
 ### Permissions from Response
 
-When `USE_DATABASE_PERMISSIONS` is enabled on the backend:
-- Permissions come from the user's assigned role (via `PersonClientAccess`)
-- The `PersonRepresentation` includes a `permissions` array
-- Use these permissions for UI authorization (show/hide features)
+The `GET /auth/me` endpoint returns the user's capabilities based on their role:
+- `capabilities` array contains permission strings like `read-assets`, `create-inspections`
+- `scope` indicates visibility level: `SELF`, `SITE`, `CLIENT`, `GLOBAL`, `SYSTEM`
+- Use these for UI authorization (show/hide features, enable/disable actions)
 
 ### Admin UI for Access Management
 
 1. **User Access Panel:**
-   - List user's current client access entries
-   - Add access: Select client → site → role
-   - Edit access: Change site or role
-   - Remove access: Revoke with confirmation
+   - List user's current client access entries (`GET /client-access/persons/:personId`)
+   - Add access: Select client → site → role (`POST /client-access/persons/:personId`)
+   - Edit access: Change site or role (`PATCH /client-access/:id`)
+   - Remove access: Revoke with confirmation (`DELETE /client-access/:id`)
 
 2. **Role Management Panel:**
-   - List all roles (filter by client)
-   - Create custom roles
-   - Edit role name/description
-   - Manage permissions (add/remove)
-   - Show assignment count before delete
+   - List all roles (`GET /roles`)
+   - Get available capabilities and scopes (`GET /roles/capabilities`, `GET /roles/scopes`)
+   - Create custom roles with scope and capabilities (`POST /roles`)
+   - Edit role including scope/capabilities (`PATCH /roles/:id`)
+   - Manage notification groups (`POST /roles/:id/update-notification-groups`)
+   - Delete roles (`DELETE /roles/:id`) - show warning if role is assigned to users
+
+3. **Role Editor UI:**
+   - **Scope selector**: Dropdown with scope options (from `GET /roles/scopes`)
+   - **Capabilities checkboxes**: Multi-select from available capabilities (from `GET /roles/capabilities`)
+   - Show labels and descriptions for user-friendly display
+   - Warn if granting `GLOBAL`/`SYSTEM` scope to a client-assignable role
 
 ### Error Handling
 
@@ -391,6 +536,7 @@ When `USE_DATABASE_PERMISSIONS` is enabled on the backend:
 | `403 site_not_active` | Show "site inactive" message |
 | `400` on grant access | Show validation error (duplicate, invalid site) |
 | `400` on delete role | Show "role in use" or "system role" message |
+| `400` on create/update role | Show validation error for invalid scope or capabilities |
 
 ---
 

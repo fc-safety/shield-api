@@ -146,7 +146,7 @@ export class ClientsService {
     const cacheKey = `client-access:${idpId}:${clientExternalId}`;
     const cachedValue = await this.cache.get<string | null>(cacheKey);
 
-    if (cachedValue !== undefined) {
+    if (!isNil(cachedValue)) {
       return cachedValue;
     }
 
@@ -906,15 +906,14 @@ export class ClientsService {
   ) {
     const prisma = await this.prisma.build();
     const currentUser = prisma.$currentUser();
-    const hasMultiSiteVisibility =
-      prisma.$mode === 'cron' ||
-      (currentUser && currentUser.hasMultiSiteVisibility);
+    const hasMultiSiteScope =
+      prisma.$mode === 'cron' || (currentUser && currentUser.hasMultiSiteScope);
 
     const allowedSiteIds = currentUser
       ? currentUser.allowedSiteIdsStr.split(',')
       : [];
     let allowedSiteExternalIds: string[] = [];
-    if (!hasMultiSiteVisibility && allowedSiteIds.length > 0) {
+    if (!hasMultiSiteScope && allowedSiteIds.length > 0) {
       const allowedSites = await prisma.site.findMany({
         where: {
           id: {
@@ -938,7 +937,7 @@ export class ClientsService {
       },
     ];
 
-    if (!hasMultiSiteVisibility) {
+    if (!hasMultiSiteScope) {
       queryFilters.push({
         q: {
           key: 'site_id',

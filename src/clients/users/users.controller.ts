@@ -12,10 +12,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import {
-  CheckPolicies,
-  CheckResourcePermissions,
-} from 'src/auth/policies.guard';
+import { CheckCapability } from 'src/auth/policies.guard';
 import { AddRoleDto } from './dto/add-role.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -27,7 +24,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
-@CheckResourcePermissions('users')
+@CheckCapability('manage-users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -70,7 +67,6 @@ export class UsersController {
    * @deprecated Use PUT /users/:id/roles or POST /users/:id/roles instead
    */
   @Post(':id/assign-role')
-  @CheckPolicies(({ user }) => user.canUpdate('users'))
   @HttpCode(HttpStatus.NO_CONTENT)
   async assignRole(
     @Param('id') id: string,
@@ -85,7 +81,6 @@ export class UsersController {
    * Supports multi-role assignment.
    */
   @Post(':id/roles')
-  @CheckPolicies(({ user }) => user.canUpdate('users'))
   async addRole(
     @Param('id') id: string,
     @Body() addRoleDto: AddRoleDto,
@@ -99,7 +94,6 @@ export class UsersController {
    * Other roles remain intact.
    */
   @Delete(':id/roles/:roleId')
-  @CheckPolicies(({ user }) => user.canUpdate('users'))
   async removeRole(
     @Param('id') id: string,
     @Param('roleId') roleId: string,
@@ -113,7 +107,6 @@ export class UsersController {
    * Removes all existing roles and assigns the specified ones.
    */
   @Put(':id/roles')
-  @CheckPolicies(({ user }) => user.canUpdate('users'))
   @HttpCode(HttpStatus.NO_CONTENT)
   async setRoles(
     @Param('id') id: string,
@@ -124,7 +117,6 @@ export class UsersController {
   }
 
   @Post(':id/reset-password')
-  @CheckPolicies(({ user }) => user.canUpdate('users'))
   resetPassword(
     @Param('id') id: string,
     @Body() resetPasswordDto: ResetPasswordDto,
@@ -134,7 +126,6 @@ export class UsersController {
   }
 
   @Post(':id/send-reset-password-email')
-  @CheckPolicies(({ user }) => user.can('notify', 'users'))
   sendResetPasswordEmail(
     @Param('id') id: string,
     @Query() query: SendResetPasswordQueryDto,

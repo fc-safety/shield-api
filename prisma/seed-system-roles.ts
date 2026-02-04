@@ -1,5 +1,5 @@
 /**
- * Seed script for system roles that mirror common Keycloak group permissions.
+ * Seed script for system roles with capabilities and scope.
  *
  * Usage:
  *   npx ts-node prisma/seed-system-roles.ts
@@ -9,7 +9,8 @@
 
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as dotenv from 'dotenv';
-import { ACTION_PERMISSIONS, VISIBILITY } from 'src/auth/permissions';
+import { CAPABILITIES, TCapability } from 'src/auth/capabilities';
+import { RoleScope } from 'src/auth/scope';
 import { PrismaClient } from 'src/generated/prisma/client';
 
 dotenv.config();
@@ -22,97 +23,96 @@ const prisma = new PrismaClient({
 });
 
 /**
- * System roles with their associated permissions.
- * These mirror common Keycloak group configurations.
+ * System roles with their associated scope and capabilities.
  */
-const SYSTEM_ROLES = [
+const DEFAULT_ROLES: Array<{
+  name: string;
+  description: string;
+  isSystem: boolean;
+  scope: RoleScope;
+  capabilities: TCapability[];
+  clientAssignable: boolean;
+}> = [
   {
     name: 'Super Admin',
     description:
       'Full system access across all clients. Can manage all resources and users.',
-    permissions: [VISIBILITY.SUPER_ADMIN, ...ACTION_PERMISSIONS],
-  },
-  {
-    name: 'Global Admin',
-    description:
-      'Cross-client visibility with full resource management capabilities.',
-    permissions: [VISIBILITY.GLOBAL, ...ACTION_PERMISSIONS],
+    isSystem: true,
+    scope: RoleScope.SYSTEM,
+    capabilities: Object.values(CAPABILITIES),
+    clientAssignable: false,
   },
   {
     name: 'Client Admin',
     description:
       'Full access within a single client, including all sites and resources.',
-    permissions: [
-      VISIBILITY.CLIENT_SITES,
-      ...ACTION_PERMISSIONS.filter(
-        (p) =>
-          !p.includes('clients') &&
-          !p.includes('ansi-categories') &&
-          !p.includes('manufacturers'),
-      ),
+    isSystem: false,
+    scope: RoleScope.CLIENT,
+    capabilities: [
+      CAPABILITIES.PERFORM_INSPECTIONS,
+      CAPABILITIES.SUBMIT_REQUESTS,
+      CAPABILITIES.MANAGE_ASSETS,
+      CAPABILITIES.MANAGE_ROUTES,
+      CAPABILITIES.RESOLVE_ALERTS,
+      CAPABILITIES.VIEW_REPORTS,
+      CAPABILITIES.MANAGE_USERS,
+      CAPABILITIES.APPROVE_REQUESTS,
+      CAPABILITIES.REGISTER_TAGS,
     ],
+    clientAssignable: true,
   },
   {
     name: 'Site Manager',
     description:
       'Manage assets, inspections, and alerts for assigned sites within a client.',
-    permissions: [
-      VISIBILITY.CLIENT_SITES,
-      'read:assets',
-      'create:assets',
-      'update:assets',
-      'read:consumables',
-      'create:consumables',
-      'update:consumables',
-      'read:tags',
-      'program:tags',
-      'register:tags',
-      'read:inspections',
-      'create:inspections',
-      'read:inspection-routes',
-      'create:inspection-routes',
-      'update:inspection-routes',
-      'read:alerts',
-      'resolve:alerts',
-      'read:people',
-      'read:sites',
-      'read:products',
-      'read:product-categories',
-      'read:manufacturers',
-      'setup:assets',
+    isSystem: false,
+    scope: RoleScope.CLIENT,
+    capabilities: [
+      CAPABILITIES.PERFORM_INSPECTIONS,
+      CAPABILITIES.SUBMIT_REQUESTS,
+      CAPABILITIES.MANAGE_ASSETS,
+      CAPABILITIES.MANAGE_ROUTES,
+      CAPABILITIES.RESOLVE_ALERTS,
+      CAPABILITIES.VIEW_REPORTS,
+      CAPABILITIES.REGISTER_TAGS,
     ],
+    clientAssignable: true,
   },
   {
     name: 'Inspector',
     description: 'Can perform inspections and view assets at assigned site(s).',
-    permissions: [
-      VISIBILITY.SINGLE_SITE,
-      'read:assets',
-      'read:consumables',
-      'read:tags',
-      'read:inspections',
-      'create:inspections',
-      'read:inspection-routes',
-      'read:alerts',
-      'read:sites',
-      'read:products',
-      'read:product-categories',
+    isSystem: false,
+    scope: RoleScope.SITE,
+    capabilities: [
+      CAPABILITIES.PERFORM_INSPECTIONS,
+      CAPABILITIES.SUBMIT_REQUESTS,
     ],
+    clientAssignable: true,
   },
   {
     name: 'Viewer',
     description: 'Read-only access to assets and inspections at assigned site.',
-    permissions: [
-      VISIBILITY.SINGLE_SITE,
-      'read:assets',
-      'read:consumables',
-      'read:tags',
-      'read:inspections',
-      'read:alerts',
-      'read:sites',
-      'read:products',
-      'read:product-categories',
-    ],
+    isSystem: false,
+    scope: RoleScope.SITE,
+    capabilities: [CAPABILITIES.VIEW_REPORTS],
+    clientAssignable: true,
+  },
+  {
+    name: 'Product Manager',
+    description:
+      'Can configure products, categories, and manufacturers globally.',
+    isSystem: false,
+    scope: RoleScope.GLOBAL,
+    capabilities: [CAPABILITIES.CONFIGURE_PRODUCTS],
+    clientAssignable: false,
+  },
+  {
+    name: 'Tag Programmer',
+    description: 'Can program and register NFC tags.',
+    isSystem: false,
+    scope: RoleScope.GLOBAL,
+    capabilities: [CAPABILITIES.PROGRAM_TAGS],
+    clientAssignable: false,
   },
 ];
 
@@ -121,7 +121,7 @@ async function seedSystemRoles() {
 
   await prisma.$executeRaw`SELECT set_config('app.bypass_rls', 'on', FALSE)`;
 
-  for (const roleData of SYSTEM_ROLES) {
+  for (const roleData of DEFAULT_ROLES) {
     console.log(`  Creating role: ${roleData.name}`);
 
     // Check if global role already exists (null clientId doesn't work well with unique constraint)
@@ -138,48 +138,31 @@ async function seedSystemRoles() {
         where: { id: role.id },
         data: {
           description: roleData.description,
-          isSystem: true,
+          isSystem: roleData.isSystem,
+          scope: roleData.scope,
+          capabilities: roleData.capabilities,
+          clientAssignable: roleData.clientAssignable,
         },
       });
+      console.log(`    Updated existing role`);
     } else {
       // Create new role
       role = await prisma.role.create({
         data: {
           name: roleData.name,
           description: roleData.description,
-          isSystem: true,
+          isSystem: roleData.isSystem,
           clientId: null,
+          scope: roleData.scope,
+          capabilities: roleData.capabilities,
+          clientAssignable: roleData.clientAssignable,
         },
       });
-    }
-
-    // Get existing permissions
-    const existingPermissions = await prisma.rolePermission.findMany({
-      where: { roleId: role.id },
-      select: { permission: true },
-    });
-    const existingPermissionSet = new Set(
-      existingPermissions.map((p) => p.permission),
-    );
-
-    // Add missing permissions
-    const permissionsToAdd = roleData.permissions.filter(
-      (p) => !existingPermissionSet.has(p),
-    );
-
-    if (permissionsToAdd.length > 0) {
-      await prisma.rolePermission.createMany({
-        data: permissionsToAdd.map((permission) => ({
-          roleId: role.id,
-          permission,
-        })),
-        skipDuplicates: true,
-      });
-      console.log(`    Added ${permissionsToAdd.length} permissions`);
+      console.log(`    Created new role`);
     }
 
     console.log(
-      `    Role ${roleData.name} has ${roleData.permissions.length} total permissions`,
+      `    Role ${roleData.name}: scope=${roleData.scope}, ${roleData.capabilities.length} capabilities`,
     );
   }
 
@@ -201,4 +184,4 @@ if (require.main === module) {
     });
 }
 
-export { seedSystemRoles, SYSTEM_ROLES };
+export { seedSystemRoles, DEFAULT_ROLES as SYSTEM_ROLES };

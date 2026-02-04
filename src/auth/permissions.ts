@@ -100,7 +100,7 @@ const prismaResources = [
   'ansi-categories',
 ] as const satisfies Pluralize<CamelToKebab<Prisma.ModelName>>[];
 
-const resources = [...prismaResources, 'users'] as const;
+const resources = [...prismaResources, 'users', 'invitations'] as const;
 
 const readonlyResources: (typeof resources)[number][] = ['alerts'];
 

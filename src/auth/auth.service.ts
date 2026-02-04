@@ -8,10 +8,17 @@ import { isBefore } from 'date-fns';
 import { IncomingMessage } from 'http';
 import { Jwt, TokenExpiredError } from 'jsonwebtoken';
 import { expressJwtSecret } from 'jwks-rsa';
+import { isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { SigningKey } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { buildUserFromToken, StatelessUser } from './user.schema';
+import { TCapability } from './capabilities';
+import { RoleScope, TScope } from './scope';
+import {
+  buildUserFromToken,
+  StatelessUser,
+  StatelessUserData,
+} from './user.schema';
 
 interface ValidateJWTTokenOptions {
   allowPublic?: boolean;
@@ -85,7 +92,18 @@ export class AuthService {
         audience: this.config.get('AUTH_AUDIENCE'),
       });
 
-      const user = buildUserFromToken(payload);
+      // Get basic user data from token
+      const userData = buildUserFromToken(payload);
+
+      // Load capabilities and scope from database
+      const roleData = await this.loadUserRoleFromDatabase(userData);
+
+      // Construct full StatelessUser with capabilities and scope
+      const user = new StatelessUser({
+        ...userData,
+        scope: roleData?.scope ?? RoleScope.SELF,
+        capabilities: roleData?.capabilities ?? [],
+      });
 
       return { isValid: true, user };
     } catch (e) {
@@ -98,6 +116,88 @@ export class AuthService {
       }
 
       return { isValid: false };
+    }
+  }
+
+  /**
+   * Load scope and capabilities from PersonClientAccess.role for the user.
+   * Returns null if no access record exists (user may not be configured yet).
+   */
+  private async loadUserRoleFromDatabase(
+    userData: StatelessUserData,
+  ): Promise<{ scope: TScope; capabilities: TCapability[] } | null> {
+    const prismaBypassRLS = this.prisma.bypassRLS();
+
+    const cacheKey = `user-role:${userData.idpId}:${userData.clientId}`;
+
+    const cached = await this.cache.get<{
+      scope: TScope;
+      capabilities: TCapability[];
+    } | null>(cacheKey);
+    if (!isNil(cached)) {
+      return cached;
+    }
+
+    try {
+      // First, find the Person by idpId
+      const person = await prismaBypassRLS.person.findUnique({
+        where: { idpId: userData.idpId },
+        select: { id: true },
+      });
+
+      if (!person) {
+        // Person doesn't exist yet - will be created on first request
+        await this.cache.set(cacheKey, null, 60 * 1000); // Cache for 1 minute
+        return null;
+      }
+
+      // Find the client by external ID
+      const client = await prismaBypassRLS.client.findUnique({
+        where: { externalId: userData.clientId },
+        select: { id: true },
+      });
+
+      if (!client) {
+        await this.cache.set(cacheKey, null, 60 * 1000);
+        return null;
+      }
+
+      // Find PersonClientAccess with role
+      const access = await prismaBypassRLS.personClientAccess.findFirst({
+        where: {
+          personId: person.id,
+          clientId: client.id,
+        },
+        orderBy: {
+          isPrimary: 'desc',
+        },
+        include: {
+          role: {
+            select: {
+              scope: true,
+              capabilities: true,
+            },
+          },
+        },
+      });
+
+      if (!access) {
+        await this.cache.set(cacheKey, null, 60 * 1000);
+        return null;
+      }
+
+      const result = {
+        scope: access.role.scope,
+        capabilities: access.role.capabilities as TCapability[],
+      };
+
+      // Cache for 1 hour
+      await this.cache.set(cacheKey, result, 60 * 60 * 1000);
+
+      return result;
+    } catch (e) {
+      this.logger.error('Error loading user role from database', e);
+      return null;
     }
   }
 

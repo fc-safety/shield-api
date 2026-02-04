@@ -20,12 +20,14 @@ The multi-client access feature enables users to access multiple clients, with e
 
 ```prisma
 model Role {
-  id          String   @id @default(cuid(2))
-  name        String
-  description String?
-  isSystem    Boolean  @default(false)  // System roles can't be deleted
-  clientId    String?                   // null = global role, set = client-specific
-  permissions RolePermission[]
+  id                 String   @id @default(cuid(2))
+  name               String
+  description        String?
+  isSystem           Boolean  @default(false)  // System roles can't be deleted
+  clientAssignable   Boolean  @default(false)  // Can clients assign this role?
+  notificationGroups String[] @default([])     // Notification group IDs
+  clientId           String?                   // null = global role, set = client-specific
+  permissions        RolePermission[]
 
   @@unique([name, clientId])
 }
@@ -317,23 +319,32 @@ if (!hasAccess) {
 | PATCH | `/client-access/:id` | Update access entry (admin) |
 | DELETE | `/client-access/:id` | Revoke access (admin) |
 
-### Database Roles (`/db-roles`)
+### Roles (`/roles`)
+
+The `/roles` endpoint supports both Keycloak and database-backed roles via the `USE_DATABASE_PERMISSIONS` feature flag.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/db-roles` | List roles (optionally by clientId) |
-| GET | `/db-roles/:id` | Get role with permissions |
-| POST | `/db-roles` | Create role |
-| PATCH | `/db-roles/:id` | Update role |
-| DELETE | `/db-roles/:id` | Delete role (if not system) |
-| POST | `/db-roles/:id/permissions` | Add permissions to role |
-| DELETE | `/db-roles/:id/permissions/:permission` | Remove permission |
+| GET | `/roles` | List all roles |
+| GET | `/roles/:id` | Get role with permissions |
+| GET | `/roles/permissions` | List available permissions |
+| GET | `/roles/notification-groups` | List notification groups |
+| POST | `/roles` | Create role |
+| PATCH | `/roles/:id` | Update role |
+| DELETE | `/roles/:id` | Delete role (if not system) |
+| POST | `/roles/:id/update-permissions` | Update permissions (grant/revoke) |
+| POST | `/roles/:id/update-notification-groups` | Update notification groups |
 
 ## Future Enhancements
 
-1. **Permission Migration**: Move existing Keycloak groups to database roles
-2. **UI Integration**: Client selector dropdown in the application
-3. **Redis Pub/Sub**: Cross-instance cache invalidation
+1. **UI Integration**: Client selector dropdown in the application
+2. **Redis Pub/Sub**: Cross-instance cache invalidation
+
+## Feature Flags
+
+| Flag | Description |
+|------|-------------|
+| `USE_DATABASE_PERMISSIONS` | When `true`, roles and permissions are stored in the database. When `false` or unset, uses Keycloak groups. |
 
 ## Related Files
 
@@ -347,4 +358,4 @@ if (!hasAccess) {
 | `src/clients/people/people.service.ts` | Builds PersonRepresentation with switching |
 | `src/assets/tags/tags.service.ts` | Multi-client tag access check |
 | `src/clients/client-access/` | Client access management API |
-| `src/admin/db-roles/` | Database roles management API |
+| `src/admin/roles/` | Roles management API (supports both Keycloak and database modes) |

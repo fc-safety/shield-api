@@ -8,10 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import {
-  CheckPolicies,
-  CheckResourcePermissions,
-} from 'src/auth/policies.guard';
+import { CheckAnyCapability, CheckCapability } from 'src/auth/policies.guard';
 import { CreateProductRequestDto } from './dto/create-product-request.dto';
 import { QueryProductRequestDto } from './dto/query-product-request.dto';
 import { ReviewProductRequestDto } from './dto/review-product-request.dto';
@@ -20,13 +17,14 @@ import { UpdateProductRequestDto } from './dto/update-product-request.dto';
 import { ProductRequestsService } from './product-requests.service';
 
 @Controller('product-requests')
-@CheckResourcePermissions('product-requests')
+@CheckAnyCapability('submit-requests', 'approve-requests')
 export class ProductRequestsController {
   constructor(
     private readonly productRequestsService: ProductRequestsService,
   ) {}
 
   @Post()
+  @CheckCapability('submit-requests')
   create(@Body() data: CreateProductRequestDto) {
     return this.productRequestsService.create(data);
   }
@@ -42,31 +40,31 @@ export class ProductRequestsController {
   }
 
   @Patch('statuses')
-  @CheckPolicies((context) =>
-    context.user.can('update-status', 'product-requests'),
-  )
+  @CheckCapability('approve-requests')
   updateStatuses(@Body() data: UpdateProductRequestStatusDto) {
     return this.productRequestsService.updateStatuses(data);
   }
 
   @Patch(':id')
+  @CheckCapability('submit-requests')
   update(@Param('id') id: string, @Body() data: UpdateProductRequestDto) {
     return this.productRequestsService.update(id, data);
   }
 
   @Delete(':id')
+  @CheckCapability('submit-requests')
   remove(@Param('id') id: string) {
     return this.productRequestsService.remove(id);
   }
 
   @Delete(':id/cancel')
-  @CheckPolicies((context) => context.user.can('cancel', 'product-requests'))
+  @CheckCapability('submit-requests')
   cancel(@Param('id') id: string) {
     return this.productRequestsService.cancel(id);
   }
 
   @Patch(':id/review')
-  @CheckPolicies((context) => context.user.can('review', 'product-requests'))
+  @CheckCapability('approve-requests')
   review(@Param('id') id: string, @Body() data: ReviewProductRequestDto) {
     return this.productRequestsService.review(id, data);
   }

@@ -7,7 +7,8 @@ import {
 import { ModuleRef, Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './auth.guard';
-import { TPermission, TResource } from './permissions';
+import { TCapability } from './capabilities';
+import { TScope } from './scope';
 import { StatelessUser } from './user.schema';
 
 export interface PolicyHandlerContext {
@@ -35,6 +36,7 @@ export type PolicyHandler<TContext> =
 
 export const CHECK_POLICIES_KEY = 'check_policy';
 export const CHECK_PUBLIC_POLICIES_KEY = 'check_public_policy';
+
 /**
  * A decorator that runs a set of policy handlers.
  *
@@ -54,62 +56,100 @@ export const CheckPublicPolicies = (
   ...handlers: PolicyHandler<PublicPolicyHandlerContext>[]
 ) => SetMetadata(CHECK_PUBLIC_POLICIES_KEY, handlers);
 
+/**
+ * A decorator that checks if the user is authenticated (user object exists).
+ */
 export const CheckIsAuthenticated = () =>
   CheckPolicies((context) => !!context.user);
 
-/**
- * A decorator that checks if the user has the specified permissions.
- *
- * @param permissions - An array of permissions that the user must have.
- * @param mode - Determines the required match for permissions.
- *               'all' means the user must have all specified permissions,
- *               'any' means the user must have at least one of the specified permissions.
- *               Defaults to 'all'.
- */
-export const CheckPermissions = (
-  permissions: TPermission[],
-  mode?: 'all' | 'any',
-) => CheckPolicies((context) => context.user.hasPermissions(permissions, mode));
+// ============================================================================
+// Capability-based decorators
+// ============================================================================
 
 /**
- * A policy handler that checks if the user has the required permissions
- * to perform the specified action on the given resource.
+ * A decorator that checks if the user has a specific capability.
  *
- * @param resource - The resource to check permissions for.
- * @returns A policy handler that takes a PolicyHandlerContext and returns a boolean.
+ * @param capability - The capability required.
+ *
+ * @example
+ * @CheckCapability('manage-assets')
+ * create() { ... }
  */
-export const handleResourcePermissionsPolicy =
-  (resource: TResource) =>
-  ({ request, user }: PolicyHandlerContext) => {
-    switch (request.method) {
-      case 'POST':
-        return user.canCreate(resource);
-      case 'PUT':
-      case 'PATCH':
-        return user.canUpdate(resource);
-      case 'DELETE':
-        return user.canDelete(resource);
-      case 'GET':
-      default:
-        return user.canRead(resource);
-    }
-  };
+export const CheckCapability = (capability: TCapability) =>
+  CheckPolicies(({ user }) => user.hasCapability(capability));
 
 /**
- * A decorator that checks if the user has the required permissions
- * to perform the current action on the given resource.
+ * A decorator that checks if the user has any of the specified capabilities.
  *
- * The permissions are determined by the HTTP method and the resource:
- * - POST: canCreate
- * - PUT/PATCH: canUpdate
- * - DELETE: canDelete
- * - GET: canRead
+ * @param capabilities - Array of capabilities, user needs at least one.
  *
- * @param resource - The resource to check permissions for.
- * @returns A decorator that sets the CHECK_POLICIES_KEY metadata.
+ * @example
+ * @CheckAnyCapability('perform-inspections', 'view-reports')
+ * findAll() { ... }
  */
-export const CheckResourcePermissions = (resource: TResource) =>
-  CheckPolicies(handleResourcePermissionsPolicy(resource));
+export const CheckAnyCapability = (...capabilities: TCapability[]) =>
+  CheckPolicies(({ user }) => user.hasAnyCapability(capabilities));
+
+/**
+ * A decorator that checks if the user has all of the specified capabilities.
+ *
+ * @param capabilities - Array of capabilities, user needs all of them.
+ *
+ * @example
+ * @CheckAllCapabilities('manage-assets', 'manage-routes')
+ * createWithRoute() { ... }
+ */
+export const CheckAllCapabilities = (...capabilities: TCapability[]) =>
+  CheckPolicies(({ user }) => user.hasAllCapabilities(capabilities));
+
+// ============================================================================
+// Scope-based decorators
+// ============================================================================
+
+/**
+ * A decorator that checks if the user's scope is at least as permissive as required.
+ *
+ * Scope hierarchy (most to least permissive):
+ * SYSTEM > GLOBAL > CLIENT > SITE_GROUP > SITE > SELF
+ *
+ * @param scope - The minimum required scope.
+ *
+ * @example
+ * @CheckScope('CLIENT')
+ * findAllSites() { ... }  // Requires CLIENT, GLOBAL, or SYSTEM scope
+ */
+export const CheckScope = (scope: TScope) =>
+  CheckPolicies(({ user }) => user.scopeAllows(scope));
+
+/**
+ * A decorator that checks if the user is a super admin (SYSTEM or GLOBAL scope).
+ *
+ * @example
+ * @CheckSuperAdmin()
+ * dangerousOperation() { ... }
+ */
+export const CheckSystemAdmin = () =>
+  CheckPolicies(({ user }) => user.isSystemAdmin());
+
+/**
+ * A decorator that checks if the user is a global admin (GLOBAL or SYSTEM scope).
+ *
+ * @example
+ * @CheckGlobalAdmin()
+ * crossClientOperation() { ... }
+ */
+export const CheckGlobalAdmin = () =>
+  CheckPolicies(({ user }) => user.isGlobalAdmin());
+
+/**
+ * A decorator that checks if the user is a client admin (CLIENT scope or above).
+ *
+ * @example
+ * @CheckClientAdmin()
+ * manageClientUsers() { ... }
+ */
+export const CheckClientAdmin = () =>
+  CheckPolicies(({ user }) => user.isClientAdmin());
 
 @Injectable()
 export class PoliciesGuard implements CanActivate {

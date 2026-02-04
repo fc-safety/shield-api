@@ -9,8 +9,9 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  CheckAnyCapability,
+  CheckCapability,
   CheckPolicies,
-  CheckResourcePermissions,
 } from 'src/auth/policies.guard';
 import { AssetQuestionsService } from './asset-questions.service';
 import { CreateAssetQuestionConditionDto } from './dto/create-asset-question-condition.dto';
@@ -24,7 +25,7 @@ import { UpdateAssetQuestionDto } from './dto/update-asset-question.dto';
 import { UpdateClientAssetQuestionCustomizationDto } from './dto/update-client-asset-question-customization.dto';
 
 @Controller('asset-questions')
-@CheckResourcePermissions('asset-questions')
+@CheckCapability('configure-products')
 export class AssetQuestionsController {
   constructor(private readonly assetQuestionsService: AssetQuestionsService) {}
 
@@ -71,8 +72,10 @@ export class AssetQuestionsController {
   // ASSET-SPECIFIC ENDPOINTS
 
   @Get('by-asset/:assetId')
-  @CheckPolicies(
-    ({ user }) => user.canRead('assets') || user.canCreate('inspections'),
+  @CheckAnyCapability(
+    'configure-products',
+    'manage-assets',
+    'perform-inspections',
   )
   findByAssetId(
     @Param('assetId') assetId: string,
@@ -82,14 +85,16 @@ export class AssetQuestionsController {
   }
 
   @Get('by-asset-properties')
-  @CheckPolicies(({ user }) => user.canRead('assets'))
+  @CheckAnyCapability('configure-products', 'manage-assets')
   findByPartialAsset(@Query() query: QueryQuestionsByAssetPropertiesDto) {
     return this.assetQuestionsService.findByAssetProperties(query);
   }
 
   @Get('check-configuration-by-asset/:assetId')
-  @CheckPolicies(
-    ({ user }) => user.canRead('assets') || user.canCreate('inspections'),
+  @CheckAnyCapability(
+    'configure-products',
+    'manage-assets',
+    'perform-inspections',
   )
   checkConfigurationByAsset(@Param('assetId') assetId: string) {
     return this.assetQuestionsService.checkAssetConfiguration(assetId);
@@ -163,7 +168,7 @@ export class AssetQuestionsController {
   }
 
   @Post('migrate-to-conditions')
-  @CheckPolicies(({ user }) => user.isSuperAdmin())
+  @CheckPolicies(({ user }) => user.isSystemAdmin())
   migrateQuestionsToConditions() {
     return this.assetQuestionsService.migrateQuestionsToConditions();
   }

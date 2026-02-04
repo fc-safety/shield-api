@@ -9,10 +9,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import {
-  CheckIsAuthenticated,
-  CheckResourcePermissions,
-} from 'src/auth/policies.guard';
+import { CheckIsAuthenticated, CheckScope } from 'src/auth/policies.guard';
 import { ClientsService } from './clients.service';
 import { ClearDemoInspectionsQueryDto } from './dto/clear-demo-inspections-query.dto';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -22,7 +19,7 @@ import { QueryClientDto } from './dto/query-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
 @Controller('clients')
-@CheckResourcePermissions('clients')
+@CheckScope('GLOBAL')
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 

@@ -8,10 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import {
-  CheckPolicies,
-  CheckResourcePermissions,
-} from 'src/auth/policies.guard';
+import { CheckAnyCapability, CheckCapability } from 'src/auth/policies.guard';
 import { CreateInspectionRoutePointDto } from './dto/create-inspection-route-point.dto';
 import { CreateInspectionRouteDto } from './dto/create-inspection-route.dto';
 import { QueryInspectionRouteDto } from './dto/query-inspection-route.dto';
@@ -21,13 +18,14 @@ import { UpdateInspectionRouteDto } from './dto/update-inspection-route.dto';
 import { InspectionRoutesService } from './inspection-routes.service';
 
 @Controller('inspection-routes')
-@CheckResourcePermissions('inspection-routes')
+@CheckAnyCapability('manage-routes', 'perform-inspections')
 export class InspectionRoutesController {
   constructor(
     private readonly inspectionRoutesService: InspectionRoutesService,
   ) {}
 
   @Post()
+  @CheckCapability('manage-routes')
   create(@Body() createInspectionRouteDto: CreateInspectionRouteDto) {
     return this.inspectionRoutesService.create(createInspectionRouteDto);
   }
@@ -48,6 +46,7 @@ export class InspectionRoutesController {
   }
 
   @Patch(':id')
+  @CheckCapability('manage-routes')
   update(
     @Param('id') id: string,
     @Body() updateInspectionRouteDto: UpdateInspectionRouteDto,
@@ -56,12 +55,13 @@ export class InspectionRoutesController {
   }
 
   @Delete(':id')
+  @CheckCapability('manage-routes')
   remove(@Param('id') id: string) {
     return this.inspectionRoutesService.remove(id);
   }
 
   @Post(':id/points')
-  @CheckPolicies(({ user }) => user.canUpdate('inspection-routes'))
+  @CheckCapability('manage-routes')
   createPoint(
     @Param('id') id: string,
     @Body() createInspectionRoutePointDto: CreateInspectionRoutePointDto,
@@ -83,6 +83,7 @@ export class InspectionRoutesController {
   }
 
   @Patch(':id/points/:pointId')
+  @CheckCapability('manage-routes')
   updatePoint(
     @Param('id') id: string,
     @Param('pointId') pointId: string,
@@ -96,11 +97,13 @@ export class InspectionRoutesController {
   }
 
   @Delete(':id/points/:pointId')
+  @CheckCapability('manage-routes')
   removePoint(@Param('id') id: string, @Param('pointId') pointId: string) {
     return this.inspectionRoutesService.removePoint(id, pointId);
   }
 
   @Post(':id/points/reorder')
+  @CheckCapability('manage-routes')
   reorderPoints(
     @Param('id') id: string,
     @Body() reorderInspectionRoutePointsDto: ReorderInspectionRoutePointsDto,

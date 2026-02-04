@@ -16,11 +16,11 @@ import {
 import React from 'react';
 import { Role } from 'src/admin/roles/model/role';
 import {
-  MULTI_CLIENT_VISIBILITIES,
-  MULTI_SITE_VISIBILITIES,
-  TVisibility,
-  VISIBILITY_VALUES,
-} from 'src/auth/permissions';
+  RoleScope,
+  scopeAllowsAllClientSites,
+  scopeAllowsMultipleClients,
+  TScope,
+} from 'src/auth/scope';
 import { ClientUser } from 'src/clients/users/model/client-user';
 import { UsersService } from 'src/clients/users/users.service';
 import { groupBy } from 'src/common/utils';
@@ -158,7 +158,7 @@ export class ClientNotificationsProcessor
     );
 
     // These mappings indicate which user roles should have visibility into which client assets.
-    const assetVisibilityMappings = await this.getAssetVisibilityMappings(
+    const assetScopeMappings = await this.getAssetScopeMappings(
       job.data.clientId,
     );
 
@@ -236,7 +236,7 @@ export class ClientNotificationsProcessor
       for (const user of users) {
         const visibleAssetIds = getVisibleAssetIdsForUser(
           user,
-          assetVisibilityMappings,
+          assetScopeMappings,
         );
         const visibleAssets = assets.filter((a) =>
           visibleAssetIds.includes(a.id),
@@ -322,7 +322,7 @@ export class ClientNotificationsProcessor
     );
 
     // These mappings indicate which user roles should have visibility into which client assets.
-    const assetVisibilityMappings = await this.getAssetVisibilityMappings(
+    const assetScopeMappings = await this.getAssetScopeMappings(
       job.data.clientId,
     );
 
@@ -357,7 +357,7 @@ export class ClientNotificationsProcessor
       for (const user of monthlyComplianceReportUsers) {
         const visibleAssetIds = getVisibleAssetIdsForUser(
           user,
-          assetVisibilityMappings,
+          assetScopeMappings,
         );
         const visibleAssets = assets.filter((a) =>
           visibleAssetIds.includes(a.id),
@@ -479,10 +479,10 @@ export class ClientNotificationsProcessor
       for (const user of monthlyConsumableReportUsers) {
         const visibleAssetIds = getVisibleAssetIdsForUser(
           user,
-          assetVisibilityMappings,
+          assetScopeMappings,
         );
-        const visibleConsumables = consumables.filter((c) =>
-          visibleAssetIds.includes(c.assetId),
+        const visibleConsumables = consumables.filter(
+          (c) => c.assetId && visibleAssetIds.includes(c.assetId),
         );
 
         if (visibleConsumables.length === 0) {
@@ -633,38 +633,45 @@ export class ClientNotificationsProcessor
   }
 
   /**
-   * Returns a mapping of asset visibility to a list of sites and asset IDs. Used to efficiently determine
+   * Returns a mapping of asset scope to a list of sites and asset IDs. Used to efficiently determine
    * which users should have visibility into which assets.
    *
-   * @param clientId The ID of the client to get the asset visibility mappings for.
-   * @returns A mapping of asset visibility to a list of sites and asset IDs.
+   * @param clientId The ID of the client to get the asset scope mappings for.
+   * @returns A mapping of asset scope to a list of sites and asset IDs.
    */
-  private async getAssetVisibilityMappings(clientId: string) {
+  private async getAssetScopeMappings(clientId: string) {
     const sites = await this.prisma.bypassRLS().site.findMany({
       select: { id: true, externalId: true, name: true },
       where: { clientId },
     });
 
-    const assetVisibilityMappings: Record<
-      Exclude<TVisibility, 'global' | 'super-admin'>,
-      {
-        siteId: string;
-        siteExternalId: string;
-        siteName: string;
-        assetIds: string[];
-      }[]
+    // Client-level scopes (GLOBAL, SYSTEM) see all assets in the client
+    // We only need to compute per-site mappings for more restricted scopes
+    const clientLevelScopes: TScope[] = [
+      RoleScope.CLIENT,
+      RoleScope.SITE_GROUP,
+      RoleScope.SITE,
+      RoleScope.SELF,
+    ];
+
+    const assetScopeMappings: Partial<
+      Record<
+        TScope,
+        {
+          siteId: string;
+          siteExternalId: string;
+          siteName: string;
+          assetIds: string[];
+        }[]
+      >
     > = {
-      'client-sites': [],
-      'site-group': [],
-      'single-site': [],
-      self: [],
+      [RoleScope.CLIENT]: [],
+      [RoleScope.SITE_GROUP]: [],
+      [RoleScope.SITE]: [],
+      [RoleScope.SELF]: [],
     };
 
-    for (const visibility of VISIBILITY_VALUES) {
-      if (visibility === 'global' || visibility === 'super-admin') {
-        continue;
-      }
-
+    for (const scope of clientLevelScopes) {
       for (const site of sites) {
         const usersPrismaClient = await this.prisma.build({
           person: {
@@ -673,11 +680,10 @@ export class ClientNotificationsProcessor
             siteId: site.id,
             allowedSiteIdsStr: site.id, // This accepts a comma-delimited list of site IDs.
             clientId: clientId,
-            visibility,
-            hasMultiClientVisibility:
-              MULTI_CLIENT_VISIBILITIES.includes(visibility),
-            hasMultiSiteVisibility:
-              MULTI_SITE_VISIBILITIES.includes(visibility),
+            scope,
+            capabilities: [],
+            hasMultiClientScope: scopeAllowsMultipleClients(scope),
+            hasMultiSiteScope: scopeAllowsAllClientSites(scope),
           },
         });
         const assetIds = await usersPrismaClient.asset
@@ -687,7 +693,8 @@ export class ClientNotificationsProcessor
             },
           })
           .then((assets) => assets.map((a) => a.id));
-        assetVisibilityMappings[visibility].push({
+        // Scope is one of the initialized keys, so this is safe
+        assetScopeMappings[scope]!.push({
           siteId: site.id,
           siteExternalId: site.externalId,
           siteName: site.name,
@@ -696,7 +703,7 @@ export class ClientNotificationsProcessor
       }
     }
 
-    return assetVisibilityMappings;
+    return assetScopeMappings;
   }
 }
 
@@ -746,57 +753,59 @@ function isThresholdMetToday(props: {
 }
 
 /**
- * Returns the visibility for a given role.
+ * Returns the scope for a given role.
  *
- * @param role The role to get the visibility for.
- * @returns The visibility for the given role.
+ * @param role The role to get the scope for.
+ * @returns The scope for the given role.
  */
-function getRoleVisibility(role: Pick<Role, 'permissions'>) {
-  const visibility = role.permissions
-    .find((p) => p.includes('visibility'))
-    ?.split(':')
-    .at(-1);
-
-  return (visibility ?? 'self') as TVisibility;
+function getRoleScope(role: Pick<Role, 'scope'>): TScope {
+  return role.scope;
 }
 
 /**
- * Get the highest visibility level across all of a user's roles.
- * Most permissive wins: super-admin > global > client-sites > site-group > single-site > self
+ * Get the highest scope level across all of a user's roles.
+ * Most permissive wins: SYSTEM > GLOBAL > CLIENT > SITE_GROUP > SITE > SELF
  */
-function getUserVisibility(user: ClientUser): TVisibility {
-  if (user.roles.length === 0) return 'self';
+function getUserScope(user: ClientUser): TScope {
+  if (user.roles.length === 0) return RoleScope.SELF;
 
-  // Get all visibility levels from user's roles
-  const visibilityLevels = user.roles.map((role) => getRoleVisibility(role));
+  // Get all scope levels from user's roles
+  const scopeLevels = user.roles.map((role) => getRoleScope(role));
 
-  if (visibilityLevels.length === 0) return 'self';
+  if (scopeLevels.length === 0) return RoleScope.SELF;
 
-  // Return the highest (most permissive) visibility level
-  // Using VISIBILITY_VALUES array which is ordered from most to least permissive
-  for (const visibility of VISIBILITY_VALUES) {
-    if (visibilityLevels.includes(visibility)) {
-      return visibility;
+  // Return the highest (most permissive) scope level
+  // SCOPE_HIERARCHY is ordered from most to least permissive
+  for (const scope of [
+    RoleScope.SYSTEM,
+    RoleScope.GLOBAL,
+    RoleScope.CLIENT,
+    RoleScope.SITE_GROUP,
+    RoleScope.SITE,
+    RoleScope.SELF,
+  ]) {
+    if (scopeLevels.includes(scope)) {
+      return scope;
     }
   }
 
-  return 'self';
+  return RoleScope.SELF;
 }
 
 /**
  * Check if a user is restricted to a single site.
- * Returns true only if ALL of the user's roles have single-site or self visibility.
+ * Returns true only if ALL of the user's roles have SITE or SELF scope.
  */
 function isSingleSiteUser(user: ClientUser) {
   if (user.roles.length === 0) return true;
 
-  // Get all visibility levels from user's roles
-  const visibilityLevels = user.roles.map((role) => getRoleVisibility(role));
+  // Get all scope levels from user's roles
+  const scopeLevels = user.roles.map((role) => getRoleScope(role));
 
-  if (visibilityLevels.length === 0) return true;
+  if (scopeLevels.length === 0) return true;
 
-  // User is single-site only if ALL roles are single-site or self
-  return visibilityLevels.every((v) => ['single-site', 'self'].includes(v));
+  // User is single-site only if ALL roles are SITE or SELF
+  return scopeLevels.every((s) => s === RoleScope.SITE || s === RoleScope.SELF);
 }
 
 /**
@@ -829,20 +838,31 @@ function getUsersGroupedByNotificationGroupId(
 
 function getVisibleAssetIdsForUser(
   user: ClientUser,
-  assetVisibilityMappings: Record<
-    Exclude<TVisibility, 'global' | 'super-admin'>,
-    {
-      siteId: string;
-      siteExternalId: string;
-      siteName: string;
-      assetIds: string[];
-    }[]
+  assetScopeMappings: Partial<
+    Record<
+      TScope,
+      {
+        siteId: string;
+        siteExternalId: string;
+        siteName: string;
+        assetIds: string[];
+      }[]
+    >
   >,
 ) {
-  const visibility = getUserVisibility(user);
+  const scope = getUserScope(user);
+
+  // For GLOBAL and SYSTEM scopes, they have access to all assets (handled at query time)
+  // For client-level scopes, look up from the mappings
+  const scopeMapping = assetScopeMappings[scope];
+  if (!scopeMapping) {
+    // GLOBAL or SYSTEM - return empty since they're not in the mappings
+    // (these users have access to everything)
+    return [];
+  }
 
   return (
-    assetVisibilityMappings[visibility].find(
+    scopeMapping.find(
       ({ siteExternalId }) => siteExternalId === user.siteExternalId,
     )?.assetIds ?? []
   );

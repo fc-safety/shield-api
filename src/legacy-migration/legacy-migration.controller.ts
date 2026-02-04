@@ -3,7 +3,7 @@ import { CheckPolicies } from 'src/auth/policies.guard';
 import { LegacyMigrationService } from './legacy-migration.service';
 
 @Controller('legacy-migration')
-@CheckPolicies(({ user }) => user.isSuperAdmin())
+@CheckPolicies(({ user }) => user.isSystemAdmin())
 export class LegacyMigrationController {
   constructor(
     private readonly legacyMigrationService: LegacyMigrationService,

@@ -9,9 +9,9 @@ import { createId } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
 import { ClsService } from 'nestjs-cls';
 import {
-  keycloakGroupAsRole,
+  DatabaseRole,
+  databaseRoleToRole,
   Role,
-  ValidatedGroupRepresentation,
 } from 'src/admin/roles/model/role';
 import { RolesService } from 'src/admin/roles/roles.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
@@ -34,10 +34,6 @@ import {
 
 @Injectable()
 export class UsersService {
-  private readonly convertGroupToRole: (
-    group: ValidatedGroupRepresentation,
-  ) => Role;
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly keycloak: KeycloakService,
@@ -45,10 +41,7 @@ export class UsersService {
     private readonly cls: ClsService<CommonClsStore>,
     private readonly notifications: NotificationsService,
     private readonly config: ApiConfigService,
-  ) {
-    this.convertGroupToRole = (group: ValidatedGroupRepresentation) =>
-      keycloakGroupAsRole(group, this.config.get('AUTH_AUDIENCE'));
-  }
+  ) {}
 
   async create(
     createUserDto: CreateUserDto,
@@ -107,37 +100,42 @@ export class UsersService {
     bypassRLS?: boolean,
   ) {
     const client = await this.getClient(clientId, bypassRLS);
-    const allRoleGroups = await this.roles.getRoleGroups();
 
     const { offset, limit } = queryUserDto;
-    return this.keycloak
-      .findUsersByAttribute({
-        filter: {
-          AND: [
-            ...this.buildSiteFilters(client),
-            ...asFilterConditions(queryUserDto),
-          ],
-        },
-        limit,
-        offset,
-      })
-      .then((r) => {
-        const cleanedUsers = r.results
-          .filter(validateKeycloakUser)
-          .map((user) =>
-            keycloakUserAsClientUser(
-              user,
-              allRoleGroups,
-              this.convertGroupToRole,
-            ),
-          );
+    const keycloakResponse = await this.keycloak.findUsersByAttribute({
+      filter: {
+        AND: [
+          ...this.buildSiteFilters(client),
+          ...asFilterConditions(queryUserDto),
+        ],
+      },
+      limit,
+      offset,
+    });
 
-        return {
-          ...r,
-          limit: cleanedUsers.length,
-          results: cleanedUsers,
-        };
-      });
+    const validUsers = keycloakResponse.results.filter(validateKeycloakUser);
+
+    // Get all user IDs to batch lookup roles
+    const userIds = validUsers.map((u) => u.attributes.user_id[0]);
+
+    // Load roles for all users from database via PersonClientAccess
+    const userRolesMap = await this.getUserRolesFromDatabase(
+      userIds,
+      client.id,
+      bypassRLS,
+    );
+
+    const cleanedUsers = validUsers.map((user) => {
+      const userId = user.attributes.user_id[0];
+      const roles = userRolesMap.get(userId) ?? [];
+      return keycloakUserAsClientUser(user, roles);
+    });
+
+    return {
+      ...keycloakResponse,
+      limit: cleanedUsers.length,
+      results: cleanedUsers,
+    };
   }
 
   async findOne(
@@ -145,14 +143,54 @@ export class UsersService {
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
+    const client = await this.getClient(clientId, bypassRLS);
     const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
-    const allRoleGroups = await this.roles.getRoleGroups();
 
-    return keycloakUserAsClientUser(
-      keycloakUser,
-      allRoleGroups,
-      this.convertGroupToRole,
+    // Load role from database via PersonClientAccess
+    const userRolesMap = await this.getUserRolesFromDatabase(
+      [id],
+      client.id,
+      bypassRLS,
     );
+    const roles = userRolesMap.get(id) ?? [];
+
+    return keycloakUserAsClientUser(keycloakUser, roles);
+  }
+
+  /**
+   * Batch load roles for users from database via PersonClientAccess.
+   */
+  private async getUserRolesFromDatabase(
+    userIds: string[],
+    clientId: string,
+    bypassRLS?: boolean,
+  ): Promise<Map<string, Role[]>> {
+    const prisma = (bypassRLS
+      ? this.prisma.bypassRLS()
+      : await this.prisma.forContext()) as unknown as PrismaClient;
+
+    // Find all persons by their internal user IDs and get their roles
+    const personsWithRoles = await prisma.person.findMany({
+      where: {
+        id: { in: userIds },
+      },
+      include: {
+        clientAccess: {
+          where: { clientId },
+          include: { role: true },
+        },
+      },
+    });
+
+    const roleMap = new Map<string, Role[]>();
+    for (const person of personsWithRoles) {
+      const roles = person.clientAccess.map((pca) =>
+        databaseRoleToRole(pca.role as DatabaseRole),
+      );
+      roleMap.set(person.id, roles);
+    }
+
+    return roleMap;
   }
 
   async update(
@@ -210,6 +248,7 @@ export class UsersService {
   /**
    * @deprecated Use setRoles() for single role assignment or addRole() for adding additional roles.
    * This method removes all existing roles before assigning a new one (single-role behavior).
+   * Now updates the database via PersonClientAccess instead of Keycloak groups.
    */
   async assignRole(
     id: string,
@@ -217,44 +256,44 @@ export class UsersService {
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+    const client = await this.getClient(clientId, bypassRLS);
+    await this.getKeycloakUser(id, clientId, bypassRLS); // Verify user exists
 
-    // Get all role groups to check existing memberships and remove them (cached via Redis)
-    const allRoleGroups = await this.roles.getRoleGroups();
+    const prisma = (bypassRLS
+      ? this.prisma.bypassRLS()
+      : await this.prisma.forContext()) as unknown as PrismaClient;
 
-    // Get the role group to assign.
-    const keycloakRoleGroup = allRoleGroups.find(
-      (g) => g.attributes.role_id[0] === assignRoleDto.roleId,
-    );
-    if (!keycloakRoleGroup) {
+    // Verify role exists
+    const role = await prisma.role.findUnique({
+      where: { id: assignRoleDto.roleId },
+    });
+    if (!role) {
       throw new NotFoundException(`Role ${assignRoleDto.roleId} not found`);
     }
 
-    // Remove from any existing role groups before assigning a new one.
-    const existingJoinedRoleGroups = allRoleGroups.filter(
-      (g) =>
-        g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
-    );
-    if (existingJoinedRoleGroups.length > 0) {
-      await Promise.allSettled(
-        existingJoinedRoleGroups.map((g) =>
-          this.keycloak.client.users.delFromGroup({
-            id: keycloakUser.id,
-            groupId: g.id,
-          }),
-        ),
-      );
-    }
-
-    return this.keycloak.client.users.addToGroup({
-      id: keycloakUser.id,
-      groupId: keycloakRoleGroup.id,
+    // Update or create PersonClientAccess with the new role
+    await prisma.personClientAccess.upsert({
+      where: {
+        personId_clientId: {
+          personId: id,
+          clientId: client.id,
+        },
+      },
+      update: {
+        roleId: assignRoleDto.roleId,
+      },
+      create: {
+        personId: id,
+        clientId: client.id,
+        siteId: client.sites[0]?.id ?? '',
+        roleId: assignRoleDto.roleId,
+      },
     });
   }
 
   /**
-   * Add a role to a user without removing existing roles.
-   * Supports multi-role assignment.
+   * Add a role to a user. Since PersonClientAccess supports one role per client,
+   * this will replace the existing role if one exists.
    */
   async addRole(
     id: string,
@@ -262,46 +301,69 @@ export class UsersService {
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+    const client = await this.getClient(clientId, bypassRLS);
 
-    // Get all role groups (cached via Redis)
-    const allRoleGroups = await this.roles.getRoleGroups();
+    const prisma = (bypassRLS
+      ? this.prisma.bypassRLS()
+      : await this.prisma.forContext()) as unknown as PrismaClient;
 
-    // Find the role group to add
-    const keycloakRoleGroup = allRoleGroups.find(
-      (g) => g.attributes.role_id[0] === addRoleDto.roleId,
-    );
-    if (!keycloakRoleGroup) {
+    const person = await prisma.person.findUnique({
+      where: { idpId: id },
+    });
+
+    if (!person) {
+      throw new NotFoundException(`Person ${id} not found`);
+    }
+
+    // Verify role exists
+    const role = await prisma.role.findUnique({
+      where: { id: addRoleDto.roleId },
+    });
+    if (!role) {
       throw new NotFoundException(`Role ${addRoleDto.roleId} not found`);
     }
 
     // Check if user already has this role
-    const existingJoinedRoleGroups = allRoleGroups.filter(
-      (g) =>
-        g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
-    );
-    const alreadyHasRole = existingJoinedRoleGroups.some(
-      (g) => g.id === keycloakRoleGroup.id,
-    );
+    const existing = await prisma.personClientAccess.findUnique({
+      where: {
+        personId_clientId: {
+          personId: id,
+          clientId: client.id,
+        },
+      },
+    });
 
-    if (alreadyHasRole) {
+    if (existing?.roleId === addRoleDto.roleId) {
       throw new BadRequestException(
         `User already has role ${addRoleDto.roleId}`,
       );
     }
 
-    // Add the user to the role group
-    await this.keycloak.client.users.addToGroup({
-      id: keycloakUser.id,
-      groupId: keycloakRoleGroup.id,
+    // Update or create PersonClientAccess with the role
+    await prisma.personClientAccess.upsert({
+      where: {
+        personId_clientId: {
+          personId: person.id,
+          clientId: client.id,
+        },
+      },
+      update: {
+        roleId: addRoleDto.roleId,
+      },
+      create: {
+        personId: person.id,
+        clientId: client.id,
+        siteId: client.sites[0]?.id ?? '',
+        roleId: addRoleDto.roleId,
+      },
     });
 
-    return this.convertGroupToRole(keycloakRoleGroup);
+    return databaseRoleToRole(role as DatabaseRole);
   }
 
   /**
    * Remove a specific role from a user.
-   * Other roles remain intact.
+   * This removes the PersonClientAccess entry for this client.
    */
   async removeRole(
     id: string,
@@ -309,47 +371,45 @@ export class UsersService {
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+    const client = await this.getClient(clientId, bypassRLS);
+    await this.getKeycloakUser(id, clientId, bypassRLS); // Verify user exists
 
-    // Get all role groups (cached via Redis)
-    const allRoleGroups = await this.roles.getRoleGroups();
-
-    // Find the role group to remove
-    const keycloakRoleGroup = allRoleGroups.find(
-      (g) => g.attributes.role_id[0] === removeRoleDto.roleId,
-    );
-    if (!keycloakRoleGroup) {
-      throw new NotFoundException(`Role ${removeRoleDto.roleId} not found`);
-    }
+    const prisma = (bypassRLS
+      ? this.prisma.bypassRLS()
+      : await this.prisma.forContext()) as unknown as PrismaClient;
 
     // Check if user has this role
-    const existingJoinedRoleGroups = allRoleGroups.filter(
-      (g) =>
-        g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
-    );
-    const hasRole = existingJoinedRoleGroups.some(
-      (g) => g.id === keycloakRoleGroup.id,
-    );
+    const existing = await prisma.personClientAccess.findUnique({
+      where: {
+        personId_clientId: {
+          personId: id,
+          clientId: client.id,
+        },
+      },
+    });
 
-    if (!hasRole) {
+    if (!existing || existing.roleId !== removeRoleDto.roleId) {
       throw new BadRequestException(
         `User does not have role ${removeRoleDto.roleId}`,
       );
     }
 
-    // Remove the user from the role group
-    await this.keycloak.client.users.delFromGroup({
-      id: keycloakUser.id,
-      groupId: keycloakRoleGroup.id,
+    // Remove the PersonClientAccess entry
+    await prisma.personClientAccess.delete({
+      where: {
+        personId_clientId: {
+          personId: id,
+          clientId: client.id,
+        },
+      },
     });
 
     return removeRoleDto.roleId;
   }
 
   /**
-   * Set the exact set of roles for a user.
-   * Removes all existing roles and assigns the specified ones.
-   * This is an atomic operation with transactional guarantees.
+   * Set the exact role for a user in a client.
+   * Since PersonClientAccess supports one role per client, this sets that role.
    */
   async setRoles(
     id: string,
@@ -357,70 +417,54 @@ export class UsersService {
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
     bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+    const client = await this.getClient(clientId, bypassRLS);
+    await this.getKeycloakUser(id, clientId, bypassRLS); // Verify user exists
 
-    // Check for duplicate role IDs first (cheap operation)
-    const uniqueRoleIds = new Set(setRolesDto.roleIds);
-    if (uniqueRoleIds.size !== setRolesDto.roleIds.length) {
-      throw new BadRequestException('Duplicate role IDs are not allowed');
+    // PersonClientAccess supports one role per client, so we take the first role ID
+    // or remove access if no roles specified
+    const roleId = setRolesDto.roleIds[0];
+
+    const prisma = (bypassRLS
+      ? this.prisma.bypassRLS()
+      : await this.prisma.forContext()) as unknown as PrismaClient;
+
+    if (!roleId) {
+      // No roles specified - remove access
+      await prisma.personClientAccess.deleteMany({
+        where: {
+          personId: id,
+          clientId: client.id,
+        },
+      });
+      return;
     }
 
-    // Fetch only the specific role groups we need (cached + batch operation)
-    // This throws NotFoundException if any role doesn't exist
-    const roleGroupsToAssign = await this.roles.getRoleGroupsByRoleIds(
-      setRolesDto.roleIds,
-    );
-
-    // Get all role groups to find existing memberships (cached)
-    const allRoleGroups = await this.roles.getRoleGroups();
-    const existingJoinedRoleGroups = allRoleGroups.filter(
-      (g) =>
-        g.path && keycloakUser.groups && keycloakUser.groups.includes(g.path),
-    );
-
-    // Extract group IDs for transactional operations
-    const existingGroupIds = existingJoinedRoleGroups
-      .map((g) => g.id)
-      .filter((id): id is string => id !== undefined);
-    const newGroupIds = roleGroupsToAssign
-      .map((g) => g.id)
-      .filter((id): id is string => id !== undefined);
-
-    // Use transactional operations to ensure atomicity
-    // Remove all existing roles transactionally
-    if (existingGroupIds.length > 0) {
-      await this.keycloak.removeUserFromGroupsTransactional(
-        keycloakUser.id,
-        existingGroupIds,
-      );
+    // Verify role exists
+    const role = await prisma.role.findUnique({
+      where: { id: roleId },
+    });
+    if (!role) {
+      throw new NotFoundException(`Role ${roleId} not found`);
     }
 
-    // Add all new roles transactionally
-    if (newGroupIds.length > 0) {
-      try {
-        await this.keycloak.addUserToGroupsTransactional(
-          keycloakUser.id,
-          newGroupIds,
-        );
-      } catch (error) {
-        // If adding new roles fails, attempt to restore original roles
-        if (existingGroupIds.length > 0) {
-          try {
-            await this.keycloak.addUserToGroupsTransactional(
-              keycloakUser.id,
-              existingGroupIds,
-            );
-          } catch (restoreError) {
-            // Both operations failed - log critical error
-            throw new Error(
-              `CRITICAL: Failed to set new roles and failed to restore original roles. User ${id} may have no roles. Original error: ${error}. Restore error: ${restoreError}`,
-            );
-          }
-        }
-        // Re-throw the original error if we successfully restored or there were no roles to restore
-        throw error;
-      }
-    }
+    // Update or create PersonClientAccess with the role
+    await prisma.personClientAccess.upsert({
+      where: {
+        personId_clientId: {
+          personId: id,
+          clientId: client.id,
+        },
+      },
+      update: {
+        roleId,
+      },
+      create: {
+        personId: id,
+        clientId: client.id,
+        siteId: client.sites[0]?.id ?? '',
+        roleId,
+      },
+    });
   }
 
   async resetPassword(
@@ -579,10 +623,9 @@ export class UsersService {
     ];
 
     const thisUser = this.cls.get('user');
-    const isNonGlobal =
-      !thisUser ||
-      !['super-admin', 'global', 'client-sites'].includes(thisUser.visibility);
-    if (isNonGlobal) {
+    // Check if user has scope that allows access to multiple sites
+    const hasMultiSiteAccess = thisUser?.scopeAllows('CLIENT') ?? false;
+    if (!hasMultiSiteAccess) {
       filters.push({
         q: {
           key: 'site_id',

@@ -267,7 +267,7 @@ export class PrismaService
   private async buildPrimaryExtension(options: PrimaryExtensionOptions) {
     const user = this.cls.get('user');
     const context = options.context ?? this.cls.get('viewContext');
-    const isSuperAdmin = !!user?.isSuperAdmin();
+    const isSuperAdmin = !!user?.isSystemAdmin();
     const mode = this.cls.get('mode');
     const cronMode = mode === 'cron';
     const shouldBypassRLS = cronMode || (isSuperAdmin && context === 'admin');
@@ -456,7 +456,7 @@ function buildRLSContextStatements(
     prismaClient.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
     prismaClient.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIdsStr}, TRUE)`,
     prismaClient.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
-    prismaClient.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
+    prismaClient.$executeRaw`SELECT set_config('app.current_user_scope', ${person.scope}, TRUE)`,
   ];
 }
 

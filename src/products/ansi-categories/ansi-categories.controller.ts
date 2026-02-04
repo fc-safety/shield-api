@@ -8,14 +8,14 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import { CheckCapability } from 'src/auth/policies.guard';
 import { AnsiCategoriesService } from './ansi-categories.service';
 import { CreateAnsiCategoryDto } from './dto/create-ansi-category.dto';
 import { QueryAnsiCategoryDto } from './dto/query-ansi-category.dto';
 import { UpdateAnsiCategoryDto } from './dto/update-ansi-category.dto';
 
 @Controller('ansi-categories')
-@CheckResourcePermissions('ansi-categories')
+@CheckCapability('configure-products')
 export class AnsiCategoriesController {
   constructor(private readonly ansiCategoriesService: AnsiCategoriesService) {}
 
