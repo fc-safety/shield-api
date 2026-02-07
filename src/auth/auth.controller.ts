@@ -1,11 +1,17 @@
 import { Controller, Get } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
-import { PeopleService } from 'src/clients/people/people.service';
+import {
+  PeopleService,
+  PersonBasicInfo,
+} from 'src/clients/people/people.service';
+import { SkipAccessGrantValidation } from './guards/auth.guard';
+import { CheckIsAuthenticated } from './policies.guard';
 import { StatelessUserData } from './user.schema';
 
 /**
  * Response shape for GET /auth/me endpoint.
- * Combines token data with database-enriched user context.
+ * Returns identity info and all client access records for the user.
+ * Works for users who haven't been assigned to a client yet.
  */
 export interface CurrentUserResponse {
   // Identity info from token
@@ -17,18 +23,11 @@ export interface CurrentUserResponse {
   familyName?: string;
   picture?: string;
 
-  // Context info (may be overridden by database lookup)
-  personId: string;
-  clientId: string;
-  siteId: string;
+  // Person info from database (null if person record doesn't exist yet)
+  personId: string | null;
 
-  // Permission info from database
-  scope: string;
-  capabilities: string[];
-
-  // Computed flags
-  hasMultiClientScope: boolean;
-  hasMultiSiteScope: boolean;
+  // All client access records for this user
+  clientAccess: PersonBasicInfo['clientAccess'];
 }
 
 @Controller('auth')
@@ -40,12 +39,15 @@ export class AuthController {
 
   /**
    * Get the current authenticated user's data.
-   * Combines JWT token information with database-derived permissions.
+   * Works for users who haven't been assigned to a client yet.
+   * Returns identity info and all client access records.
    */
   @Get('me')
+  @CheckIsAuthenticated()
+  @SkipAccessGrantValidation()
   async getCurrentUser(): Promise<CurrentUserResponse> {
     const user = this.cls.get<StatelessUserData>('user');
-    const person = await this.peopleService.getPersonRepresentation();
+    const personInfo = await this.peopleService.getPersonBasicInfo();
 
     return {
       // Identity info from token
@@ -57,18 +59,11 @@ export class AuthController {
       familyName: user.familyName,
       picture: user.picture,
 
-      // Context from database (may differ from token if using x-client-id)
-      personId: person.id,
-      clientId: person.clientId,
-      siteId: person.siteId,
+      // Person info from database
+      personId: personInfo.id,
 
-      // Permissions from database
-      scope: person.scope,
-      capabilities: person.capabilities,
-
-      // Computed flags
-      hasMultiClientScope: person.hasMultiClientScope,
-      hasMultiSiteScope: person.hasMultiSiteScope,
+      // All client access records
+      clientAccess: personInfo.clientAccess,
     };
   }
 }

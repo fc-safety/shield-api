@@ -1,9 +1,10 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
+import { ApiConfigService } from '../../config/api-config.service';
 import { ClsService } from 'nestjs-cls';
 import { InvitationsService } from './invitations.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ClientsService } from '../clients/clients.service';
 
 describe('InvitationsService', () => {
   let service: InvitationsService;
@@ -22,14 +23,13 @@ describe('InvitationsService', () => {
       },
       site: {
         findUnique: jest.fn(),
-        findFirst: jest.fn(),
       },
       role: {
         findUnique: jest.fn(),
-        findFirst: jest.fn(),
       },
       person: {
         findUnique: jest.fn(),
+        create: jest.fn(),
       },
       personClientAccess: {
         findUnique: jest.fn(),
@@ -44,7 +44,7 @@ describe('InvitationsService', () => {
     get: jest.fn(),
   };
 
-  const mockConfigService = {
+  const mockApiConfigService = {
     get: jest.fn().mockReturnValue('http://localhost:3000'),
   };
 
@@ -54,13 +54,18 @@ describe('InvitationsService', () => {
     del: jest.fn(),
   };
 
+  const mockClientsService = {
+    getPrimaryClientAccess: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InvitationsService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ClsService, useValue: mockClsService },
-        { provide: ConfigService, useValue: mockConfigService },
+        { provide: ApiConfigService, useValue: mockApiConfigService },
+        { provide: ClientsService, useValue: mockClientsService },
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
       ],
     }).compile();
@@ -79,8 +84,9 @@ describe('InvitationsService', () => {
         code: 'abc123',
         status: 'PENDING',
         expiresOn: new Date(Date.now() + 86400000), // Tomorrow
-        email: null,
+        email: 'test@example.com',
         roleId: 'role-1',
+        siteId: 'site-1',
         client: { id: 'client-1', name: 'Test Client' },
       };
 
@@ -92,8 +98,7 @@ describe('InvitationsService', () => {
 
       expect(result.valid).toBe(true);
       expect(result.client).toEqual({ id: 'client-1', name: 'Test Client' });
-      expect(result.restrictedToEmail).toBe(false);
-      expect(result.hasPreassignedRole).toBe(true);
+      expect(result.email).toBe('test@example.com');
     });
   });
 });

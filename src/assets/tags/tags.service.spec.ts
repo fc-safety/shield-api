@@ -21,6 +21,15 @@ describe('TagsService', () => {
     generateSignature: jest.fn().mockResolvedValue('mock-signature'),
   };
 
+  const createMockUser = (overrides: any = {}) => ({
+    idpId: 'user-idp-1',
+    email: 'test@example.com',
+    username: 'testuser',
+    givenName: 'Test',
+    familyName: 'User',
+    ...overrides,
+  });
+
   const createMockTag = (overrides: any = {}) => ({
     id: 'tag-1',
     externalId: 'ext-tag-1',
@@ -74,10 +83,10 @@ describe('TagsService', () => {
       user: any,
       personClientAccess: any = null,
     ) => {
-      // Mock forUser() to return an object with $currentUser()
+      // Mock forUser() to return an object with $rlsContext()
       mockPrismaService.forUser.mockResolvedValue({
-        $currentUser: jest.fn().mockReturnValue({
-          clientId: user?.clientId ?? 'primary-client-internal',
+        $rlsContext: jest.fn().mockReturnValue({
+          clientId: 'primary-client-internal',
           siteId: 'site-internal-1',
         }),
       });
@@ -92,21 +101,23 @@ describe('TagsService', () => {
         },
       });
 
-      // Mock CLS to return user
+      // Mock CLS to return user (no clientId on user - uses PersonClientAccess)
       mockClsService.get.mockImplementation((key: string) => {
         if (key === 'user') return user;
         return undefined;
       });
     };
 
-    it('should return tag when user has primary client access', async () => {
+    it('should return tag when user has client access via PersonClientAccess', async () => {
       const mockTag = createMockTag();
-      const user = {
-        idpId: 'user-idp-1',
-        clientId: 'client-ext-1', // Same as tag's client
+      const user = createMockUser();
+      const personClientAccess = {
+        id: 'access-1',
+        personId: 'person-1',
+        clientId: 'client-internal-1',
       };
 
-      setupMocks(mockTag, user);
+      setupMocks(mockTag, user, personClientAccess);
 
       const result = await service.findOneForInspection('ext-tag-1');
 
@@ -120,10 +131,7 @@ describe('TagsService', () => {
           externalId: 'secondary-client-ext',
         },
       });
-      const user = {
-        idpId: 'user-idp-1',
-        clientId: 'primary-client-ext', // Different from tag's client
-      };
+      const user = createMockUser();
       const personClientAccess = {
         id: 'access-1',
         personId: 'person-1',
@@ -145,10 +153,7 @@ describe('TagsService', () => {
           externalId: 'unauthorized-client-ext',
         },
       });
-      const user = {
-        idpId: 'user-idp-1',
-        clientId: 'primary-client-ext', // Different from tag's client
-      };
+      const user = createMockUser();
 
       setupMocks(mockTag, user, null); // No PersonClientAccess
 
@@ -160,9 +165,9 @@ describe('TagsService', () => {
     it('should throw UnauthorizedException when user is not authenticated', async () => {
       const mockTag = createMockTag();
 
-      // Mock forUser() to return an object with $currentUser()
+      // Mock forUser() to return an object with $rlsContext()
       mockPrismaService.forUser.mockResolvedValue({
-        $currentUser: jest.fn().mockReturnValue(null),
+        $rlsContext: jest.fn().mockReturnValue(null),
       });
 
       mockPrismaService.bypassRLS.mockReturnValue({
@@ -186,10 +191,7 @@ describe('TagsService', () => {
         clientId: null,
         client: null,
       });
-      const user = {
-        idpId: 'user-idp-1',
-        clientId: 'primary-client-ext',
-      };
+      const user = createMockUser();
 
       setupMocks(mockTag, user);
 
@@ -235,20 +237,17 @@ describe('TagsService', () => {
       });
 
       mockPrismaService.forUser.mockResolvedValue({
-        $currentUser: jest.fn().mockReturnValue({
+        $rlsContext: jest.fn().mockReturnValue({
           clientId: 'primary-client-internal', // Different from tag
           siteId: 'site-1',
-          hasMultiSiteVisibility: true,
+          hasMultiSiteScope: true,
           allowedSiteIdsStr: '',
         }),
       });
 
       mockClsService.get.mockImplementation((key: string) => {
         if (key === 'user') {
-          return {
-            idpId: 'user-idp-1',
-            clientId: 'primary-client-ext',
-          };
+          return createMockUser();
         }
         return undefined;
       });

@@ -1,10 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AssetsService } from './assets.service';
+import { ClsService } from 'nestjs-cls';
+import { UsersService } from 'src/clients/users/users.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ConsumablesService } from '../consumables/consumables.service';
-import { NotificationsService } from 'src/notifications/notifications.service';
-import { UsersService } from 'src/clients/users/users.service';
-import { ClsService } from 'nestjs-cls';
+import { AssetsService } from './assets.service';
 
 describe('AssetsService', () => {
   let service: AssetsService;
@@ -18,7 +18,7 @@ describe('AssetsService', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
-      $currentUser: jest.fn(),
+      $rlsContext: jest.fn(),
     }),
   };
 

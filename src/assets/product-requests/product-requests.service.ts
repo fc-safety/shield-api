@@ -34,7 +34,7 @@ export class ProductRequestsService {
   }
 
   async findAll(query?: QueryProductRequestDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.productRequest.findManyForPage(
         buildPrismaFindArgs<typeof prisma.productRequest>(query, {
           include: {
@@ -67,7 +67,7 @@ export class ProductRequestsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forContext().then((client) =>
+    return this.prisma.forViewContext().then((client) =>
       client.productRequest.findUnique({
         where: { id },
         include: {
@@ -120,7 +120,7 @@ export class ProductRequestsService {
   }
 
   async updateStatuses(data: UpdateProductRequestStatusDto) {
-    return this.prisma.forContext().then((client) =>
+    return this.prisma.forViewContext().then((client) =>
       client.productRequest.updateMany({
         where: {
           id: {
@@ -139,7 +139,7 @@ export class ProductRequestsService {
   }
 
   async cancel(id: string) {
-    return this.prisma.forContext().then((client) =>
+    return this.prisma.forViewContext().then((client) =>
       client.productRequest.update({
         where: {
           id,

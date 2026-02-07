@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { CheckAnyCapability, CheckCapability } from 'src/auth/policies.guard';
+import { CheckAnyCapability, CheckCapability } from 'src/auth/utils/policies';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
 import { AssetsService } from './assets.service';
 import { ConfigureAssetDto } from './dto/configure-asset.dto';
@@ -20,7 +20,12 @@ import { UpdateAssetDto } from './dto/update-asset.dto';
 import { UpdateSetupAssetDto } from './dto/update-setup-asset.dto';
 
 @Controller('assets')
-@CheckAnyCapability('manage-assets', 'perform-inspections', 'view-reports')
+@CheckAnyCapability(
+  'manage-assets',
+  'perform-inspections',
+  'view-reports',
+  'register-tags',
+)
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
 
@@ -85,7 +90,7 @@ export class AssetsController {
     return this.assetsService.addTag(id, tagExternalId, tagSerialNumber);
   }
 
-  @CheckCapability('manage-assets')
+  @CheckAnyCapability('manage-assets', 'perform-inspections', 'register-tags')
   @Post(':id/configure')
   configure(
     @Param('id') id: string,
@@ -94,13 +99,13 @@ export class AssetsController {
     return this.assetsService.configure(id, configureAssetDto);
   }
 
-  @CheckCapability('manage-assets')
+  @CheckAnyCapability('manage-assets', 'perform-inspections', 'register-tags')
   @Post(':id/setup')
   setup(@Param('id') id: string, @Body() setupAssetDto: SetupAssetDto) {
     return this.assetsService.setup(id, setupAssetDto);
   }
 
-  @CheckCapability('manage-assets')
+  @CheckAnyCapability('manage-assets', 'perform-inspections', 'register-tags')
   @Patch(':id/setup')
   updateSetup(
     @Param('id') id: string,

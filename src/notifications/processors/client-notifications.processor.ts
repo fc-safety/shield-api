@@ -20,7 +20,7 @@ import {
   scopeAllowsAllClientSites,
   scopeAllowsMultipleClients,
   TScope,
-} from 'src/auth/scope';
+} from 'src/auth/utils/scope';
 import { ClientUser } from 'src/clients/users/model/client-user';
 import { UsersService } from 'src/clients/users/users.service';
 import { groupBy } from 'src/common/utils';

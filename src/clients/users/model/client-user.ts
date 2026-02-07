@@ -1,5 +1,6 @@
 import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
-import { Role } from 'src/admin/roles/model/role';
+import { databaseRoleToRole, Role } from 'src/admin/roles/model/role';
+import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 export interface ClientUser {
@@ -79,5 +80,50 @@ export const keycloakUserAsClientUser = (
     // Backward compatibility: return first role or undefined
     roleName: roles[0]?.name ?? undefined,
     position: user.attributes.user_position?.[0],
+  };
+};
+
+/**
+ * Converts a PersonClientAccess record with relations to ClientUser.
+ * Used for database-first user listings.
+ */
+export const personClientAccessToClientUser = (
+  pca: Prisma.PersonClientAccessGetPayload<{
+    include: {
+      person: true;
+      site: { select: { externalId: true } };
+      client: { select: { externalId: true } };
+      role: true;
+    };
+  }>,
+): ClientUser => {
+  const { person, site, client, role } = pca;
+  const convertedRole = databaseRoleToRole(role);
+
+  return {
+    id: person.id,
+    idpId: person.idpId ?? '',
+    createdOn: person.createdOn.toISOString(),
+    modifiedOn: person.modifiedOn.toISOString(),
+    active: person.active,
+    firstName: person.firstName,
+    lastName: person.lastName,
+    name: `${person.firstName} ${person.lastName}`.trim(),
+    email: person.email,
+    username: person.username ?? undefined,
+    phoneNumber: person.phoneNumber ?? undefined,
+    position: person.position ?? undefined,
+    siteExternalId: site.externalId,
+    clientExternalId: client.externalId,
+    roles: [
+      {
+        id: convertedRole.id,
+        name: convertedRole.name,
+        scope: convertedRole.scope,
+        capabilities: convertedRole.capabilities,
+        notificationGroups: convertedRole.notificationGroups,
+      },
+    ],
+    roleName: convertedRole.name,
   };
 };

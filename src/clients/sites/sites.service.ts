@@ -22,8 +22,8 @@ export class SitesService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
-  private invalidateSiteStatusCache(siteExternalId: string) {
-    const cacheKey = buildSiteStatusCacheKey(siteExternalId);
+  private invalidateSiteStatusCache(siteId: string) {
+    const cacheKey = buildSiteStatusCacheKey(siteId);
     this.cache.del(cacheKey);
   }
 
@@ -31,8 +31,8 @@ export class SitesService {
    * Gets the active status of a site by its external ID.
    * Results are cached for 1 hour.
    */
-  public async getSiteStatus(siteExternalId: string): Promise<boolean | null> {
-    const cacheKey = buildSiteStatusCacheKey(siteExternalId);
+  public async getSiteStatus(siteId: string): Promise<boolean | null> {
+    const cacheKey = buildSiteStatusCacheKey(siteId);
     const cachedValue = await this.cache.get<boolean>(cacheKey);
 
     if (!isNil(cachedValue)) {
@@ -40,7 +40,7 @@ export class SitesService {
     }
 
     const siteResult = await this.prisma.bypassRLS().site.findUnique({
-      where: { externalId: siteExternalId },
+      where: { id: siteId },
       select: { active: true },
     });
 
@@ -59,12 +59,12 @@ export class SitesService {
 
   async create(createSiteDto: CreateSiteDto) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) => prisma.site.create({ data: createSiteDto }));
   }
 
   async findAll(querySiteDto: QuerySiteDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.site.findManyForPage(
         buildPrismaFindArgs<typeof prisma.site>(querySiteDto, {
           include: {
@@ -78,7 +78,7 @@ export class SitesService {
 
   async findOne(id: string) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) =>
         prisma.site.findUniqueOrThrow({
           where: { id },
@@ -111,7 +111,7 @@ export class SitesService {
   }
 
   async update(id: string, updateSiteDto: UpdateSiteDto) {
-    const prisma = await this.prisma.forContext();
+    const prisma = await this.prisma.forViewContext();
     const result = await prisma.site
       .update({
         where: { id },
@@ -123,7 +123,7 @@ export class SitesService {
   }
 
   async remove(id: string) {
-    const prisma = await this.prisma.forContext();
+    const prisma = await this.prisma.forViewContext();
     const result = await prisma.site.delete({ where: { id } });
     // Invalidate cache to ensure deleted site status is not cached
     this.invalidateSiteStatusCache(result.externalId);

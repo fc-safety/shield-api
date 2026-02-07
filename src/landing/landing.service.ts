@@ -1,8 +1,7 @@
 import { HttpService } from '@nestjs/axios';
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ClsService } from 'nestjs-cls';
 import { firstValueFrom } from 'rxjs';
-import { CommonClsStore } from 'src/common/types';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { SettingsService } from 'src/settings/settings.service';
@@ -13,7 +12,7 @@ export class LandingService {
   constructor(
     private readonly notifications: NotificationsService,
     private readonly config: ApiConfigService,
-    private readonly cls: ClsService<CommonClsStore>,
+    private readonly cls: ApiClsService,
     private readonly http: HttpService,
     private readonly settings: SettingsService,
   ) {}

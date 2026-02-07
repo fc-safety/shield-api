@@ -1,10 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClsService } from 'nestjs-cls';
-import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { RolesService } from 'src/admin/roles/roles.service';
+import { AssetsService } from 'src/assets/assets/assets.service';
+import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
-import { AssetsService } from 'src/assets/assets/assets.service';
 import { UsersService } from '../users/users.service';
 import { ClientsService } from './clients.service';
 import { GenerateDemoInspectionsDto } from './dto/generate-demo-inspections.dto';
@@ -78,7 +78,7 @@ describe('ClientsService', () => {
             demoMode: false,
           }),
         },
-        $currentUser: jest.fn().mockReturnValue({ hasMultiSiteScope: true }),
+        $rlsContext: jest.fn().mockReturnValue({ hasMultiSiteScope: true }),
         $mode: 'user',
       };
 
@@ -179,7 +179,7 @@ describe('ClientsService', () => {
 
       const mockTx = {
         ...mockInnerTx,
-        $currentUser: jest.fn().mockReturnValue({
+        $rlsContext: jest.fn().mockReturnValue({
           hasMultiSiteScope: true,
           allowedSiteIdsStr: '',
         }),

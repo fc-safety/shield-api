@@ -1,5 +1,6 @@
-import { isValidCapability, TCapability } from 'src/auth/capabilities';
-import { TScope } from 'src/auth/scope';
+import { isValidCapability, TCapability } from 'src/auth/utils/capabilities';
+import { TScope } from 'src/auth/utils/scope';
+import { Prisma } from 'src/generated/prisma/client';
 import {
   NotificationGroupId,
   NotificationGroupIds,
@@ -19,29 +20,12 @@ export interface Role {
   createdOn: string;
   updatedOn: string;
   clientAssignable: boolean;
-  clientId?: string | null;
-}
-
-/**
- * Database Role type (from Prisma).
- */
-export interface DatabaseRole {
-  id: string;
-  name: string;
-  description: string | null;
-  createdOn: Date;
-  modifiedOn: Date;
-  clientAssignable: boolean;
-  notificationGroups: string[];
-  scope: TScope;
-  capabilities: string[];
-  clientId: string | null;
 }
 
 /**
  * Convert a database Role to the Role interface.
  */
-export function databaseRoleToRole(role: DatabaseRole): Role {
+export function databaseRoleToRole(role: Prisma.RoleGetPayload<object>): Role {
   return {
     id: role.id,
     groupId: role.id, // Use the role ID as groupId for compatibility
@@ -56,6 +40,5 @@ export function databaseRoleToRole(role: DatabaseRole): Role {
     createdOn: role.createdOn.toISOString(),
     updatedOn: role.modifiedOn.toISOString(),
     clientAssignable: role.clientAssignable,
-    clientId: role.clientId,
   };
 }

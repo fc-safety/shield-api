@@ -1,64 +1,55 @@
 import { createZodDto } from 'nestjs-zod';
-import { CustomQueryFilter } from 'src/auth/keycloak/types';
-import { buildFixedQuerySchema, PrismaOrderEmum } from 'src/common/validation';
+import {
+  buildFixedQuerySchema,
+  PrismaOrderEmum,
+  prismaStringFilter,
+} from 'src/common/validation';
+import { Prisma } from 'src/generated/prisma/client';
 import { z } from 'zod';
 
 const QueryUserFiltersSchema = z
   .object({
-    id: z.union([z.string(), z.array(z.string())]),
-    siteExternalId: z.string(),
-    clientExternalId: z.string(),
+    personId: z
+      .union([
+        z.string(),
+        z.object({ in: z.array(z.string()) }),
+      ])
+      .optional(),
+    person: z
+      .object({
+        firstName: prismaStringFilter(z.string()).optional(),
+        lastName: prismaStringFilter(z.string()).optional(),
+        email: prismaStringFilter(z.string()).optional(),
+        active: z.boolean().optional(),
+      })
+      .optional(),
+    site: z
+      .object({
+        externalId: z.string().optional(),
+      })
+      .optional(),
   })
-  .partial();
+  .partial() satisfies z.Schema<Prisma.PersonClientAccessWhereInput>;
 
 const QueryUserOrderSchema = z
   .object({
-    firstName: PrismaOrderEmum,
-    lastName: PrismaOrderEmum,
-    email: PrismaOrderEmum,
-    site_id: PrismaOrderEmum,
+    person: z
+      .object({
+        firstName: PrismaOrderEmum.optional(),
+        lastName: PrismaOrderEmum.optional(),
+        email: PrismaOrderEmum.optional(),
+      })
+      .optional(),
+    site: z
+      .object({
+        externalId: PrismaOrderEmum.optional(),
+      })
+      .optional(),
   })
-  .partial();
+  .partial() satisfies z.Schema<Prisma.PersonClientAccessOrderByWithRelationInput>;
 
-export class QueryUserDto extends createZodDto(
-  QueryUserFiltersSchema.extend(buildFixedQuerySchema(QueryUserOrderSchema)),
-) {}
+export const QueryUserSchema = QueryUserFiltersSchema.extend(
+  buildFixedQuerySchema(QueryUserOrderSchema),
+);
 
-export function getOrderForKeycloak(query: QueryUserDto): string {
-  if (!query.order) return '';
-  const orders: string[] = [];
-  for (const key in query.order) {
-    if (query[key]) {
-      orders.push(`${query[key] === 'desc' ? '-' : ''}${key}`);
-    }
-  }
-  return orders.join(',');
-}
-
-export function asFilterConditions(query: QueryUserDto) {
-  const qs: CustomQueryFilter[] = [];
-
-  if (query.siteExternalId) {
-    qs.push({
-      q: { key: 'site_id', value: query.siteExternalId },
-    });
-  }
-
-  if (query.clientExternalId) {
-    qs.push({
-      q: { key: 'client_id', value: query.clientExternalId },
-    });
-  }
-
-  if (query.id) {
-    qs.push({
-      q: {
-        key: 'user_id',
-        value: query.id,
-        op: Array.isArray(query.id) ? 'in' : 'eq',
-      },
-    });
-  }
-
-  return qs;
-}
+export class QueryUserDto extends createZodDto(QueryUserSchema) {}

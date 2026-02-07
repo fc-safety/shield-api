@@ -9,8 +9,8 @@
 
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as dotenv from 'dotenv';
-import { CAPABILITIES, TCapability } from 'src/auth/capabilities';
-import { RoleScope } from 'src/auth/scope';
+import { CAPABILITIES, TCapability } from 'src/auth/utils/capabilities';
+import { RoleScope } from 'src/auth/utils/scope';
 import { PrismaClient } from 'src/generated/prisma/client';
 
 dotenv.config();

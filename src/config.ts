@@ -21,6 +21,7 @@ export const configSchema = z.object({
   KEYCLOAK_ADMIN_CLIENT_CLIENT_ID: z.string(),
   KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET: z.string(),
   KEYCLOAK_ADMIN_CLIENT_REFRESH_INTERVAL_SECONDS: z.coerce.number().default(58),
+  KEYCLOAK_WEBHOOK_SECRET: z.string().optional(),
 
   // CORS
   CORS_ALLOWED_ORIGINS: z

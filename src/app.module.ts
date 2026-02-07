@@ -9,6 +9,7 @@ import { ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod';
 import { AdminModule } from './admin/admin.module';
 import { AssetsModule } from './assets/assets.module';
 import { AuthModule } from './auth/auth.module';
+import { CacheModule } from './cache/cache.module';
 import { ClientsModule } from './clients/clients.module';
 import { configSchema } from './config';
 import { ApiConfigModule } from './config/api-config.module';
@@ -58,6 +59,7 @@ import { SupportModule } from './support/support.module';
         limit: 300000000,
       },
     ]),
+    CacheModule,
     AssetsModule,
     ProductsModule,
     ClientsModule,

@@ -4,6 +4,7 @@ import { ApiConfigService } from 'src/config/api-config.service';
 import { ClsService } from 'nestjs-cls';
 import { UsersService } from 'src/clients/users/users.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { ClientsService } from 'src/clients/clients/clients.service';
 
 describe('SupportService', () => {
   let service: SupportService;
@@ -29,6 +30,10 @@ describe('SupportService', () => {
     }),
   };
 
+  const mockClientsService = {
+    getPrimaryClientAccess: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -37,6 +42,7 @@ describe('SupportService', () => {
         { provide: ClsService, useValue: mockClsService },
         { provide: UsersService, useValue: mockUsersService },
         { provide: PrismaService, useValue: mockPrismaService },
+        { provide: ClientsService, useValue: mockClientsService },
       ],
     }).compile();
 

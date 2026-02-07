@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ApiConfigService } from 'src/config/api-config.service';
+import { KeycloakWebhookController } from './keycloak-webhook.controller';
 import {
   KEYCLOAK_ADMIN_CLIENT,
   keycloakAdminClientFactory,
@@ -7,6 +8,8 @@ import {
 } from './keycloak.service';
 
 @Module({
+  // PrismaModule is @Global() so no need to import it explicitly
+  controllers: [KeycloakWebhookController],
   providers: [
     {
       provide: KEYCLOAK_ADMIN_CLIENT,

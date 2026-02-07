@@ -1,5 +1,5 @@
 import { Controller, Get, Headers, Query } from '@nestjs/common';
-import { Public } from 'src/auth/auth.guard';
+import { Public } from 'src/auth/guards/auth.guard';
 import { CheckPublicPolicies } from 'src/auth/policies.guard';
 import { firstOf } from 'src/common/utils';
 import { TagsService } from '../tags/tags.service';

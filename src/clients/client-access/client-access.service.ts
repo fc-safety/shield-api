@@ -6,8 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { type Cache } from 'cache-manager';
-import { ClsService } from 'nestjs-cls';
-import { CommonClsStore } from 'src/common/types';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateClientAccessDto } from './dto/create-client-access.dto';
 import { UpdateClientAccessDto } from './dto/update-client-access.dto';
@@ -16,7 +15,7 @@ import { UpdateClientAccessDto } from './dto/update-client-access.dto';
 export class ClientAccessService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cls: ClsService<CommonClsStore>,
+    private readonly cls: ApiClsService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
@@ -194,7 +193,12 @@ export class ClientAccessService {
 
     // Invalidate cache (if person has idpId)
     if (person.idpId && client.externalId) {
-      await this.invalidateCacheForPerson(person.idpId, client.externalId);
+      await this.invalidateCacheForPerson({
+        idpId: person.idpId,
+        clientExternalId: client.externalId,
+        personId,
+        clientId: dto.clientId,
+      });
     }
 
     return access;
@@ -274,10 +278,12 @@ export class ClientAccessService {
 
     // Invalidate cache (if person has idpId)
     if (existingAccess.person.idpId && existingAccess.client.externalId) {
-      await this.invalidateCacheForPerson(
-        existingAccess.person.idpId,
-        existingAccess.client.externalId,
-      );
+      await this.invalidateCacheForPerson({
+        idpId: existingAccess.person.idpId,
+        clientExternalId: existingAccess.client.externalId,
+        personId: existingAccess.personId,
+        clientId: existingAccess.clientId,
+      });
     }
 
     return access;
@@ -308,21 +314,39 @@ export class ClientAccessService {
 
     // Invalidate cache (if person has idpId)
     if (existingAccess.person.idpId && existingAccess.client.externalId) {
-      await this.invalidateCacheForPerson(
-        existingAccess.person.idpId,
-        existingAccess.client.externalId,
-      );
+      await this.invalidateCacheForPerson({
+        idpId: existingAccess.person.idpId,
+        clientExternalId: existingAccess.client.externalId,
+        personId: existingAccess.personId,
+        clientId: existingAccess.clientId,
+      });
     }
   }
 
   /**
-   * Invalidate cache for a person's client access.
+   * Invalidate all caches related to a person's client access.
+   * This includes caches in both ClientsService and PeopleService.
    */
-  private async invalidateCacheForPerson(
-    idpId: string,
-    clientExternalId: string,
-  ) {
-    const cacheKey = `client-access:${idpId}:${clientExternalId}`;
-    await this.cache.del(cacheKey);
+  private async invalidateCacheForPerson(params: {
+    idpId: string;
+    clientExternalId: string;
+    personId: string;
+    clientId: string;
+  }) {
+    const { idpId, clientExternalId, personId, clientId } = params;
+
+    // Invalidate all related caches
+    await Promise.all([
+      // ClientsService.validateClientAccess cache
+      this.cache.del(`client-access:${idpId}:${clientExternalId}`),
+      // PeopleService.getPersonRepresentation cache (primary client)
+      this.cache.del(`person:idpId=${idpId}`),
+      // PeopleService.getSwitchedClientContext cache
+      this.cache.del(`person-switched:${personId}:${clientExternalId}`),
+      // PeopleService.getPrimaryClientAccess cache
+      this.cache.del(`primary-client-access:${idpId}`),
+      // PeopleService.getPrimaryClientRole cache
+      this.cache.del(`person-primary-role:${personId}:${clientId}`),
+    ]);
   }
 }

@@ -5,16 +5,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import {
   CAPABILITY_DESCRIPTIONS,
   CAPABILITY_LABELS,
   isValidCapability,
   TCapability,
   VALID_CAPABILITIES,
-} from 'src/auth/capabilities';
-import { isScopeAtLeast, RoleScope, TScope } from 'src/auth/scope';
-import { CommonClsStore } from 'src/common/types';
+} from 'src/auth/utils/capabilities';
+import { isScopeAtLeast, RoleScope, TScope } from 'src/auth/utils/scope';
 import {
   NotificationGroupId,
   NotificationGroups,
@@ -30,7 +29,7 @@ const ROLE_CACHE_TTL = 300_000;
 @Injectable()
 export class RolesService {
   constructor(
-    private readonly cls: ClsService<CommonClsStore>,
+    private readonly cls: ApiClsService,
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
@@ -156,11 +155,11 @@ export class RolesService {
   }
 
   async getRoles(): Promise<Role[]> {
-    const user = this.cls.get('user');
+    const accessGrant = this.cls.requireAccessGrant();
     const prisma = this.prisma.bypassRLS();
 
     const roles = await prisma.role.findMany({
-      where: user?.isSystemAdmin()
+      where: accessGrant.isSystemAdmin()
         ? {} // Super admin sees all roles
         : { clientAssignable: true }, // Others see only client-assignable
       orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
@@ -170,7 +169,7 @@ export class RolesService {
   }
 
   async getRole(id: string): Promise<Role> {
-    const user = this.cls.get('user');
+    const accessGrant = this.cls.requireAccessGrant();
     const prisma = this.prisma.bypassRLS();
 
     const role = await prisma.role.findUnique({
@@ -182,7 +181,7 @@ export class RolesService {
     }
 
     // Check access: super admin sees all, others see only client-assignable
-    if (!role.clientAssignable && !user?.isSystemAdmin()) {
+    if (!role.clientAssignable && !accessGrant.isSystemAdmin()) {
       throw new NotFoundException(`Role ${id} not found`);
     }
 

@@ -1,6 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { Public } from 'src/auth/auth.guard';
+import { Public } from 'src/auth/guards/auth.guard';
 import { GetStartedFormDto } from './dto/get-started-form.dto';
 import { LandingService } from './landing.service';
 

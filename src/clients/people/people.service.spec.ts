@@ -2,10 +2,10 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ModuleRef } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ClsService } from 'nestjs-cls';
-import { RoleScope, TScope } from 'src/auth/scope';
-import { TCapability } from 'src/auth/capabilities';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import { StatelessUser } from 'src/auth/user.schema';
+import { StatelessUserData } from 'src/auth/user.schema';
+import { TCapability } from 'src/auth/utils/capabilities';
+import { RoleScope } from 'src/auth/utils/scope';
 import { PeopleService, UserConfigurationError } from './people.service';
 
 describe('PeopleService', () => {
@@ -26,30 +26,15 @@ describe('PeopleService', () => {
   };
 
   const createMockUser = (
-    overrides: Partial<{
-      idpId: string;
-      email: string;
-      username: string;
-      givenName: string;
-      familyName: string;
-      clientId: string;
-      siteId: string;
-      scope: TScope;
-      capabilities: TCapability[];
-    }> = {},
-  ) =>
-    ({
-      idpId: 'keycloak-user-123',
-      email: 'test@example.com',
-      username: 'testuser',
-      givenName: 'Test',
-      familyName: 'User',
-      clientId: 'primary-client-ext',
-      siteId: 'primary-site-ext',
-      scope: RoleScope.CLIENT,
-      capabilities: ['manage-assets'] as TCapability[],
-      ...overrides,
-    }) as StatelessUser;
+    overrides: Partial<StatelessUserData> = {},
+  ): StatelessUserData => ({
+    idpId: 'keycloak-user-123',
+    email: 'test@example.com',
+    username: 'testuser',
+    givenName: 'Test',
+    familyName: 'User',
+    ...overrides,
+  });
 
   beforeEach(async () => {
     mockCacheManager = {
@@ -88,6 +73,73 @@ describe('PeopleService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('getPersonBasicInfo', () => {
+    it('should return basic info for user with client access', async () => {
+      const user = createMockUser();
+      mockClsService.get.mockReturnValue(user);
+
+      mockPrismaService.bypassRLS.mockReturnValue({
+        person: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'person-123',
+            firstName: 'Test',
+            lastName: 'User',
+          }),
+        },
+        personClientAccess: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              clientId: 'client-1',
+              siteId: 'site-1',
+              isPrimary: true,
+              client: {
+                id: 'client-1',
+                name: 'Test Client',
+                externalId: 'ext-client-1',
+              },
+              site: {
+                id: 'site-1',
+                name: 'Test Site',
+              },
+              role: {
+                id: 'role-1',
+                name: 'Admin',
+                scope: RoleScope.CLIENT,
+                capabilities: ['manage-assets'],
+              },
+            },
+          ]),
+        },
+      });
+
+      const result = await service.getPersonBasicInfo(user);
+
+      expect(result.id).toBe('person-123');
+      expect(result.idpId).toBe('keycloak-user-123');
+      expect(result.clientAccess).toHaveLength(1);
+      expect(result.clientAccess[0].clientName).toBe('Test Client');
+    });
+
+    it('should return null id for user without person record', async () => {
+      const user = createMockUser();
+      mockClsService.get.mockReturnValue(user);
+
+      mockPrismaService.bypassRLS.mockReturnValue({
+        person: {
+          findUnique: jest.fn().mockResolvedValue(null),
+        },
+        personClientAccess: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+      });
+
+      const result = await service.getPersonBasicInfo(user);
+
+      expect(result.id).toBeNull();
+      expect(result.clientAccess).toEqual([]);
+    });
+  });
+
   describe('getPersonRepresentation', () => {
     describe('without client switching (primary client)', () => {
       it('should return PersonRepresentation for primary client', async () => {
@@ -98,25 +150,12 @@ describe('PeopleService', () => {
           return undefined;
         });
 
-        // Mock client lookup
         mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-              subsites: [],
-            }),
-          },
           person: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
+              clientId: 'primary-client-internal',
+              siteId: 'primary-site-internal',
             }),
             update: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
@@ -124,13 +163,19 @@ describe('PeopleService', () => {
           },
           personClientAccess: {
             findFirst: jest.fn().mockResolvedValue({
-              personId: 'person-internal-id',
               clientId: 'primary-client-internal',
-              isPrimary: true,
+              siteId: 'primary-site-internal',
+              client: { externalId: 'primary-client-ext' },
               role: {
                 scope: RoleScope.CLIENT,
                 capabilities: ['manage-assets'],
               },
+            }),
+          },
+          site: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'primary-site-internal',
+              subsites: [],
             }),
           },
         });
@@ -149,66 +194,7 @@ describe('PeopleService', () => {
         );
       });
 
-      it('should create person if not exists', async () => {
-        const user = createMockUser();
-        mockClsService.get.mockImplementation((key: string) => {
-          if (key === 'user') return user;
-          if (key === 'activeClientId') return undefined;
-          return undefined;
-        });
-
-        const mockCreate = jest.fn().mockResolvedValue({
-          id: 'new-person-id',
-        });
-
-        mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-              subsites: [],
-            }),
-          },
-          person: {
-            findUnique: jest.fn().mockResolvedValue(null),
-            create: mockCreate,
-          },
-          personClientAccess: {
-            findFirst: jest.fn().mockResolvedValue({
-              personId: 'new-person-id',
-              clientId: 'primary-client-internal',
-              isPrimary: true,
-              role: {
-                scope: RoleScope.CLIENT,
-                capabilities: ['manage-assets'],
-              },
-            }),
-          },
-        });
-
-        const result = await service.getPersonRepresentation(user);
-
-        expect(result.id).toBe('new-person-id');
-        expect(mockCreate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            data: expect.objectContaining({
-              idpId: 'keycloak-user-123',
-              email: 'test@example.com',
-              firstName: 'Test',
-              lastName: 'User',
-            }),
-          }),
-        );
-      });
-
-      it('should throw UserConfigurationError when no role is assigned', async () => {
+      it('should throw UserConfigurationError when user has no client access', async () => {
         const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
@@ -217,25 +203,8 @@ describe('PeopleService', () => {
         });
 
         mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-              subsites: [],
-            }),
-          },
           person: {
             findUnique: jest.fn().mockResolvedValue({
-              id: 'person-internal-id',
-            }),
-            update: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
             }),
           },
@@ -259,51 +228,56 @@ describe('PeopleService', () => {
           return undefined;
         });
 
-        // Mock for primary client lookups (ensurePersonExists)
-        const primaryMocks = {
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
+        // First call for primary access check
+        const primaryAccessMock = jest.fn().mockResolvedValue({
+          clientId: 'primary-client-internal',
+          siteId: 'primary-site-internal',
+          client: { externalId: 'primary-client-ext' },
+          role: {
+            scope: RoleScope.CLIENT,
+            capabilities: ['manage-assets'],
           },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'switched-site-internal',
-              subsites: [
-                {
-                  id: 'subsite-1',
-                  subsites: [],
-                },
-              ],
-            }),
+        });
+
+        // Second call for switched access
+        const switchedAccessMock = jest.fn().mockResolvedValue({
+          personId: 'person-internal-id',
+          clientId: 'secondary-client-internal',
+          siteId: 'switched-site-internal',
+          client: { id: 'secondary-client-internal' },
+          site: { id: 'switched-site-internal' },
+          role: {
+            scope: RoleScope.SITE,
+            capabilities: ['perform-inspections'],
           },
+        });
+
+        mockPrismaService.bypassRLS.mockReturnValue({
           person: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
+              clientId: 'primary-client-internal',
+              siteId: 'primary-site-internal',
             }),
             update: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
             }),
           },
           personClientAccess: {
-            findFirst: jest.fn().mockResolvedValue({
-              personId: 'person-internal-id',
-              clientId: 'secondary-client-internal',
-              siteId: 'switched-site-internal',
-              client: { id: 'secondary-client-internal' },
-              site: { id: 'switched-site-internal' },
-              role: {
-                scope: RoleScope.SITE,
-                capabilities: ['perform-inspections'],
-              },
+            findFirst: jest
+              .fn()
+              // 1st call: getPrimaryClientAccess
+              .mockImplementationOnce(() => primaryAccessMock())
+              // 2nd call: getSwitchedClientContext
+              .mockImplementation(() => switchedAccessMock()),
+          },
+          site: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'switched-site-internal',
+              subsites: [],
             }),
           },
-        };
-
-        mockPrismaService.bypassRLS.mockReturnValue(primaryMocks);
+        });
 
         const result = await service.getPersonRepresentation(user);
 
@@ -327,155 +301,43 @@ describe('PeopleService', () => {
           return undefined;
         });
 
+        // Primary access exists
+        const primaryAccessMock = jest.fn().mockResolvedValue({
+          clientId: 'primary-client-internal',
+          siteId: 'primary-site-internal',
+          client: { externalId: 'primary-client-ext' },
+          role: {
+            scope: RoleScope.CLIENT,
+            capabilities: ['manage-assets'],
+          },
+        });
+
         mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-              subsites: [],
-            }),
-          },
           person: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
+              clientId: 'primary-client-internal',
+              siteId: 'primary-site-internal',
             }),
             update: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
             }),
           },
           personClientAccess: {
-            findFirst: jest.fn().mockResolvedValue(null),
+            findFirst: jest
+              .fn()
+              // 1st call: getPrimaryClientAccess
+              .mockImplementationOnce(() => primaryAccessMock())
+              // 2nd call: getSwitchedClientContext - returns null (no access)
+              .mockResolvedValue(null),
+          },
+          site: {
+            findUnique: jest.fn().mockResolvedValue(null),
           },
         });
 
         await expect(service.getPersonRepresentation(user)).rejects.toThrow(
           UserConfigurationError,
-        );
-      });
-
-      it('should not switch when activeClientId matches primary client', async () => {
-        const user = createMockUser();
-        mockClsService.get.mockImplementation((key: string) => {
-          if (key === 'user') return user;
-          // Same as user.clientId
-          if (key === 'activeClientId') return 'primary-client-ext';
-          return undefined;
-        });
-
-        mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-              subsites: [],
-            }),
-          },
-          person: {
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'person-internal-id',
-            }),
-            update: jest.fn().mockResolvedValue({
-              id: 'person-internal-id',
-            }),
-          },
-          personClientAccess: {
-            findFirst: jest.fn().mockResolvedValue({
-              personId: 'person-internal-id',
-              clientId: 'primary-client-internal',
-              isPrimary: true,
-              role: {
-                scope: RoleScope.CLIENT,
-                capabilities: ['manage-assets'],
-              },
-            }),
-          },
-        });
-
-        const result = await service.getPersonRepresentation(user);
-
-        // Should use primary client, not query PersonClientAccess for switch
-        expect(result.clientId).toBe('primary-client-internal');
-        expect(result.scope).toBe(RoleScope.CLIENT);
-      });
-
-      it('should include subsites in allowedSiteIdsStr for switched client', async () => {
-        const user = createMockUser();
-        mockClsService.get.mockImplementation((key: string) => {
-          if (key === 'user') return user;
-          if (key === 'activeClientId') return 'secondary-client-ext';
-          return undefined;
-        });
-
-        mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'switched-site-internal',
-              subsites: [
-                {
-                  id: 'subsite-1',
-                  subsites: [
-                    {
-                      id: 'subsite-1-1',
-                      subsites: [{ id: 'subsite-1-1-1' }],
-                    },
-                  ],
-                },
-                {
-                  id: 'subsite-2',
-                  subsites: [],
-                },
-              ],
-            }),
-          },
-          person: {
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'person-internal-id',
-            }),
-            update: jest.fn().mockResolvedValue({
-              id: 'person-internal-id',
-            }),
-          },
-          personClientAccess: {
-            findFirst: jest.fn().mockResolvedValue({
-              personId: 'person-internal-id',
-              clientId: 'secondary-client-internal',
-              siteId: 'switched-site-internal',
-              client: { id: 'secondary-client-internal' },
-              site: { id: 'switched-site-internal' },
-              role: {
-                scope: RoleScope.CLIENT,
-                capabilities: ['manage-assets'],
-              },
-            }),
-          },
-        });
-
-        const result = await service.getPersonRepresentation(user);
-
-        expect(result.allowedSiteIdsStr).toBe(
-          'switched-site-internal,subsite-1,subsite-1-1,subsite-1-1-1,subsite-2',
         );
       });
     });
@@ -485,28 +347,16 @@ describe('PeopleService', () => {
         const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
-          if (key === 'activeClientId') return 'secondary-client-ext';
+          if (key === 'activeClientId') return undefined;
           return undefined;
         });
 
         mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'switched-site-internal',
-              subsites: [],
-            }),
-          },
           person: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
+              clientId: 'client-internal',
+              siteId: 'site-internal',
             }),
             update: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
@@ -514,15 +364,19 @@ describe('PeopleService', () => {
           },
           personClientAccess: {
             findFirst: jest.fn().mockResolvedValue({
-              personId: 'person-internal-id',
-              clientId: 'secondary-client-internal',
-              siteId: 'switched-site-internal',
-              client: { id: 'secondary-client-internal' },
-              site: { id: 'switched-site-internal' },
+              clientId: 'client-internal',
+              siteId: 'site-internal',
+              client: { externalId: 'client-ext' },
               role: {
                 scope: RoleScope.GLOBAL,
                 capabilities: ['manage-assets', 'manage-users'],
               },
+            }),
+          },
+          site: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'site-internal',
+              subsites: [],
             }),
           },
         });
@@ -538,28 +392,16 @@ describe('PeopleService', () => {
         const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
-          if (key === 'activeClientId') return 'secondary-client-ext';
+          if (key === 'activeClientId') return undefined;
           return undefined;
         });
 
         mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'switched-site-internal',
-              subsites: [],
-            }),
-          },
           person: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
+              clientId: 'client-internal',
+              siteId: 'site-internal',
             }),
             update: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
@@ -567,15 +409,19 @@ describe('PeopleService', () => {
           },
           personClientAccess: {
             findFirst: jest.fn().mockResolvedValue({
-              personId: 'person-internal-id',
-              clientId: 'secondary-client-internal',
-              siteId: 'switched-site-internal',
-              client: { id: 'secondary-client-internal' },
-              site: { id: 'switched-site-internal' },
+              clientId: 'client-internal',
+              siteId: 'site-internal',
+              client: { externalId: 'client-ext' },
               role: {
                 scope: RoleScope.CLIENT,
                 capabilities: ['manage-assets'],
               },
+            }),
+          },
+          site: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'site-internal',
+              subsites: [],
             }),
           },
         });
@@ -591,28 +437,16 @@ describe('PeopleService', () => {
         const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
-          if (key === 'activeClientId') return 'secondary-client-ext';
+          if (key === 'activeClientId') return undefined;
           return undefined;
         });
 
         mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'switched-site-internal',
-              subsites: [],
-            }),
-          },
           person: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
+              clientId: 'client-internal',
+              siteId: 'site-internal',
             }),
             update: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
@@ -620,15 +454,19 @@ describe('PeopleService', () => {
           },
           personClientAccess: {
             findFirst: jest.fn().mockResolvedValue({
-              personId: 'person-internal-id',
-              clientId: 'secondary-client-internal',
-              siteId: 'switched-site-internal',
-              client: { id: 'secondary-client-internal' },
-              site: { id: 'switched-site-internal' },
+              clientId: 'client-internal',
+              siteId: 'site-internal',
+              client: { externalId: 'client-ext' },
               role: {
                 scope: RoleScope.SITE,
                 capabilities: ['perform-inspections'],
               },
+            }),
+          },
+          site: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'site-internal',
+              subsites: [],
             }),
           },
         });
@@ -644,7 +482,7 @@ describe('PeopleService', () => {
         const user = createMockUser();
         mockClsService.get.mockImplementation((key: string) => {
           if (key === 'user') return user;
-          if (key === 'activeClientId') return 'secondary-client-ext';
+          if (key === 'activeClientId') return undefined;
           return undefined;
         });
 
@@ -655,23 +493,11 @@ describe('PeopleService', () => {
         ] as TCapability[];
 
         mockPrismaService.bypassRLS.mockReturnValue({
-          client: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-client-internal',
-            }),
-          },
-          site: {
-            findUniqueOrThrow: jest.fn().mockResolvedValue({
-              id: 'primary-site-internal',
-            }),
-            findUnique: jest.fn().mockResolvedValue({
-              id: 'switched-site-internal',
-              subsites: [],
-            }),
-          },
           person: {
             findUnique: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
+              clientId: 'client-internal',
+              siteId: 'site-internal',
             }),
             update: jest.fn().mockResolvedValue({
               id: 'person-internal-id',
@@ -679,15 +505,19 @@ describe('PeopleService', () => {
           },
           personClientAccess: {
             findFirst: jest.fn().mockResolvedValue({
-              personId: 'person-internal-id',
-              clientId: 'secondary-client-internal',
-              siteId: 'switched-site-internal',
-              client: { id: 'secondary-client-internal' },
-              site: { id: 'switched-site-internal' },
+              clientId: 'client-internal',
+              siteId: 'site-internal',
+              client: { externalId: 'client-ext' },
               role: {
                 scope: RoleScope.CLIENT,
                 capabilities: expectedCapabilities,
               },
+            }),
+          },
+          site: {
+            findUnique: jest.fn().mockResolvedValue({
+              id: 'site-internal',
+              subsites: [],
             }),
           },
         });

@@ -1,18 +1,11 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import type { Cache } from 'cache-manager';
-import { ClsService } from 'nestjs-cls';
-import { TCapability } from 'src/auth/capabilities';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import {
-  scopeAllowsAllClientSites,
-  scopeAllowsMultipleClients,
-  TScope,
-} from 'src/auth/scope';
 import { StatelessUserData } from 'src/auth/user.schema';
-import { CommonClsStore } from 'src/common/types';
-import { isNil } from 'src/common/utils';
+import { TCapability } from 'src/auth/utils/capabilities';
+import { TScope } from 'src/auth/utils/scope';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { Prisma } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -30,6 +23,34 @@ export interface PersonRepresentation {
   hasMultiSiteScope: boolean;
 }
 
+/**
+ * Basic person info that can be retrieved without requiring client context.
+ * Used for endpoints that need to work for users who haven't been assigned to a client yet.
+ */
+export interface PersonBasicInfo {
+  id: string | null;
+  idpId: string;
+  email: string;
+  username: string;
+  firstName: string | null;
+  lastName: string | null;
+  /** List of clients the user has access to via PersonClientAccess */
+  clientAccess: {
+    clientId: string;
+    clientName: string;
+    clientExternalId: string;
+    siteId: string;
+    siteName: string;
+    isPrimary: boolean;
+    role: {
+      id: string;
+      name: string;
+      scope: TScope;
+      capabilities: TCapability[];
+    };
+  }[];
+}
+
 export class UserConfigurationError extends Error {
   constructor(message: string) {
     super(message);
@@ -45,12 +66,12 @@ export class PeopleService implements OnModuleDestroy {
 
   constructor(
     private readonly keycloak: KeycloakService,
-    protected readonly cls: ClsService<CommonClsStore>,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    protected readonly cls: ApiClsService,
+    protected readonly memoryCache: MemoryCacheService,
     private readonly moduleRef: ModuleRef,
   ) {
     this.invalidatePersonCache = ({ id }) => {
-      this.cache.del(getPersonCacheKey({ idpId: id }));
+      this.memoryCache.del(getPersonCacheKey({ idpId: id }));
     };
 
     // Invalidate the person cache for the user when they are updated or their group membership changes.
@@ -72,412 +93,135 @@ export class PeopleService implements OnModuleDestroy {
     return this.prisma!;
   }
 
-  public async getPersonRepresentation(
+  /**
+   * Gets basic person info that works for users without client context.
+   * This is used for endpoints like /auth/me that need to work for new users
+   * who haven't been assigned to a client yet.
+   */
+  public async getPersonBasicInfo(
     userInput?: StatelessUserData,
-  ): Promise<PersonRepresentation> {
+  ): Promise<PersonBasicInfo> {
     const user = userInput ?? this.cls.get('user');
     invariant(user, 'No user in CLS');
 
-    // Check if user is switching to a different client
-    const activeClientId = this.cls.get('activeClientId');
-    const isSwitchingClient =
-      activeClientId && activeClientId !== user.clientId;
+    const prisma = this.getPrisma().bypassRLS();
 
-    // Always get primary client/site for Person record
-    const [primaryClientId, primarySiteId] = await Promise.all([
-      this.getUserClientId(user),
-      this.getUserSiteId(user),
-    ]);
-
-    // Ensure Person record exists (with primary client/site)
-    const personId = await this.ensurePersonExists(
-      user,
-      primaryClientId,
-      primarySiteId,
-    );
-
-    // If switching client, get context from PersonClientAccess
-    if (isSwitchingClient) {
-      const switchedContext = await this.getSwitchedClientContext(
-        personId,
-        activeClientId,
-      );
-
-      if (!switchedContext) {
-        // This shouldn't happen if ActiveClientGuard ran correctly,
-        // but handle it gracefully
-        throw new UserConfigurationError(
-          'You do not have access to the requested client.',
-        );
-      }
-
-      return switchedContext;
-    }
-
-    // Standard flow - get role from PersonClientAccess for primary client
-    const cacheKey = getPersonCacheKey(user);
-
-    return this.getFromCacheOrDefault<PersonRepresentation>(
-      cacheKey,
-      async () => {
-        const roleData = await this.getPrimaryClientRole(
-          personId,
-          primaryClientId,
-        );
-
-        if (!roleData) {
-          // No PersonClientAccess exists - user has no role/access configured
-          throw new UserConfigurationError(
-            'Your account does not have a role assigned. Please contact your administrator.',
-          );
-        }
-
-        const allowedSiteIdsStr = await this.getAllowedSiteIds(user);
-
-        return {
-          id: personId,
-          idpId: user.idpId,
-          siteId: primarySiteId,
-          clientId: primaryClientId,
-          scope: roleData.scope,
-          capabilities: roleData.capabilities,
-          allowedSiteIdsStr,
-          hasMultiClientScope: scopeAllowsMultipleClients(roleData.scope),
-          hasMultiSiteScope: scopeAllowsAllClientSites(roleData.scope),
-        };
+    // Find existing person or return null id
+    const person = await prisma.person.findUnique({
+      where: { idpId: user.idpId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
       },
-      60 * 60 * 1000, // 1 hour
-    );
-  }
+    });
 
-  /**
-   * Ensures a Person record exists for the user with their primary client/site.
-   * Returns the person's internal ID.
-   */
-  private async ensurePersonExists(
-    user: StatelessUserData,
-    clientId: string,
-    siteId: string,
-  ): Promise<string> {
-    const cacheKey = `person-id:idpId=${user.idpId}`;
-
-    return this.getFromCacheOrDefault<string>(
-      cacheKey,
-      async () => {
-        const prisma = this.getPrisma().bypassRLS();
-
-        const existingPerson = await prisma.person.findUnique({
-          where: { idpId: user.idpId },
-          select: { id: true },
-        });
-
-        if (existingPerson) {
-          // Update with latest info from JWT
-          await prisma.person.update({
-            where: { id: existingPerson.id },
-            data: {
-              firstName: user.givenName ?? '',
-              lastName: user.familyName ?? '',
-              email: user.email,
-              username: user.username,
-              siteId,
-              clientId,
-            },
-          });
-          return existingPerson.id;
-        }
-
-        const newPerson = await prisma.person.create({
-          data: {
-            idpId: user.idpId,
-            firstName: user.givenName ?? '',
-            lastName: user.familyName ?? '',
-            email: user.email,
-            username: user.username,
-            siteId,
-            clientId,
-          },
-        });
-
-        return newPerson.id;
-      },
-      60 * 60 * 1000, // 1 hour
-    );
-  }
-
-  /**
-   * Gets PersonRepresentation for a switched client context.
-   * Uses PersonClientAccess to determine the site and role for that client.
-   */
-  private async getSwitchedClientContext(
-    personId: string,
-    clientExternalId: string,
-  ): Promise<PersonRepresentation | null> {
-    const cacheKey = `person-switched:${personId}:${clientExternalId}`;
-
-    return this.getFromCacheOrDefault<PersonRepresentation | null>(
-      cacheKey,
-      async () => {
-        const prisma = this.getPrisma().bypassRLS();
-
-        const access = await prisma.personClientAccess.findFirst({
-          where: {
-            personId,
-            client: { externalId: clientExternalId },
-          },
+    // Get all client access records for this person
+    const clientAccessRecords = person
+      ? await prisma.personClientAccess.findMany({
+          where: { personId: person.id },
           include: {
-            client: { select: { id: true } },
-            site: { select: { id: true } },
-            role: { select: { scope: true, capabilities: true } },
-          },
-        });
-
-        if (!access) {
-          return null;
-        }
-
-        // Get allowed site IDs for the switched site
-        const allowedSiteIdsStr = await this.getAllowedSiteIdsForSite(
-          access.siteId,
-        );
-
-        const scope = access.role.scope;
-        const capabilities = access.role.capabilities as TCapability[];
-
-        return {
-          id: personId,
-          idpId: null, // Not needed for RLS context
-          siteId: access.siteId,
-          clientId: access.clientId,
-          scope,
-          capabilities,
-          allowedSiteIdsStr,
-          hasMultiClientScope: scopeAllowsMultipleClients(scope),
-          hasMultiSiteScope: scopeAllowsAllClientSites(scope),
-        };
-      },
-      60 * 60 * 1000, // 1 hour
-    );
-  }
-
-  /**
-   * Gets scope and capabilities from PersonClientAccess for a user's primary client.
-   */
-  private async getPrimaryClientRole(
-    personId: string,
-    clientId: string,
-  ): Promise<{ scope: TScope; capabilities: TCapability[] } | null> {
-    const cacheKey = `person-primary-role:${personId}:${clientId}`;
-
-    return this.getFromCacheOrDefault<{
-      scope: TScope;
-      capabilities: TCapability[];
-    } | null>(
-      cacheKey,
-      async () => {
-        const prisma = this.getPrisma().bypassRLS();
-
-        // Look for PersonClientAccess with isPrimary=true, or any access for this client
-        const access = await prisma.personClientAccess.findFirst({
-          where: {
-            personId,
-            clientId,
+            client: {
+              select: {
+                id: true,
+                name: true,
+                externalId: true,
+              },
+            },
+            site: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            role: {
+              select: {
+                id: true,
+                name: true,
+                scope: true,
+                capabilities: true,
+              },
+            },
           },
           orderBy: {
-            isPrimary: 'desc', // Prefer isPrimary=true
+            isPrimary: 'desc',
           },
-          include: {
-            role: { select: { scope: true, capabilities: true } },
-          },
-        });
+        })
+      : [];
 
-        if (!access) {
-          return null;
-        }
-
-        return {
+    return {
+      id: person?.id ?? null,
+      idpId: user.idpId,
+      email: user.email,
+      username: user.username,
+      firstName: person?.firstName ?? user.givenName ?? null,
+      lastName: person?.lastName ?? user.familyName ?? null,
+      clientAccess: clientAccessRecords.map((access) => ({
+        clientId: access.clientId,
+        clientName: access.client.name,
+        clientExternalId: access.client.externalId,
+        siteId: access.siteId,
+        siteName: access.site.name,
+        isPrimary: access.isPrimary,
+        role: {
+          id: access.role.id,
+          name: access.role.name,
           scope: access.role.scope,
           capabilities: access.role.capabilities as TCapability[],
-        };
-      },
-      60 * 60 * 1000, // 1 hour
-    );
+        },
+      })),
+    };
   }
 
   /**
-   * Gets comma-delimited allowed site IDs for a specific site (internal ID).
-   * Similar to getAllowedSiteIds but takes internal site ID instead of user context.
+   * Ensures a Person record exists for the user.
+   * Returns the person's internal ID.
+   *
+   * Note: This only ensures the Person record exists. The client/site
+   * are managed via PersonClientAccess, not directly on Person.
    */
-  private async getAllowedSiteIdsForSite(siteId: string): Promise<string> {
-    const cacheKey = `allowed-site-ids:siteId=${siteId}`;
+  private async getOrCreatePerson(userArg?: StatelessUserData) {
+    const user = userArg ?? this.cls.requireUser();
+    const cacheKey = `person-id:idpId=${user.idpId}`;
 
-    return this.getFromCacheOrDefault<string>(
+    const prisma = this.getPrisma().bypassRLS();
+
+    const personInput: Prisma.PersonCreateInput = {
+      idpId: user.idpId,
+      firstName: user.givenName ?? '',
+      lastName: user.familyName ?? '',
+      email: user.email,
+      username: user.username,
+    };
+
+    let person = await this.memoryCache.getOrSet<
+      Prisma.PersonGetPayload<object>
+    >(
       cacheKey,
       async () => {
-        const site = await this.getPrisma()
-          .bypassRLS()
-          .site.findUnique({
-            where: { id: siteId },
-            select: {
-              id: true,
-              subsites: {
-                select: {
-                  id: true,
-                  subsites: {
-                    select: {
-                      id: true,
-                      subsites: { select: { id: true } },
-                    },
-                  },
-                },
-              },
-            },
-          });
-
-        if (!site) {
-          return siteId;
-        }
-
-        // Flatten 3 levels deep
-        return [
-          site.id,
-          ...site.subsites.flatMap((s1) => [
-            s1.id,
-            ...s1.subsites.flatMap((s2) => [
-              s2.id,
-              ...s2.subsites.map((s3) => s3.id),
-            ]),
-          ]),
-        ].join(',');
+        return prisma.person.upsert({
+          where: { idpId: user.idpId },
+          update: personInput,
+          create: personInput,
+        });
       },
       60 * 60 * 1000, // 1 hour
     );
-  }
 
-  public async getUserClientId(userInput?: StatelessUserData) {
-    const user = userInput ?? this.cls.get('user');
-    invariant(user, 'No user in CLS');
-
-    return await this.getFromCacheOrDefault<string>(
-      `clientId:externalId=${user.clientId}`,
-      () =>
-        this.getPrisma()
-          .bypassRLS()
-          .client.findUniqueOrThrow({
-            select: { id: true },
-            where: { externalId: user.clientId },
-          })
-          .catch((e) => {
-            if (
-              e instanceof Prisma.PrismaClientKnownRequestError &&
-              e.code === 'P2025'
-            ) {
-              throw new UserConfigurationError(
-                'Unable to find a valid client account for your user. Please contact your administrator to ensure your account is properly configured.',
-              );
-            }
-            throw e;
-          })
-          .then(({ id }) => id),
-      60 * 60 * 1000,
-    ); // 1 hour
-  }
-
-  public async getUserSiteId(userInput?: StatelessUserData) {
-    const user = userInput ?? this.cls.get('user');
-    invariant(user, 'No user in CLS');
-
-    return await this.getFromCacheOrDefault<string>(
-      `siteId:externalId=${user.siteId}`,
-      () =>
-        this.getPrisma()
-          .bypassRLS()
-          .site.findUniqueOrThrow({
-            select: { id: true },
-            where: { externalId: user.siteId },
-          })
-          .catch((e) => {
-            if (
-              e instanceof Prisma.PrismaClientKnownRequestError &&
-              e.code === 'P2025'
-            ) {
-              throw new UserConfigurationError(
-                'Unable to find a valid site assignment your user. Please contact your administrator to ensure your account is properly configured.',
-              );
-            }
-            throw e;
-          })
-          .then(({ id }) => id),
-      60 * 60 * 1000,
-    ); // 1 hour
-  }
-
-  public async getAllowedSiteIds(userInput?: StatelessUserData) {
-    const user = userInput ?? this.cls.get('user');
-    invariant(user, 'No user in CLS');
-
-    return await this.getFromCacheOrDefault<string>(
-      `flattenedSiteIds:externalId=${user.siteId}`,
-      () =>
-        this.getPrisma()
-          .bypassRLS()
-          .site.findUnique({
-            select: {
-              id: true,
-              // For simplicity, only including 2 levels deep (3 total).
-              subsites: {
-                select: { id: true, subsites: { select: { id: true } } },
-              },
-            },
-            where: { externalId: user.siteId },
-          })
-          .then((site) =>
-            site
-              ? [
-                  site.id,
-                  site.subsites.map((s) => s.id),
-                  site.subsites.flatMap((s) => s.subsites.map((s) => s.id)),
-                ]
-                  .flat()
-                  .join(',')
-              : '',
-          ),
-      60 * 60 * 1000,
-    ); // 1 hour
-  }
-
-  private async getFromCacheOrDefault<
-    T extends string | number | boolean | object | null,
-  >(
-    cacheKey: string,
-    defaultValue: T | Promise<T> | (() => T | Promise<T>),
-    timeout?: number,
-  ) {
-    // If the cache key is not in the map, create a new promise to check the cache.
-    // This is to avoid race conditions where multiple requests are made for the same cache key.
-    if (!this.cacheCheckMap.has(cacheKey)) {
-      const cacheCheckPromise = this.cache
-        .get<T>(cacheKey)
-        .then(async (cachedValue) => {
-          if (!isNil(cachedValue)) {
-            return cachedValue;
-          }
-
-          const valueOrPromise =
-            typeof defaultValue === 'function' ? defaultValue() : defaultValue;
-          const value: T = await valueOrPromise;
-          await this.cache.set(cacheKey, value, timeout);
-
-          return value;
-        })
-        .finally(() => {
-          this.cacheCheckMap.delete(cacheKey);
-        });
-
-      this.cacheCheckMap.set(cacheKey, cacheCheckPromise);
+    // Update person if user data has changed.
+    if (
+      personInput.firstName !== person.firstName ||
+      personInput.lastName !== person.lastName ||
+      personInput.email !== person.email ||
+      personInput.username !== person.username
+    ) {
+      person = await prisma.person.update({
+        where: { id: person.id },
+        data: personInput,
+      });
     }
 
-    return (await this.cacheCheckMap.get(cacheKey)) as T;
+    return person;
   }
 }
 

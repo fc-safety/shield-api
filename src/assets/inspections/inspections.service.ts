@@ -76,11 +76,14 @@ export class InspectionsService {
     // If the route session exists but isn't owned by the current inspector,
     // update ownership.
     if (inspectionSession) {
-      const currentUser = prisma.$currentUser();
-      if (currentUser && currentUser.id !== inspectionSession.lastInspectorId) {
+      const rlsContext = prisma.$rlsContext();
+      if (
+        rlsContext &&
+        rlsContext.personId !== inspectionSession.lastInspectorId
+      ) {
         await prisma.inspectionSession.update({
           where: { id: inspectionSession.id },
-          data: { lastInspectorId: currentUser.id },
+          data: { lastInspectorId: rlsContext.personId },
         });
       }
     }
@@ -193,7 +196,7 @@ export class InspectionsService {
   }
 
   async findAll(queryInspectionDto?: QueryInspectionDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.inspection.findManyForPage(
         buildPrismaFindArgs<typeof prisma.inspection>(queryInspectionDto, {
           include: {
@@ -216,7 +219,7 @@ export class InspectionsService {
 
   async findOne(id: string) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) =>
         prisma.inspection.findUniqueOrThrow({
           where: { id },

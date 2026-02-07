@@ -1,28 +1,28 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { init as cuid2Init } from '@paralleldrive/cuid2';
-import type { Cache } from 'cache-manager';
 import crypto from 'crypto';
 import { isBefore } from 'date-fns';
 import { IncomingMessage } from 'http';
 import { Jwt, TokenExpiredError } from 'jsonwebtoken';
 import { expressJwtSecret } from 'jwks-rsa';
-import { isNil } from 'src/common/utils';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
+import { firstOf } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { SigningKey } from 'src/generated/prisma/client';
+import { ClientStatus, Prisma, RoleScope } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { TCapability } from './capabilities';
-import { RoleScope, TScope } from './scope';
+import { TAccessGrantResult } from './auth.types';
 import {
   buildUserFromToken,
   StatelessUser,
   StatelessUserData,
 } from './user.schema';
-
-interface ValidateJWTTokenOptions {
-  allowPublic?: boolean;
-}
+import {
+  buildAccessGrantResponseCacheKey,
+  IOrganizationContext,
+  reduceAccessGrants,
+} from './utils/access-grants';
+import { TCapability } from './utils/capabilities';
 
 const createId32 = cuid2Init({ length: 32 });
 const createSecret = () => createId32() + createId32();
@@ -43,7 +43,7 @@ export class AuthService {
   constructor(
     private jwtService: JwtService,
     private config: ApiConfigService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly memoryCache: MemoryCacheService,
     private readonly prisma: PrismaService,
   ) {
     this.getSecret = expressJwtSecret({
@@ -54,19 +54,20 @@ export class AuthService {
     });
   }
 
-  async validateJwtToken(
-    token: string | undefined | null,
-    { allowPublic = false }: ValidateJWTTokenOptions = {},
-  ): Promise<{
-    isValid: boolean;
-    user?: StatelessUser;
-  }> {
-    if (!token) {
-      if (allowPublic) {
-        return { isValid: true };
+  async validateJwtToken(token: string | undefined | null): Promise<
+    | {
+        isValid: true;
+        user: StatelessUser;
+        reason?: never;
       }
-
-      return { isValid: false };
+    | {
+        isValid: false;
+        reason: string;
+        user?: never;
+      }
+  > {
+    if (!token) {
+      return { isValid: false, reason: 'Authentication token is required.' };
     }
 
     try {
@@ -93,117 +94,298 @@ export class AuthService {
       });
 
       // Get basic user data from token
-      const userData = buildUserFromToken(payload);
-
-      // Load capabilities and scope from database
-      const roleData = await this.loadUserRoleFromDatabase(userData);
-
-      // Construct full StatelessUser with capabilities and scope
-      const user = new StatelessUser({
-        ...userData,
-        scope: roleData?.scope ?? RoleScope.SELF,
-        capabilities: roleData?.capabilities ?? [],
-      });
+      const user = buildUserFromToken(payload);
 
       return { isValid: true, user };
     } catch (e) {
       if (!(e instanceof TokenExpiredError)) {
         this.logger.error('Error validating JWT token', e);
+
+        return {
+          isValid: false,
+          reason: 'Authentication token validation failed.',
+        };
       }
 
-      if (allowPublic) {
-        return { isValid: true };
-      }
-
-      return { isValid: false };
+      return { isValid: false, reason: 'Authentication token expired.' };
     }
   }
 
-  /**
-   * Load scope and capabilities from PersonClientAccess.role for the user.
-   * Returns null if no access record exists (user may not be configured yet).
-   */
-  private async loadUserRoleFromDatabase(
-    userData: StatelessUserData,
-  ): Promise<{ scope: TScope; capabilities: TCapability[] } | null> {
+  public async getAccessGrantForUser(
+    user: StatelessUser,
+    organizationContext: IOrganizationContext = {},
+  ): Promise<TAccessGrantResult> {
+    const cacheKey = buildAccessGrantResponseCacheKey(
+      user.idpId,
+      organizationContext,
+    );
+
+    return this.memoryCache.getOrSet(
+      cacheKey,
+      () => this.getAccessGrantForUserFromDatabase(user, organizationContext),
+      5 * 60 * 1000, // 5 minutes
+    );
+  }
+
+  private async getAccessGrantForUserFromDatabase(
+    user: StatelessUser,
+    organizationContext: {
+      requestedClientId?: string;
+      requestedSiteId?: string;
+    } = {},
+  ): Promise<TAccessGrantResult> {
     const prismaBypassRLS = this.prisma.bypassRLS();
 
-    const cacheKey = `user-role:${userData.idpId}:${userData.clientId}`;
-
-    const cached = await this.cache.get<{
-      scope: TScope;
-      capabilities: TCapability[];
-    } | null>(cacheKey);
-    if (!isNil(cached)) {
-      return cached;
-    }
-
-    try {
-      // First, find the Person by idpId
-      const person = await prismaBypassRLS.person.findUnique({
-        where: { idpId: userData.idpId },
-        select: { id: true },
-      });
-
-      if (!person) {
-        // Person doesn't exist yet - will be created on first request
-        await this.cache.set(cacheKey, null, 60 * 1000); // Cache for 1 minute
-        return null;
-      }
-
-      // Find the client by external ID
-      const client = await prismaBypassRLS.client.findUnique({
-        where: { externalId: userData.clientId },
-        select: { id: true },
-      });
-
-      if (!client) {
-        await this.cache.set(cacheKey, null, 60 * 1000);
-        return null;
-      }
-
-      // Find PersonClientAccess with role
-      const access = await prismaBypassRLS.personClientAccess.findFirst({
-        where: {
-          personId: person.id,
-          clientId: client.id,
-        },
-        orderBy: {
-          isPrimary: 'desc',
-        },
-        include: {
-          role: {
-            select: {
-              scope: true,
-              capabilities: true,
-            },
-          },
-        },
-      });
-
-      if (!access) {
-        await this.cache.set(cacheKey, null, 60 * 1000);
-        return null;
-      }
-
-      const result = {
-        scope: access.role.scope,
-        capabilities: access.role.capabilities as TCapability[],
+    const whereIsUsersPrimaryAccessRecord: Prisma.PersonClientAccessWhereInput =
+      {
+        person: { idpId: user.idpId },
+        isPrimary: true,
       };
 
-      // Cache for 1 hour
-      await this.cache.set(cacheKey, result, 60 * 60 * 1000);
+    // Default to querying for the user's primary access record.
+    let whereClause: Prisma.PersonClientAccessWhereInput =
+      whereIsUsersPrimaryAccessRecord;
 
-      return result;
-    } catch (e) {
-      this.logger.error('Error loading user role from database', e);
-      return null;
+    // If the user is requesting a specific client (and site), we need to include that in the query.
+    if (organizationContext.requestedClientId) {
+      whereClause = {
+        OR: [
+          whereIsUsersPrimaryAccessRecord,
+          {
+            person: { idpId: user.idpId },
+            clientId: organizationContext.requestedClientId,
+            siteId: organizationContext.requestedSiteId || undefined,
+          },
+        ],
+      };
     }
+
+    const accessRecordQueryArgs = {
+      where: whereClause,
+      select: {
+        id: true,
+        isPrimary: true,
+        client: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        site: {
+          select: {
+            id: true,
+            active: true,
+          },
+        },
+        roleId: true,
+        role: {
+          select: {
+            scope: true,
+            capabilities: true,
+          },
+        },
+      },
+    } satisfies Prisma.PersonClientAccessFindManyArgs;
+
+    /** Query the database for the user's access records. */
+    const accessRecords = await prismaBypassRLS.personClientAccess.findMany(
+      accessRecordQueryArgs,
+    );
+
+    /** Allow or deny based on presence of an access record for the requested client (and site). */
+    if (organizationContext.requestedClientId) {
+      const requestedAccessRecords = accessRecords.filter(
+        (accessRecord) =>
+          accessRecord.client.id === organizationContext.requestedClientId &&
+          (!organizationContext.requestedSiteId ||
+            accessRecord.site.id === organizationContext.requestedSiteId),
+      );
+
+      if (requestedAccessRecords.length === 0) {
+        const primaryAccessRecord = accessRecords.find(
+          (accessRecord) => accessRecord.isPrimary,
+        );
+
+        /** If no record is found for requested client, return a detailed error message. */
+        return {
+          reason: 'access_grant_request_denied',
+          message:
+            'You do not have access to the requested organization or site. If you have recieved an invitation, please accept it to gain access.',
+          details: {
+            requestedClientId: organizationContext.requestedClientId,
+            requestedSiteId: organizationContext.requestedSiteId,
+            primaryClientId: primaryAccessRecord?.client.id,
+            primarySiteId: primaryAccessRecord?.site.id,
+            primaryRoleId: primaryAccessRecord?.roleId,
+          },
+        };
+      }
+
+      return this.validateAndBuildAccessGrantResult(
+        requestedAccessRecords,
+        organizationContext,
+      );
+    }
+
+    /** Default to the user's primary access record when no specific client is requested. */
+    const primaryAccessRecords = accessRecords.filter(
+      (accessRecord) => accessRecord.isPrimary,
+    );
+
+    if (primaryAccessRecords.length > 0) {
+      return this.validateAndBuildAccessGrantResult(
+        primaryAccessRecords,
+        organizationContext,
+      );
+    }
+
+    /** If no primary access record is found, return the first access record. */
+    if (accessRecords.length > 0) {
+      return this.validateAndBuildAccessGrantResult(
+        accessRecords.slice(0, 1),
+        organizationContext,
+      );
+    }
+
+    /** If no access record is found, return a detailed error message. */
+    return {
+      reason: 'no_access_grant',
+      message:
+        'You do not have access to any organizations. If you have received an invitation, please accept it to gain access.',
+      details: {
+        primaryClientId: null,
+        primarySiteId: null,
+        primaryRoleId: null,
+      },
+    };
+  }
+
+  /**
+   * Reduces multiple access records into a single grant and ensures client and site are activated
+   * for role scopes that require it.
+   *
+   * @param accessRecords - The access records to validate and build the access grant result for.
+   * @param organizationContext - The requested client and site IDs.
+   * @returns The access grant result.
+   */
+  private validateAndBuildAccessGrantResult(
+    accessRecords: Prisma.PersonClientAccessGetPayload<{
+      select: {
+        id: true;
+        client: {
+          select: {
+            id: true;
+            status: true;
+          };
+        };
+        site: {
+          select: {
+            id: true;
+            active: true;
+          };
+        };
+        role: {
+          select: {
+            scope: true;
+            capabilities: true;
+          };
+        };
+      };
+    }>[],
+    organizationContext: {
+      requestedClientId?: string;
+      requestedSiteId?: string;
+    } = {},
+  ): TAccessGrantResult {
+    const grant = reduceAccessGrants(
+      accessRecords.map((accessRecord) => ({
+        scope: accessRecord.role.scope,
+        capabilities: accessRecord.role.capabilities as TCapability[],
+        clientId: accessRecord.client.id,
+        siteId: accessRecord.site.id,
+      })),
+    );
+
+    // Global scopes and above (ie System scope) do not require client or site activation.
+    // This prevents unnecessary account lockouts.
+    if (grant.scopeAllows(RoleScope.GLOBAL)) {
+      return {
+        grant,
+      };
+    }
+
+    const clientAndSiteStatus = accessRecords
+      .filter(
+        (r) => r.client.id === grant.clientId && r.site.id === grant.siteId,
+      )
+      .map((r) => ({
+        clientActive: r.client.status === ClientStatus.ACTIVE,
+        siteActive: r.site.active,
+      }))
+      .at(0);
+
+    if (!clientAndSiteStatus) {
+      this.logger.error(
+        `Failed to find the client and site statuses for access records with IDs: ${accessRecords.map((r) => r.id).join(', ')}`,
+      );
+
+      throw new Error(
+        'An error occured while authenticating your request. Please contact support.',
+      );
+    }
+
+    const { clientActive, siteActive } = clientAndSiteStatus;
+
+    if (!clientActive) {
+      return {
+        reason: 'client_inactive',
+        message:
+          'The organization you are trying to access is not currently activated. Please contact support to reactivate your account.',
+        details: {
+          requestedClientId: organizationContext.requestedClientId,
+          requestedSiteId: organizationContext.requestedSiteId,
+        },
+      };
+    }
+
+    // Client scopes and above do not require site activation.
+    // This prevents unnecessary account lockouts.
+    if (grant.scopeAllows(RoleScope.CLIENT)) {
+      return {
+        grant,
+      };
+    }
+
+    if (!siteActive) {
+      return {
+        reason: 'site_inactive',
+        message:
+          'The site you are trying to access is not currently active. Please contact support to reactivate your account.',
+        details: {
+          requestedClientId: organizationContext.requestedClientId,
+          requestedSiteId: organizationContext.requestedSiteId,
+        },
+      };
+    }
+
+    return {
+      grant,
+    };
   }
 
   public extractTokenFromRequest(request: IncomingMessage): string | undefined {
     const [type, token] = request.headers.authorization?.split(' ') ?? [];
     return type === 'Bearer' ? token : undefined;
+  }
+
+  public extractOrganizationContextFromRequest(request: IncomingMessage): {
+    requestedClientId?: string;
+    requestedSiteId?: string;
+  } {
+    return {
+      requestedClientId: firstOf(request.headers['x-client-id']),
+      requestedSiteId: firstOf(request.headers['x-site-id']),
+    };
   }
 
   public async generateSignature(options: {
@@ -336,6 +518,48 @@ export class AuthService {
     }
   }
 
+  public async savePersonFromUserData(user: StatelessUserData) {
+    const prisma = this.prisma.bypassRLS();
+
+    const personInput: Prisma.PersonCreateInput = {
+      idpId: user.idpId,
+      firstName: user.givenName ?? '',
+      lastName: user.familyName ?? '',
+      email: user.email,
+      username: user.username,
+    };
+
+    const cacheKey = `person:idpId=${user.idpId}`;
+    let person = await this.memoryCache.getOrSet<
+      Prisma.PersonGetPayload<object>
+    >(
+      cacheKey,
+      async () => {
+        return prisma.person.upsert({
+          where: { idpId: user.idpId },
+          update: personInput,
+          create: personInput,
+        });
+      },
+      60 * 60 * 1000, // 1 hour
+    );
+
+    // Update person if user data has changed.
+    if (
+      personInput.firstName !== person.firstName ||
+      personInput.lastName !== person.lastName ||
+      personInput.email !== person.email ||
+      personInput.username !== person.username
+    ) {
+      person = await prisma.person.update({
+        where: { id: person.id },
+        data: personInput,
+      });
+    }
+
+    return person;
+  }
+
   private encodeTokenPart(part: object): string {
     return Buffer.from(JSON.stringify(part)).toString('base64url');
   }
@@ -346,30 +570,25 @@ export class AuthService {
 
   private async getSigningKey(keyId: string) {
     const cacheKey = `signing-key:${keyId}`;
-    let signingKey = (await this.cache.get<SigningKey>(cacheKey)) ?? null;
-
-    if (signingKey) {
-      return signingKey;
-    }
-
-    signingKey = await this.prisma.signingKey.findUnique({
-      where: {
-        keyId,
-      },
-    });
-
-    if (signingKey === null) {
-      signingKey = await this.prisma.signingKey.create({
-        data: {
-          keyId,
-          keySecret: createSecret(),
-        },
-      });
-    }
 
     // Cache indefinitely.
-    await this.cache.set(cacheKey, signingKey);
+    return this.memoryCache.getOrSet(cacheKey, async () => {
+      let signingKey = await this.prisma.signingKey.findUnique({
+        where: {
+          keyId,
+        },
+      });
 
-    return signingKey;
+      if (signingKey === null) {
+        signingKey = await this.prisma.signingKey.create({
+          data: {
+            keyId,
+            keySecret: createSecret(),
+          },
+        });
+      }
+
+      return signingKey;
+    });
   }
 }

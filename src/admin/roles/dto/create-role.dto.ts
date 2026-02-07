@@ -1,6 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
-import { VALID_CAPABILITIES } from 'src/auth/capabilities';
-import { RoleScope } from 'src/auth/scope';
+import { VALID_CAPABILITIES } from 'src/auth/utils/capabilities';
+import { RoleScope } from 'src/auth/utils/scope';
 import { NotificationGroupIds } from 'src/notifications/notification-types';
 import { z } from 'zod';
 

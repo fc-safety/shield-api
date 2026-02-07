@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { normalizeState } from 'src/common/address-utils';
 import { US_STATES } from 'src/common/geography/geography.constants';
-import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import {
@@ -29,11 +28,11 @@ import { UpdateClientAssetQuestionCustomizationDto } from './dto/update-client-a
 export class AssetQuestionsService {
   constructor(
     private readonly prisma: PrismaService,
-    protected readonly cls: ClsService<CommonClsStore>,
+    protected readonly cls: ApiClsService,
   ) {}
 
   async create(createAssetQuestionDto: CreateAssetQuestionDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestion.create({
         data: createAssetQuestionDto,
         include: {
@@ -50,7 +49,7 @@ export class AssetQuestionsService {
   }
 
   async findAll(queryAssetQuestionDto?: QueryAssetQuestionDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestion.findManyForPage(
         buildPrismaFindArgs<typeof prisma.assetQuestion>(
           queryAssetQuestionDto,
@@ -84,7 +83,7 @@ export class AssetQuestionsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestion
         .findUniqueOrThrow({
           where: { id, parentQuestionId: null },
@@ -113,7 +112,7 @@ export class AssetQuestionsService {
   }
 
   async update(id: string, updateAssetQuestionDto: UpdateAssetQuestionDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestion
         .update({
           where: { id },
@@ -134,7 +133,7 @@ export class AssetQuestionsService {
 
   async remove(id: string) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) => prisma.assetQuestion.delete({ where: { id } }))
       .catch(as404OrThrow);
   }
@@ -183,7 +182,7 @@ export class AssetQuestionsService {
     parentId: string,
     createAssetQuestionDto: CreateAssetQuestionDto,
   ) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestion.create({
         data: {
           ...createAssetQuestionDto,
@@ -206,7 +205,7 @@ export class AssetQuestionsService {
     questionId: string,
     createAssetQuestionConditionDto: CreateAssetQuestionConditionDto,
   ) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestionCondition
         .create({
           data: {
@@ -222,7 +221,7 @@ export class AssetQuestionsService {
     conditionId: string,
     updateAssetQuestionConditionDto: UpdateAssetQuestionConditionDto,
   ) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestionCondition
         .update({
           where: { id: conditionId },
@@ -234,7 +233,7 @@ export class AssetQuestionsService {
 
   async removeCondition(conditionId: string) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) =>
         prisma.assetQuestionCondition.delete({ where: { id: conditionId } }),
       )

@@ -4,12 +4,12 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ClsModule } from 'nestjs-cls';
 import { ClientsModule } from 'src/clients/clients/clients.module';
-import { ActiveClientGuard } from 'src/clients/guards/active-client.guard';
 import { PeopleModule } from 'src/clients/people/people.module';
 import { SitesModule } from 'src/clients/sites/sites.module';
+import { ApiClsService } from './api-cls.service';
 import { AuthController } from './auth.controller';
-import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
+import { AuthGuard } from './guards/auth.guard';
 import { KeycloakModule } from './keycloak/keycloak.module';
 import { PoliciesGuard } from './policies.guard';
 
@@ -25,6 +25,8 @@ import { PoliciesGuard } from './policies.guard';
           if (req) {
             cls.set('mode', 'request');
           }
+          cls.set('isPublic', false);
+          cls.set('skipAccessGrantValidation', false);
         },
       },
     }),
@@ -35,6 +37,7 @@ import { PoliciesGuard } from './policies.guard';
   ],
   controllers: [AuthController],
   providers: [
+    ApiClsService,
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
@@ -42,10 +45,6 @@ import { PoliciesGuard } from './policies.guard';
     {
       provide: APP_GUARD,
       useClass: PoliciesGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: ActiveClientGuard,
     },
     AuthService,
   ],

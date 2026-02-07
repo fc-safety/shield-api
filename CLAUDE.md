@@ -328,6 +328,32 @@ Database schema is defined in `prisma/schema.prisma`. Migrations are in `prisma/
 - **Notifications**: Email via Resend, SMS via Telnyx
 - **Media**: File handling with vault ownership system
 
+### Configuration
+
+Use `ApiConfigService` (not the NestJS `ConfigService`) to access environment variables. It provides type-safe access to validated configuration defined in `src/config.ts`.
+
+```typescript
+// Good - use ApiConfigService
+import { ApiConfigService } from '../../config/api-config.service';
+
+constructor(private readonly config: ApiConfigService) {}
+
+someMethod() {
+  const frontendUrl = this.config.get('FRONTEND_URL'); // Type-safe, validated
+}
+
+// Bad - don't use ConfigService directly
+import { ConfigService } from '@nestjs/config';
+
+constructor(private readonly configService: ConfigService) {}
+
+someMethod() {
+  const frontendUrl = this.configService.get<string>('FRONTEND_URL'); // Not type-safe
+}
+```
+
+`ApiConfigModule` is global, so no module import is needed. Configuration is validated at startup via Zod schema in `src/config.ts`.
+
 ### Module Structure
 
 ```

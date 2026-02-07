@@ -19,7 +19,7 @@ export class VaultOwnershipsService {
 
   async findAll(queryViewOwnershipDto: QueryViewOwnershipDto) {
     return await this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) =>
         prisma.vaultOwnership.findManyForPage(
           buildPrismaFindArgs<typeof prisma.vaultOwnership>(
@@ -30,7 +30,7 @@ export class VaultOwnershipsService {
   }
 
   async findOne(id: string) {
-    return await this.prisma.forContext().then((prisma) =>
+    return await this.prisma.forViewContext().then((prisma) =>
       prisma.vaultOwnership.findUnique({
         where: { id },
       }),

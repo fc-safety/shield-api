@@ -8,15 +8,14 @@ import {
 import { createId } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
 import { add, isAfter } from 'date-fns';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { AuthService, SigningKeyExpiredError } from 'src/auth/auth.service';
-import { PersonRepresentation } from 'src/clients/people/people.service';
-import { CommonClsStore } from 'src/common/types';
+import { isScopeAtLeast } from 'src/auth/utils/scope';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { Prisma } from 'src/generated/prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { Prisma, RoleScope } from 'src/generated/prisma/client';
+import { IPrismaRLSContext, PrismaService } from 'src/prisma/prisma.service';
 import { Readable } from 'stream';
 import { BulkGenerateSignedTagUrlDto } from './dto/bulk-generate-signed-tag-url.dto';
 import { CreateTagDto } from './dto/create-tag.dto';
@@ -36,18 +35,18 @@ export class TagsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ApiConfigService,
-    private readonly cls: ClsService<CommonClsStore>,
+    private readonly cls: ApiClsService,
     private readonly authService: AuthService,
   ) {}
 
   async create(createTagDto: CreateTagDto) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) => prisma.tag.create({ data: createTagDto }));
   }
 
   async findAll(queryTagDto: QueryTagDto | undefined) {
-    return this.prisma.forContext().then(async (prisma) =>
+    return this.prisma.forViewContext().then(async (prisma) =>
       prisma.tag.findManyForPage(
         buildPrismaFindArgs<typeof prisma.tag>(queryTagDto, {
           include: {
@@ -66,7 +65,7 @@ export class TagsService {
 
   async findOne(id: string) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) =>
         prisma.tag.findUniqueOrThrow({
           where: { id },
@@ -82,7 +81,7 @@ export class TagsService {
 
   async findOneForInspection(externalId: string) {
     // Get current user context for validation and error handling
-    const currentUser = (await this.prisma.forUser()).$currentUser();
+    const currentUser = (await this.prisma.forUser()).$rlsContext();
 
     // Bypass RLS for initial tag lookup - access is validated at app level below
     const tag = await this.prisma
@@ -145,7 +144,7 @@ export class TagsService {
 
   /**
    * Validates that the current user has access to the given client.
-   * Checks both primary client (from JWT) and secondary access (via PersonClientAccess).
+   * Checks PersonClientAccess to verify the user has access.
    * Throws ForbiddenException if user lacks access.
    */
   private async validateUserAccessToTagClient(
@@ -156,12 +155,7 @@ export class TagsService {
       throw new UnauthorizedException('User not authenticated');
     }
 
-    // Check if it's the user's primary client
-    if (user.clientId === clientExternalId) {
-      return;
-    }
-
-    // Check PersonClientAccess for secondary client access
+    // Check PersonClientAccess for client access
     const access = await this.prisma.bypassRLS().personClientAccess.findFirst({
       where: {
         person: { idpId: user.idpId },
@@ -209,7 +203,7 @@ export class TagsService {
   }
 
   async findOneForAssetSetup(externalId: string) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.tag
         .findFirstOrThrow({
           where: { externalId },
@@ -242,7 +236,7 @@ export class TagsService {
         .catch(
           this.findAndThrowReasonForTagError(
             { externalId },
-            prisma.$currentUser(),
+            prisma.$rlsContext(),
           ),
         )
         .catch(as404OrThrow),
@@ -269,14 +263,14 @@ export class TagsService {
 
     // If the tag is registered to a client, the user must have access to that client
     // (either primary or via PersonClientAccess)
-    const userPerson = (await this.prisma.forUser()).$currentUser();
-    if (!userPerson) {
+    const rlsContext = (await this.prisma.forUser()).$rlsContext();
+    if (!rlsContext) {
       throw new BadRequestException('Unable to determine user context.');
     }
 
     // Check if user has access to the tag's client
     const hasClientAccess = await this.checkUserHasClientAccess(
-      userPerson.clientId,
+      rlsContext.clientId,
       tag.clientId,
     );
     if (!hasClientAccess) {
@@ -292,9 +286,9 @@ export class TagsService {
     // If the tag is registered to a site, the user must belong to that
     // site.
     if (
-      !userPerson.hasMultiSiteScope &&
-      !userPerson.allowedSiteIdsStr.includes(tag.siteId) &&
-      tag.siteId !== userPerson.siteId
+      !isScopeAtLeast(rlsContext.scope, RoleScope.SITE_GROUP) &&
+      !rlsContext.allowedSiteIds.includes(tag.siteId) &&
+      tag.siteId !== rlsContext.siteId
     ) {
       throw new BadRequestException('Tag is not registered to your site.');
     }
@@ -307,18 +301,18 @@ export class TagsService {
     { client: newClient, ...dto }: RegisterTagDto,
   ) {
     // Determine if the user can and intends to act as a global admin.
-    const user = this.cls.get('user');
+    const accessGrant = this.cls.get('accessGrant');
     const viewContext = this.cls.get('viewContext');
-    const actingAsGlobalAdmin =
-      user?.isGlobalAdmin() === true && viewContext === 'admin';
+    const actingAsSystemAdmin =
+      accessGrant?.isSystemAdmin() === true && viewContext === 'admin';
 
     // Get tag data from inspection token.
     const { tagExternalId, serialNumber } =
       this.parseInspectionToken(inspectionToken);
 
     // If acting as a global admin, simply upsert registration data.
-    if (actingAsGlobalAdmin && newClient !== undefined) {
-      const prisma = await this.prisma.build({ context: 'admin' });
+    if (actingAsSystemAdmin && newClient !== undefined) {
+      const prisma = await this.prisma.build({ viewContext: 'admin' });
       return prisma.tag.upsert({
         where: { externalId: tagExternalId },
         update: {
@@ -344,7 +338,7 @@ export class TagsService {
     });
 
     return this.prisma.forUser().then(async (prisma) => {
-      const person = prisma.$currentUser();
+      const person = prisma.$rlsContext();
 
       if (!person) {
         throw new ForbiddenException(
@@ -391,7 +385,7 @@ export class TagsService {
   }
 
   async update(id: string, updateTagDto: UpdateTagDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.tag
         .update({
           where: { id },
@@ -403,7 +397,7 @@ export class TagsService {
 
   async remove(id: string) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) => prisma.tag.delete({ where: { id } }));
   }
 
@@ -697,7 +691,7 @@ export class TagsService {
 
   private findAndThrowReasonForTagError(
     findInput: Prisma.TagWhereUniqueInput,
-    currentUser: PersonRepresentation | undefined | null,
+    rlsContext: IPrismaRLSContext | undefined | null,
   ) {
     return async (error: unknown) => {
       if (
@@ -717,13 +711,10 @@ export class TagsService {
 
         // Try to check against the current user (if present). If the user is present along
         // with the client and site IDs, alert the user as to why they are unable to access the tag.
-        if (currentUser) {
+        if (rlsContext) {
           // Check if user has access via PersonClientAccess (multi-client)
           const hasClientAccess = clientId
-            ? await this.checkUserHasClientAccess(
-                currentUser.clientId,
-                clientId,
-              )
+            ? await this.checkUserHasClientAccess(rlsContext.clientId, clientId)
             : true;
 
           if (clientId && !hasClientAccess) {
@@ -733,9 +724,9 @@ export class TagsService {
           }
           if (
             siteId &&
-            !currentUser.hasMultiSiteScope &&
-            !currentUser.allowedSiteIdsStr.split(',').includes(siteId) &&
-            siteId !== currentUser.siteId
+            !isScopeAtLeast(rlsContext.scope, RoleScope.SITE_GROUP) &&
+            !rlsContext.allowedSiteIds.includes(siteId) &&
+            siteId !== rlsContext.siteId
           ) {
             throw new BadRequestException(
               'Tag is not registered to your site. Please contact your administrator if you think this is a mistake.',

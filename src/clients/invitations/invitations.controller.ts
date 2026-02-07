@@ -8,10 +8,13 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { Public } from '../../auth/auth.guard';
-import { CheckCapability, CheckPolicies } from '../../auth/policies.guard';
+import { CheckCapability, CheckIsAuthenticated } from 'src/auth/utils/policies';
+import {
+  Public,
+  SkipAccessGrantValidation,
+} from '../../auth/guards/auth.guard';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
-import { ListInvitationsQueryDto } from './dto/list-invitations-query.dto';
+import { QueryInvitationDto } from './dto/query-invitationd.dto';
 import { InvitationsService } from './invitations.service';
 
 @Controller('invitations')
@@ -33,7 +36,7 @@ export class InvitationsController {
    * List invitations with pagination and filtering.
    */
   @Get()
-  async findAll(@Query() query: ListInvitationsQueryDto) {
+  async findAll(@Query() query: QueryInvitationDto) {
     return this.invitationsService.findAll(query);
   }
 
@@ -57,10 +60,12 @@ export class InvitationsController {
 
   /**
    * Accept an invitation.
-   * Any authenticated user can accept an invitation.
+   * Any authenticated user can accept an invitation, even if they don't have
+   * a client/site assigned yet (which is the typical case for new users).
    */
   @Post(':code/accept')
-  @CheckPolicies(() => true) // Any authenticated user
+  @CheckIsAuthenticated()
+  @SkipAccessGrantValidation()
   async accept(@Param('code') code: string) {
     return this.invitationsService.accept(code);
   }

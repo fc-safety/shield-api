@@ -1,6 +1,6 @@
 import { Controller, Get, MessageEvent, Query, Sse } from '@nestjs/common';
 import { map } from 'rxjs';
-import { Public } from 'src/auth/auth.guard';
+import { Public } from 'src/auth/guards/auth.guard';
 import { CheckIsAuthenticated } from 'src/auth/policies.guard';
 import { ListenDbEventsDto } from './dto/listen-db-events.dto';
 import { EventsService } from './events.service';

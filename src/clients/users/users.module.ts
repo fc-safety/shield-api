@@ -1,3 +1,4 @@
+import { CacheModule } from '@nestjs/cache-manager';
 import { forwardRef, Module } from '@nestjs/common';
 import { RolesModule } from 'src/admin/roles/roles.module';
 import { KeycloakModule } from 'src/auth/keycloak/keycloak.module';
@@ -6,7 +7,12 @@ import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
 @Module({
-  imports: [KeycloakModule, RolesModule, forwardRef(() => NotificationsModule)],
+  imports: [
+    KeycloakModule,
+    RolesModule,
+    forwardRef(() => NotificationsModule),
+    CacheModule.register(),
+  ],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],

@@ -3,6 +3,7 @@ import GroupRepresentation from '@keycloak/keycloak-admin-client/lib/defs/groupR
 import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
 import { RequestArgs } from '@keycloak/keycloak-admin-client/lib/resources/agent';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
 import JSON5 from 'json5';
 import EventEmitter from 'node:events';
 import pRetry from 'p-retry';
@@ -264,6 +265,22 @@ export class KeycloakService {
         return result;
       },
     });
+  }
+
+  verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {
+    const secret = this.config.get('KEYCLOAK_WEBHOOK_SECRET');
+    if (!secret) {
+      logger.warn(
+        'KEYCLOAK_WEBHOOK_SECRET not configured, skipping validation',
+      );
+      return true;
+    }
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+    try {
+      return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    } catch {
+      return false;
+    }
   }
 
   public async getOrCreateManagedRolesGroup<F extends boolean = false>(

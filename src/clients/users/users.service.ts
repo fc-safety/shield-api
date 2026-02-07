@@ -1,34 +1,30 @@
 import { NetworkError as KeycloakNetworkError } from '@keycloak/keycloak-admin-client';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createId } from '@paralleldrive/cuid2';
+import { type Cache } from 'cache-manager';
 import crypto from 'crypto';
-import { ClsService } from 'nestjs-cls';
-import {
-  DatabaseRole,
-  databaseRoleToRole,
-  Role,
-} from 'src/admin/roles/model/role';
+import { databaseRoleToRole } from 'src/admin/roles/model/role';
 import { RolesService } from 'src/admin/roles/roles.service';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
-import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow, isNil } from 'src/common/utils';
+import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma, PrismaClient } from 'src/generated/prisma/client';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { AssignRoleDto } from './dto/assign-role.dto';
-import { CreateUserDto } from './dto/create-user.dto';
-import { asFilterConditions, QueryUserDto } from './dto/query-user.dto';
+import { QueryUserDto } from './dto/query-user.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
-  keycloakUserAsClientUser,
+  personClientAccessToClientUser,
   validateKeycloakUser,
 } from './model/client-user';
 
@@ -38,159 +34,50 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly keycloak: KeycloakService,
     private readonly roles: RolesService,
-    private readonly cls: ClsService<CommonClsStore>,
+    private readonly cls: ApiClsService,
     private readonly notifications: NotificationsService,
     private readonly config: ApiConfigService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
-  async create(
-    createUserDto: CreateUserDto,
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
-  ) {
-    const client = await this.getClient(clientId, bypassRLS);
-    const newId = createId();
-
-    const attributes = KeycloakService.mergeAttributes(
-      {},
-      ['phone_number', createUserDto.phoneNumber],
-      ['site_id', createUserDto.siteExternalId],
-      ['client_id', client.externalId],
-      ['user_id', newId],
-      ['user_created_at', new Date().toISOString()],
-      ['user_updated_at', new Date().toISOString()],
-      ['user_position', createUserDto.position],
-      ['user_legacy_id', createUserDto.legacyUserId],
-    );
-
-    const initialPassword =
-      createUserDto.password ?? this.generatePassword(24).password;
-
-    await this.keycloak.client.users
-      .create({
-        enabled: createUserDto.active ?? true,
-        firstName: createUserDto.firstName,
-        lastName: createUserDto.lastName,
-        username: createUserDto.email,
-        email: createUserDto.email,
-        emailVerified: true,
-        attributes,
-        // Make sure user is created with initial password even if it's randomly
-        // generated, else Keycloak won't allow the user to reset the password
-        // on their own.
-        credentials: [
-          {
-            type: 'password',
-            value: initialPassword,
-          },
-        ],
-      })
-      .catch((e) => {
-        if (e instanceof KeycloakNetworkError && e.response.status === 409) {
-          throw new ConflictException(e.message);
-        }
-        throw e;
-      });
-    return this.findOne(newId, client, bypassRLS);
-  }
-
-  async findAll(
-    queryUserDto: QueryUserDto = new QueryUserDto(),
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
-  ) {
-    const client = await this.getClient(clientId, bypassRLS);
-
-    const { offset, limit } = queryUserDto;
-    const keycloakResponse = await this.keycloak.findUsersByAttribute({
-      filter: {
-        AND: [
-          ...this.buildSiteFilters(client),
-          ...asFilterConditions(queryUserDto),
-        ],
-      },
-      limit,
-      offset,
-    });
-
-    const validUsers = keycloakResponse.results.filter(validateKeycloakUser);
-
-    // Get all user IDs to batch lookup roles
-    const userIds = validUsers.map((u) => u.attributes.user_id[0]);
-
-    // Load roles for all users from database via PersonClientAccess
-    const userRolesMap = await this.getUserRolesFromDatabase(
-      userIds,
-      client.id,
-      bypassRLS,
-    );
-
-    const cleanedUsers = validUsers.map((user) => {
-      const userId = user.attributes.user_id[0];
-      const roles = userRolesMap.get(userId) ?? [];
-      return keycloakUserAsClientUser(user, roles);
-    });
-
+  /**
+   * Common include for user queries.
+   */
+  private get userInclude() {
     return {
-      ...keycloakResponse,
-      limit: cleanedUsers.length,
-      results: cleanedUsers,
+      person: true,
+      site: { select: { externalId: true } },
+      client: { select: { externalId: true } },
+      role: true,
     };
   }
 
-  async findOne(
-    id: string,
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
-  ) {
-    const client = await this.getClient(clientId, bypassRLS);
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+  async findAll(query: QueryUserDto = new QueryUserDto()) {
+    const prisma = await this.prisma.build();
 
-    // Load role from database via PersonClientAccess
-    const userRolesMap = await this.getUserRolesFromDatabase(
-      [id],
-      client.id,
-      bypassRLS,
+    const result = await prisma.personClientAccess.findManyForPage(
+      buildPrismaFindArgs<typeof prisma.personClientAccess>(query, {
+        include: this.userInclude,
+      }),
     );
-    const roles = userRolesMap.get(id) ?? [];
 
-    return keycloakUserAsClientUser(keycloakUser, roles);
+    return {
+      ...result,
+      results: result.results.map(personClientAccessToClientUser),
+    };
   }
 
-  /**
-   * Batch load roles for users from database via PersonClientAccess.
-   */
-  private async getUserRolesFromDatabase(
-    userIds: string[],
-    clientId: string,
-    bypassRLS?: boolean,
-  ): Promise<Map<string, Role[]>> {
-    const prisma = (bypassRLS
-      ? this.prisma.bypassRLS()
-      : await this.prisma.forContext()) as unknown as PrismaClient;
+  async findOne(id: string) {
+    const prisma = await this.prisma.build();
 
-    // Find all persons by their internal user IDs and get their roles
-    const personsWithRoles = await prisma.person.findMany({
-      where: {
-        id: { in: userIds },
-      },
-      include: {
-        clientAccess: {
-          where: { clientId },
-          include: { role: true },
-        },
-      },
-    });
+    const personClientAccess = await prisma.personClientAccess
+      .findFirstOrThrow({
+        where: { personId: id },
+        include: this.userInclude,
+      })
+      .catch(as404OrThrow);
 
-    const roleMap = new Map<string, Role[]>();
-    for (const person of personsWithRoles) {
-      const roles = person.clientAccess.map((pca) =>
-        databaseRoleToRole(pca.role as DatabaseRole),
-      );
-      roleMap.set(person.id, roles);
-    }
-
-    return roleMap;
+    return personClientAccessToClientUser(personClientAccess);
   }
 
   async update(
@@ -212,7 +99,7 @@ export class UsersService {
       ['user_legacy_id', updateUserDto.legacyUserId],
     );
 
-    return this.keycloak.client.users
+    await this.keycloak.client.users
       .update(
         {
           id: keycloakUser.id,
@@ -234,6 +121,38 @@ export class UsersService {
         }
         throw e;
       });
+
+    // Sync changed fields to Person record
+    const prisma = (bypassRLS
+      ? this.prisma.bypassRLS()
+      : await this.prisma.forViewContext()) as unknown as PrismaClient;
+
+    const personUpdate: Prisma.PersonUpdateInput = {};
+    if (updateUserDto.firstName !== undefined) {
+      personUpdate.firstName = updateUserDto.firstName;
+    }
+    if (updateUserDto.lastName !== undefined) {
+      personUpdate.lastName = updateUserDto.lastName;
+    }
+    if (updateUserDto.email !== undefined) {
+      personUpdate.email = updateUserDto.email;
+    }
+    if (updateUserDto.phoneNumber !== undefined) {
+      personUpdate.phoneNumber = updateUserDto.phoneNumber;
+    }
+    if (updateUserDto.position !== undefined) {
+      personUpdate.position = updateUserDto.position;
+    }
+    if (updateUserDto.active !== undefined) {
+      personUpdate.active = updateUserDto.active;
+    }
+
+    if (Object.keys(personUpdate).length > 0) {
+      await prisma.person.update({
+        where: { id },
+        data: personUpdate,
+      });
+    }
   }
 
   async remove(
@@ -246,52 +165,6 @@ export class UsersService {
   }
 
   /**
-   * @deprecated Use setRoles() for single role assignment or addRole() for adding additional roles.
-   * This method removes all existing roles before assigning a new one (single-role behavior).
-   * Now updates the database via PersonClientAccess instead of Keycloak groups.
-   */
-  async assignRole(
-    id: string,
-    assignRoleDto: AssignRoleDto,
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
-  ) {
-    const client = await this.getClient(clientId, bypassRLS);
-    await this.getKeycloakUser(id, clientId, bypassRLS); // Verify user exists
-
-    const prisma = (bypassRLS
-      ? this.prisma.bypassRLS()
-      : await this.prisma.forContext()) as unknown as PrismaClient;
-
-    // Verify role exists
-    const role = await prisma.role.findUnique({
-      where: { id: assignRoleDto.roleId },
-    });
-    if (!role) {
-      throw new NotFoundException(`Role ${assignRoleDto.roleId} not found`);
-    }
-
-    // Update or create PersonClientAccess with the new role
-    await prisma.personClientAccess.upsert({
-      where: {
-        personId_clientId: {
-          personId: id,
-          clientId: client.id,
-        },
-      },
-      update: {
-        roleId: assignRoleDto.roleId,
-      },
-      create: {
-        personId: id,
-        clientId: client.id,
-        siteId: client.sites[0]?.id ?? '',
-        roleId: assignRoleDto.roleId,
-      },
-    });
-  }
-
-  /**
    * Add a role to a user. Since PersonClientAccess supports one role per client,
    * this will replace the existing role if one exists.
    */
@@ -299,13 +172,10 @@ export class UsersService {
     id: string,
     addRoleDto: { roleId: string },
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, bypassRLS);
+    const client = await this.getClient(clientId);
 
-    const prisma = (bypassRLS
-      ? this.prisma.bypassRLS()
-      : await this.prisma.forContext()) as unknown as PrismaClient;
+    const prisma = await this.prisma.build();
 
     const person = await prisma.person.findUnique({
       where: { idpId: id },
@@ -358,7 +228,15 @@ export class UsersService {
       },
     });
 
-    return databaseRoleToRole(role as DatabaseRole);
+    // Invalidate cache (id is idpId in this method)
+    await this.invalidatePersonClientAccessCache({
+      idpId: id,
+      clientExternalId: client.externalId,
+      personId: person.id,
+      clientId: client.id,
+    });
+
+    return databaseRoleToRole(role);
   }
 
   /**
@@ -369,14 +247,17 @@ export class UsersService {
     id: string,
     removeRoleDto: { roleId: string },
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, bypassRLS);
-    await this.getKeycloakUser(id, clientId, bypassRLS); // Verify user exists
+    const client = await this.getClient(clientId);
+    await this.getKeycloakUser(id, clientId); // Verify user exists
 
-    const prisma = (bypassRLS
-      ? this.prisma.bypassRLS()
-      : await this.prisma.forContext()) as unknown as PrismaClient;
+    const prisma = await this.prisma.build();
+
+    // Get person's idpId for cache invalidation
+    const person = await prisma.person.findUnique({
+      where: { id },
+      select: { idpId: true },
+    });
 
     // Check if user has this role
     const existing = await prisma.personClientAccess.findUnique({
@@ -404,76 +285,23 @@ export class UsersService {
       },
     });
 
+    // Invalidate cache
+    await this.invalidatePersonClientAccessCache({
+      idpId: person?.idpId ?? null,
+      clientExternalId: client.externalId,
+      personId: id,
+      clientId: client.id,
+    });
+
     return removeRoleDto.roleId;
-  }
-
-  /**
-   * Set the exact role for a user in a client.
-   * Since PersonClientAccess supports one role per client, this sets that role.
-   */
-  async setRoles(
-    id: string,
-    setRolesDto: { roleIds: string[] },
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
-  ) {
-    const client = await this.getClient(clientId, bypassRLS);
-    await this.getKeycloakUser(id, clientId, bypassRLS); // Verify user exists
-
-    // PersonClientAccess supports one role per client, so we take the first role ID
-    // or remove access if no roles specified
-    const roleId = setRolesDto.roleIds[0];
-
-    const prisma = (bypassRLS
-      ? this.prisma.bypassRLS()
-      : await this.prisma.forContext()) as unknown as PrismaClient;
-
-    if (!roleId) {
-      // No roles specified - remove access
-      await prisma.personClientAccess.deleteMany({
-        where: {
-          personId: id,
-          clientId: client.id,
-        },
-      });
-      return;
-    }
-
-    // Verify role exists
-    const role = await prisma.role.findUnique({
-      where: { id: roleId },
-    });
-    if (!role) {
-      throw new NotFoundException(`Role ${roleId} not found`);
-    }
-
-    // Update or create PersonClientAccess with the role
-    await prisma.personClientAccess.upsert({
-      where: {
-        personId_clientId: {
-          personId: id,
-          clientId: client.id,
-        },
-      },
-      update: {
-        roleId,
-      },
-      create: {
-        personId: id,
-        clientId: client.id,
-        siteId: client.sites[0]?.id ?? '',
-        roleId,
-      },
-    });
   }
 
   async resetPassword(
     id: string,
     resetPasswordDto: ResetPasswordDto,
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+    const keycloakUser = await this.getKeycloakUser(id, clientId);
 
     await this.keycloak.client.users.resetPassword({
       id: keycloakUser.id,
@@ -504,9 +332,8 @@ export class UsersService {
     id: string,
     appClientId: string,
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
   ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+    const keycloakUser = await this.getKeycloakUser(id, clientId);
 
     await this.keycloak.client.users.resetPasswordEmail({
       id: keycloakUser.id,
@@ -558,28 +385,16 @@ export class UsersService {
 
   private async getClient(
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
   ) {
     if (!isNil(clientId) && typeof clientId !== 'string') {
       return clientId;
     }
 
-    let thisClientId = clientId;
-    let prisma: PrismaClient;
-
-    if (!thisClientId) {
-      const prismaForUser = await this.prisma.forUser();
-      thisClientId = prismaForUser.$currentUser()?.clientId;
-      prisma = prismaForUser as unknown as PrismaClient;
-    } else if (bypassRLS) {
-      prisma = this.prisma.bypassRLS() as unknown as PrismaClient;
-    } else {
-      prisma = (await this.prisma.forContext()) as unknown as PrismaClient;
-    }
+    const prisma = await this.prisma.build();
 
     return prisma.client
       .findUniqueOrThrow({
-        where: { id: thisClientId },
+        where: { id: clientId ?? this.cls.requireAccessGrant().clientId },
         include: {
           sites: true,
         },
@@ -590,9 +405,8 @@ export class UsersService {
   private async getKeycloakUser(
     id: string,
     clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
   ) {
-    const client = await this.getClient(clientId, bypassRLS);
+    const client = await this.getClient(clientId);
     const user = await this.keycloak
       .findUsersByAttribute({
         filter: {
@@ -636,5 +450,39 @@ export class UsersService {
     }
 
     return filters;
+  }
+
+  /**
+   * Invalidate all caches related to a person's client access.
+   * This includes caches in both ClientsService and PeopleService.
+   */
+  private async invalidatePersonClientAccessCache(params: {
+    idpId: string | null;
+    clientExternalId: string;
+    personId: string;
+    clientId: string;
+  }) {
+    const { idpId, clientExternalId, personId, clientId } = params;
+
+    // Only invalidate caches that use idpId if we have it
+    const cacheKeys = [
+      // PeopleService.getSwitchedClientContext cache
+      `person-switched:${personId}:${clientExternalId}`,
+      // PeopleService.getPrimaryClientRole cache
+      `person-primary-role:${personId}:${clientId}`,
+    ];
+
+    if (idpId) {
+      cacheKeys.push(
+        // ClientsService.validateClientAccess cache
+        `client-access:${idpId}:${clientExternalId}`,
+        // PeopleService.getPersonRepresentation cache (primary client)
+        `person:idpId=${idpId}`,
+        // PeopleService.getPrimaryClientAccess cache
+        `primary-client-access:${idpId}`,
+      );
+    }
+
+    await Promise.all(cacheKeys.map((key) => this.cache.del(key)));
   }
 }

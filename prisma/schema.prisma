@@ -564,9 +564,7 @@ model Client {
   defaultInspectionCycle            Int                                @default(30)
   demoMode                          Boolean                            @default(false)
   sites                             Site[]
-  people                            Person[]
   personClientAccess                PersonClientAccess[]
-  roles                             Role[]
   assets                            Asset[]
   consumables                       Consumable[]
   inspections                       Inspection[]
@@ -623,7 +621,6 @@ model Site {
   consumables                       Consumable[]
   productRequests                   ProductRequest[]
   tags                              Tag[]
-  people                            Person[]
   personClientAccess                PersonClientAccess[]
   inspections                       Inspection[]
   inspectionRoutes                  InspectionRoute[]
@@ -652,6 +649,9 @@ model Person {
   email                   String
   username                String?
   idpId                   String?                  @unique
+  phoneNumber             String?
+  position                String?
+  active                  Boolean                  @default(true)
   /**
    * The legacy username of the person (maps to `users.u_name` in the legacy database).
    */
@@ -667,14 +667,8 @@ model Person {
   clientAccess            PersonClientAccess[]
   createdInvitations      Invitation[]             @relation("CreatedInvitations")
   acceptedInvitations     Invitation[]             @relation("AcceptedInvitations")
-  site                    Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  siteId                  String
-  client                  Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId                String
 
   @@index([legacyUsername])
-  @@index([clientId])
-  @@index([clientId, siteId])
 }
 
 // Multi-Client Access & Database-Managed Permissions
@@ -701,11 +695,8 @@ model Role {
   capabilities       String[]             @default([])
   personClientAccess PersonClientAccess[]
   invitations        Invitation[]
-  client             Client?              @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId           String?
 
-  @@unique([name, clientId])
-  @@index([clientId])
+  @@unique([name])
 }
 
 model PersonClientAccess {
@@ -722,10 +713,11 @@ model PersonClientAccess {
   role       Role     @relation(fields: [roleId], references: [id])
   roleId     String
 
-  @@unique([personId, clientId])
+  @@unique([personId, clientId, siteId, roleId])
   @@index([personId])
   @@index([clientId])
   @@index([siteId])
+  @@index([clientId, siteId])
 }
 
 model Invitation {
@@ -733,9 +725,9 @@ model Invitation {
   code         String           @unique
   clientId     String
   createdById  String
-  email        String?
-  roleId       String?
-  siteId       String?
+  email        String
+  roleId       String
+  siteId       String
   status       InvitationStatus @default(PENDING)
   expiresOn    DateTime         @db.Timestamptz()
   acceptedById String?
@@ -746,8 +738,8 @@ model Invitation {
   client     Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdBy  Person  @relation("CreatedInvitations", fields: [createdById], references: [id])
   acceptedBy Person? @relation("AcceptedInvitations", fields: [acceptedById], references: [id])
-  role       Role?   @relation(fields: [roleId], references: [id])
-  site       Site?   @relation(fields: [siteId], references: [id])
+  role       Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  site       Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
   @@index([code])

@@ -3,7 +3,7 @@ import { ClsService } from 'nestjs-cls';
 import { PeopleService } from 'src/clients/people/people.service';
 import { AuthController } from './auth.controller';
 import { StatelessUserData } from './user.schema';
-import { RoleScope } from './scope';
+import { RoleScope } from './utils/scope';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -16,22 +16,31 @@ describe('AuthController', () => {
     givenName: 'Test',
     familyName: 'User',
     picture: 'https://example.com/pic.jpg',
-    clientId: 'client-123',
-    siteId: 'site-123',
-    scope: RoleScope.SELF,
-    capabilities: [],
   };
 
-  const mockPersonRepresentation = {
+  const mockPersonBasicInfo = {
     id: 'person-123',
     idpId: 'idp-123',
-    siteId: 'site-123',
-    allowedSiteIdsStr: 'site-123',
-    clientId: 'client-123',
-    scope: RoleScope.CLIENT,
-    capabilities: ['read-assets', 'write-assets'],
-    hasMultiClientScope: false,
-    hasMultiSiteScope: true,
+    email: 'test@example.com',
+    username: 'testuser',
+    firstName: 'Test',
+    lastName: 'User',
+    clientAccess: [
+      {
+        clientId: 'client-123',
+        clientName: 'Test Client',
+        clientExternalId: 'ext-client-123',
+        siteId: 'site-123',
+        siteName: 'Test Site',
+        isPrimary: true,
+        role: {
+          id: 'role-123',
+          name: 'Admin',
+          scope: RoleScope.CLIENT,
+          capabilities: ['read-assets', 'write-assets'],
+        },
+      },
+    ],
   };
 
   const mockClsService = {
@@ -39,9 +48,7 @@ describe('AuthController', () => {
   };
 
   const mockPeopleService = {
-    getPersonRepresentation: jest
-      .fn()
-      .mockResolvedValue(mockPersonRepresentation),
+    getPersonBasicInfo: jest.fn().mockResolvedValue(mockPersonBasicInfo),
   };
 
   beforeEach(async () => {
@@ -73,25 +80,33 @@ describe('AuthController', () => {
         familyName: 'User',
         picture: 'https://example.com/pic.jpg',
         personId: 'person-123',
-        clientId: 'client-123',
-        siteId: 'site-123',
-        scope: RoleScope.CLIENT,
-        capabilities: ['read-assets', 'write-assets'],
-        hasMultiClientScope: false,
-        hasMultiSiteScope: true,
+        clientAccess: mockPersonBasicInfo.clientAccess,
       });
     });
 
-    it('should call PeopleService.getPersonRepresentation', async () => {
+    it('should call PeopleService.getPersonBasicInfo', async () => {
       await controller.getCurrentUser();
 
-      expect(mockPeopleService.getPersonRepresentation).toHaveBeenCalled();
+      expect(mockPeopleService.getPersonBasicInfo).toHaveBeenCalled();
     });
 
     it('should get user from CLS', async () => {
       await controller.getCurrentUser();
 
       expect(mockClsService.get).toHaveBeenCalledWith('user');
+    });
+
+    it('should return empty clientAccess for users with no client access', async () => {
+      mockPeopleService.getPersonBasicInfo.mockResolvedValueOnce({
+        ...mockPersonBasicInfo,
+        id: null,
+        clientAccess: [],
+      });
+
+      const result = await controller.getCurrentUser();
+
+      expect(result.personId).toBeNull();
+      expect(result.clientAccess).toEqual([]);
     });
   });
 });

@@ -1,27 +1,25 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { Cache } from 'cache-manager';
 import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
-import { ClsService } from 'nestjs-cls';
 import pRetry from 'p-retry';
 import { AssetsService } from 'src/assets/assets/assets.service';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { CustomQueryFilter } from 'src/auth/keycloak/types';
-import { CommonClsStore } from 'src/common/types';
-import { as404OrThrow, isNil } from 'src/common/utils';
+import { CAPABILITIES } from 'src/auth/utils/capabilities';
+import { isScopeAtLeast } from 'src/auth/utils/scope';
+import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import {
   AssetQuestionResponseType,
   AssetQuestionType,
-  ClientStatus,
   InspectionStatus,
   Prisma,
+  RoleScope,
 } from 'src/generated/prisma/client';
 import { getAssetsToRenewForDemoClient } from 'src/generated/prisma/sql';
 import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
@@ -45,11 +43,10 @@ export class ClientsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
-    private readonly cls: ClsService<CommonClsStore>,
+    private readonly cls: ApiClsService,
     private readonly keycloakService: KeycloakService,
     private readonly assetQuestionsService: AssetQuestionsService,
     private readonly assetsService: AssetsService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   /**
@@ -102,70 +99,6 @@ export class ClientsService {
       default:
         return 'Yes';
     }
-  }
-
-  private invalidateClientStatusCache(clientExternalId: string) {
-    const cacheKey = buildClientStatusCacheKey(clientExternalId);
-    this.cache.del(cacheKey);
-  }
-
-  public async getClientStatus(clientExternalId: string) {
-    const cacheKey = buildClientStatusCacheKey(clientExternalId);
-    const cachedValue = await this.cache.get<ClientStatus>(cacheKey);
-
-    if (!isNil(cachedValue)) {
-      return cachedValue;
-    }
-
-    const clientResult = await this.prisma.bypassRLS().client.findUnique({
-      where: { externalId: clientExternalId },
-      select: { status: true },
-    });
-
-    if (clientResult) {
-      // Cache the result for 1 hour.
-      this.cache.set(cacheKey, clientResult.status, 60 * 60 * 1000);
-      return clientResult.status;
-    }
-
-    return null;
-  }
-
-  /**
-   * Validates that a user has access to a specific client via PersonClientAccess.
-   * Returns the site external ID from the access entry if valid, null otherwise.
-   *
-   * @param idpId - The identity provider ID (Keycloak sub) of the user
-   * @param clientExternalId - The external ID of the client to check access for
-   * @returns The site external ID from PersonClientAccess, or null if no access
-   */
-  public async validateClientAccess(
-    idpId: string,
-    clientExternalId: string,
-  ): Promise<string | null> {
-    const cacheKey = `client-access:${idpId}:${clientExternalId}`;
-    const cachedValue = await this.cache.get<string | null>(cacheKey);
-
-    if (!isNil(cachedValue)) {
-      return cachedValue;
-    }
-
-    const access = await this.prisma.bypassRLS().personClientAccess.findFirst({
-      where: {
-        person: { idpId },
-        client: { externalId: clientExternalId },
-      },
-      select: {
-        site: { select: { externalId: true } },
-      },
-    });
-
-    const siteExternalId = access?.site.externalId ?? null;
-
-    // Cache the result for 1 hour
-    this.cache.set(cacheKey, siteExternalId, 60 * 60 * 1000);
-
-    return siteExternalId;
   }
 
   async create(createClientDto: CreateClientDto) {
@@ -230,16 +163,16 @@ export class ClientsService {
   }
 
   async findUserOrganization() {
-    const prisma = await this.prisma.build({ context: 'user' });
-    const currentUser = prisma.$currentUser();
-    if (!currentUser) {
+    const prisma = await this.prisma.build({ viewContext: 'user' });
+    const rlsContext = prisma.$rlsContext();
+    if (!rlsContext) {
       throw new NotFoundException(
         'Cannot find your organization, because no user information was found.',
       );
     }
 
     const siteResult = await prisma.site.findUnique({
-      where: { id: currentUser.siteId },
+      where: { id: rlsContext.siteId },
       select: {
         id: true,
         name: true,
@@ -255,6 +188,10 @@ export class ClientsService {
             address: true,
             phoneNumber: true,
             demoMode: true,
+            status: true,
+            startedOn: true,
+            createdOn: true,
+            modifiedOn: true,
           },
         },
       },
@@ -282,7 +219,9 @@ export class ClientsService {
         })
         .catch(as404OrThrow),
     );
-    this.invalidateClientStatusCache(result.externalId);
+    // NOTE: We are not invalidating the access grant caches here because wildcard cache
+    // deletions are not supported by the memory cache service. The TTL is short enough that
+    // stale cache is not a problem.
     return result;
   }
 
@@ -307,8 +246,6 @@ export class ClientsService {
       await Promise.all(
         users.map((user) => this.usersService.remove(user.id, client)),
       );
-
-      this.invalidateClientStatusCache(client.externalId);
 
       return result;
     });
@@ -547,11 +484,8 @@ export class ClientsService {
     if (query.clientId) {
       uniqueWhere = { id: query.clientId };
     } else {
-      const user = this.cls.get('user');
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-      uniqueWhere = { externalId: user.clientId };
+      const accessGrant = this.cls.requireAccessGrant();
+      uniqueWhere = { id: accessGrant.clientId };
     }
 
     const prisma = await this.prisma.build();
@@ -593,11 +527,8 @@ export class ClientsService {
     if (options.clientId) {
       uniqueWhere = { id: options.clientId };
     } else {
-      const user = this.cls.get('user');
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-      uniqueWhere = { externalId: user.clientId };
+      const accessGrant = this.cls.requireAccessGrant();
+      uniqueWhere = { id: accessGrant.clientId };
     }
 
     const prisma = await this.prisma.build();
@@ -818,8 +749,8 @@ export class ClientsService {
   async renewNoncompliantDemoAssets(options: { clientId?: string } = {}) {
     const prisma = await this.prisma.build();
 
-    const currentUser = prisma.$currentUser();
-    const clientId = options.clientId ?? currentUser?.clientId;
+    const rlsContext = prisma.$rlsContext();
+    const clientId = options.clientId ?? rlsContext?.clientId;
 
     if (!clientId) {
       throw new BadRequestException('Client ID is required');
@@ -905,9 +836,10 @@ export class ClientsService {
     }>,
   ) {
     const prisma = await this.prisma.build();
-    const currentUser = prisma.$currentUser();
+    const currentUser = prisma.$rlsContext();
     const hasMultiSiteScope =
-      prisma.$mode === 'cron' || (currentUser && currentUser.hasMultiSiteScope);
+      prisma.$mode === 'cron' ||
+      (currentUser && isScopeAtLeast(currentUser.scope, RoleScope.CLIENT));
 
     const allowedSiteIds = currentUser
       ? currentUser.allowedSiteIdsStr.split(',')
@@ -959,6 +891,18 @@ export class ClientsService {
 
     // Get or create Person records for Keycloak users first (needed for asset setup)
     const keycloakUsers = keycloakUsersResponse.results;
+    const { id: inspectorRoleId } = await prisma.role.findFirstOrThrow({
+      select: {
+        id: true,
+      },
+      where: {
+        isSystem: true,
+        scope: RoleScope.SITE,
+        capabilities: {
+          has: CAPABILITIES.PERFORM_INSPECTIONS,
+        },
+      },
+    });
     const inspectors = await Promise.all(
       keycloakUsers
         .slice(0, Math.min(8, keycloakUsers.length))
@@ -981,8 +925,13 @@ export class ClientsService {
                 firstName: kcUser.firstName || 'Inspector',
                 lastName: kcUser.lastName || 'User',
                 email: kcUser.email || `inspector${personId}@example.com`,
-                siteId: theirSiteId || '',
-                clientId: client.id,
+                clientAccess: {
+                  create: {
+                    clientId: client.id,
+                    siteId: theirSiteId || '',
+                    roleId: inspectorRoleId,
+                  },
+                },
               },
             });
           }
@@ -1168,8 +1117,4 @@ class ParentChildIdMap<T extends { id: string }, U extends { id: string }> {
     );
     children.forEach((child) => this.childById.set(child.id, child));
   }
-}
-
-function buildClientStatusCacheKey(clientExternalId: string) {
-  return `clientStatus:externalId=${clientExternalId}`;
 }

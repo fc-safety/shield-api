@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ClsService } from 'nestjs-cls';
-import { CommonClsStore } from 'src/common/types';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -14,17 +13,17 @@ import { UpdateProductDto } from './dto/update-product.dto';
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
-    protected readonly cls: ClsService<CommonClsStore>,
+    protected readonly cls: ApiClsService,
   ) {}
 
   async create(createProductDto: CreateProductDto) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) => prisma.product.create({ data: createProductDto }));
   }
 
   async findAll(queryProductDto?: QueryProductDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.product.findManyForPage(
         buildPrismaFindArgs<typeof prisma.product>(queryProductDto, {
           include: {
@@ -47,7 +46,7 @@ export class ProductsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.product
         .findUniqueOrThrow({
           where: { id },
@@ -91,7 +90,7 @@ export class ProductsService {
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.product
         .update({
           where: { id },
@@ -103,14 +102,14 @@ export class ProductsService {
 
   async remove(id: string) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) => prisma.product.delete({ where: { id } }));
   }
 
   // QUESTIONS
 
   async addQuestion(id: string, input: CreateAssetQuestionDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestion
         .create({
           data: { ...input, product: { connect: { id } } },
@@ -124,7 +123,7 @@ export class ProductsService {
     questionId: string,
     input: UpdateAssetQuestionDto,
   ) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestion
         .update({
           where: { id: questionId },
@@ -135,7 +134,7 @@ export class ProductsService {
   }
 
   async deleteQuestion(questionId: string) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.assetQuestion
         .delete({
           where: { id: questionId },

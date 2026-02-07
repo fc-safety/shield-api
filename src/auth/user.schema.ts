@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { isValidCapability, TCapability } from './capabilities';
-import { isScopeAtLeast, RoleScope, TScope } from './scope';
+import { TCapability } from './utils/capabilities';
+import { TScope } from './utils/scope';
 
 /**
  * Schema for JWT token payload from the identity provider.
@@ -16,15 +16,13 @@ export const keycloakTokenPayloadSchema = z.object({
   given_name: z.string().optional(),
   family_name: z.string().optional(),
   picture: z.string().optional(),
-  client_id: z.string().default('unknown'),
-  site_id: z.string().default('unknown'),
 });
 
 export type TokenPayload = z.infer<typeof keycloakTokenPayloadSchema>;
 
 /**
- * Interface for user data used to construct StatelessUser.
- * This is populated from either JWT + database lookup or directly from PersonRepresentation.
+ * Interface for user identity data from JWT token.
+ * Does NOT include client/site/permissions - those come from the database.
  */
 export interface StatelessUserData {
   idpId: string;
@@ -34,8 +32,13 @@ export interface StatelessUserData {
   givenName?: string;
   familyName?: string;
   picture?: string;
-  clientId: string;
-  siteId: string;
+}
+
+/**
+ * Interface for full user data including permissions.
+ * Used to construct StatelessUser with role information from database.
+ */
+export interface StatelessUserWithRoleData extends StatelessUserData {
   scope: TScope;
   capabilities: TCapability[];
 }
@@ -43,12 +46,12 @@ export interface StatelessUserData {
 /**
  * Represents an authenticated user with their capabilities and scope.
  *
- * This is a stateless representation that can be serialized/deserialized
- * and passed through the request context.
+ * Identity information comes from the JWT token.
+ * Scope and capabilities come from the database (PersonClientAccess.role).
  *
  * Key concepts:
  * - **Scope**: Determines HOW MUCH data the user can access (GLOBAL, CLIENT, SITE, etc.)
- * - **Capabilities**: Determine WHAT ACTIONS the user can perform (manage-assets, perform-inspections, etc.)
+ * - **Capabilities**: Determine WHAT ACTIONS the user can perform (manage-assets, etc.)
  */
 export class StatelessUser {
   readonly idpId: string;
@@ -58,10 +61,9 @@ export class StatelessUser {
   readonly givenName?: string;
   readonly familyName?: string;
   readonly picture?: string;
-  readonly clientId: string;
-  readonly siteId: string;
-  readonly scope: TScope;
-  readonly capabilities: TCapability[];
+  // TODO: Move these to separate CLS variables
+  // readonly scope: TScope;
+  // readonly capabilities: TCapability[];
 
   constructor(data: StatelessUserData) {
     this.idpId = data.idpId;
@@ -71,86 +73,24 @@ export class StatelessUser {
     this.givenName = data.givenName;
     this.familyName = data.familyName;
     this.picture = data.picture;
-    this.clientId = data.clientId;
-    this.siteId = data.siteId;
-    this.scope = data.scope;
-    this.capabilities = data.capabilities.filter(isValidCapability);
-  }
-
-  /**
-   * Check if user has SYSTEM scope (system admin access).
-   */
-  public isSystemAdmin(): boolean {
-    return this.scope === RoleScope.SYSTEM || this.scope === RoleScope.GLOBAL;
-  }
-
-  /**
-   * Check if user has at least GLOBAL scope (can access all clients).
-   */
-  public isGlobalAdmin(): boolean {
-    return isScopeAtLeast(this.scope, RoleScope.GLOBAL);
-  }
-
-  /**
-   * Check if user has at least CLIENT scope (can access all sites in their client).
-   */
-  public isClientAdmin(): boolean {
-    return isScopeAtLeast(this.scope, RoleScope.CLIENT);
-  }
-
-  /**
-   * Check if user's scope is at least as permissive as the required scope.
-   *
-   * @example
-   * user.scopeAllows(RoleScope.CLIENT) // true if user has CLIENT, GLOBAL, or SYSTEM scope
-   */
-  public scopeAllows(required: TScope): boolean {
-    return isScopeAtLeast(this.scope, required);
-  }
-
-  /**
-   * Check if user has a specific capability.
-   */
-  public hasCapability(capability: TCapability): boolean {
-    return this.capabilities.includes(capability);
-  }
-
-  /**
-   * Check if user has any of the specified capabilities.
-   */
-  public hasAnyCapability(capabilities: TCapability[]): boolean {
-    return capabilities.some((c) => this.capabilities.includes(c));
-  }
-
-  /**
-   * Check if user has all of the specified capabilities.
-   */
-  public hasAllCapabilities(capabilities: TCapability[]): boolean {
-    return capabilities.every((c) => this.capabilities.includes(c));
   }
 }
 
 /**
- * Build a minimal user from a JWT token payload.
+ * Build user identity data from a JWT token payload.
  *
- * Note: This creates a user with NO capabilities and SELF scope.
- * The actual capabilities and scope should be loaded from the database
- * via PersonClientAccess and merged in by the auth layer.
+ * Note: This only contains identity information from the token.
+ * Scope and capabilities are loaded separately from the database.
  */
-export const buildUserFromToken = (payload: unknown): StatelessUserData => {
+export const buildUserFromToken = (payload: unknown): StatelessUser => {
   const parsed = keycloakTokenPayloadSchema.parse(payload);
-  return {
+  return new StatelessUser({
     idpId: parsed.sub,
     email: parsed.email,
     username: parsed.preferred_username,
-    name: parsed.name,
-    givenName: parsed.given_name,
-    familyName: parsed.family_name,
-    picture: parsed.picture,
-    clientId: parsed.client_id,
-    siteId: parsed.site_id,
-    // Default to no access - will be populated from database
-    scope: RoleScope.SELF,
-    capabilities: [],
-  };
+    name: parsed.name ?? undefined,
+    givenName: parsed.given_name ?? undefined,
+    familyName: parsed.family_name ?? undefined,
+    picture: parsed.picture ?? undefined,
+  });
 };

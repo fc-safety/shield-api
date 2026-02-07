@@ -1,11 +1,10 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { subDays } from 'date-fns';
-import { ClsService } from 'nestjs-cls';
 import { jsx } from 'react/jsx-runtime';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { UsersService } from 'src/clients/users/users.service';
 import { testAlertRule } from 'src/common/alert-utils';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
-import { CommonClsStore } from 'src/common/types';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import {
@@ -42,17 +41,17 @@ export class AssetsService {
     private readonly consumablesService: ConsumablesService,
     private readonly notifications: NotificationsService,
     private readonly usersService: UsersService,
-    private readonly cls: ClsService<CommonClsStore>,
+    private readonly cls: ApiClsService,
   ) {}
 
   async create(createAssetDto: Prisma.AssetCreateInput) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) => prisma.asset.create({ data: createAssetDto }));
   }
 
   async findAll(queryAssetDto: QueryAssetDto) {
-    return this.prisma.forContext().then(async (prisma) =>
+    return this.prisma.build().then(async (prisma) =>
       prisma.asset.findManyForPage(
         buildPrismaFindArgs<typeof prisma.asset>(queryAssetDto, {
           include: {
@@ -81,7 +80,7 @@ export class AssetsService {
 
   async findOne(id: string) {
     return this.prisma
-      .forContext()
+      .build()
       .then((prisma) =>
         prisma.asset.findUniqueOrThrow({
           where: { id },
@@ -146,7 +145,7 @@ export class AssetsService {
   }
 
   async findManyWithLatestInspection(queryAssetDto: QueryAssetDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.asset.findManyForPage(
         buildPrismaFindArgs<typeof prisma.asset>(queryAssetDto, {
           include: {
@@ -211,7 +210,7 @@ export class AssetsService {
   }
 
   async update(id: string, updateAssetDto: UpdateAssetDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.forViewContext().then((prisma) =>
       prisma.asset
         .update({
           where: { id },
@@ -318,7 +317,7 @@ export class AssetsService {
   }
 
   async getMetadataKeys() {
-    const prisma = await this.prisma.forContext();
+    const prisma = await this.prisma.forViewContext();
 
     const conditionMetadataKeysPromise = prisma.$queryRaw<
       Array<{ key: string }>
@@ -377,7 +376,7 @@ ORDER BY key
   }
 
   async getMetadataValues(key: string) {
-    const prisma = await this.prisma.forContext();
+    const prisma = await this.prisma.forViewContext();
 
     const conditionMetadataKeysPromise = prisma.$queryRaw<
       Array<{ metadata_value: string }>
@@ -674,7 +673,7 @@ ORDER BY metadata_value
 
   async remove(id: string) {
     return this.prisma
-      .forContext()
+      .forViewContext()
       .then((prisma) => prisma.asset.delete({ where: { id } }));
   }
 

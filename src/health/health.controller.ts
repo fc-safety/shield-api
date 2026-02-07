@@ -5,7 +5,7 @@ import {
   HttpHealthIndicator,
   PrismaHealthIndicator,
 } from '@nestjs/terminus';
-import { Public } from 'src/auth/auth.guard';
+import { Public } from 'src/auth/guards/auth.guard';
 import { CheckIsAuthenticated } from 'src/auth/policies.guard';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { PrismaService } from 'src/prisma/prisma.service';
