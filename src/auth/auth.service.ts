@@ -22,7 +22,7 @@ import {
   IOrganizationContext,
   reduceAccessGrants,
 } from './utils/access-grants';
-import { TCapability } from './utils/capabilities';
+import { TCapability, VALID_CAPABILITIES } from './utils/capabilities';
 import { getScopesAtLeast, isScopeAtLeast, TScope } from './utils/scope';
 
 const createId32 = cuid2Init({ length: 32 });
@@ -153,10 +153,14 @@ export class AuthService {
             where: {
               clientId: organizationContext.requestedClientId,
             },
-            orderBy: {
-              primary: 'desc',
-              createdOn: 'asc',
-            },
+            orderBy: [
+              {
+                primary: 'desc',
+              },
+              {
+                createdOn: 'asc',
+              },
+            ],
           });
 
           siteId = site?.id;
@@ -237,12 +241,6 @@ export class AuthService {
       accessRecordQueryArgs,
     );
 
-    console.debug('accessRecords', {
-      accessRecords,
-      organizationContext,
-      accessRecordQueryArgs,
-    });
-
     /** Allow or deny based on presence of an access record for the requested client (and site). */
     if (organizationContext.requestedClientId) {
       const requestedAccessRecords = accessRecords.filter(
@@ -256,6 +254,21 @@ export class AuthService {
         const primaryAccessRecord = accessRecords.find(
           (accessRecord) => accessRecord.isPrimary,
         );
+
+        /** If the user's email is in the system admin list, grant ephemeral system access. */
+        if (this.userIsSystemAdmin(user)) {
+          this.logger.log(
+            `Granting ephemeral system access to bootstrap admin: ${user.email}`,
+          );
+          return {
+            grant: {
+              scope: RoleScope.SYSTEM,
+              capabilities: [...VALID_CAPABILITIES],
+              clientId: organizationContext.requestedClientId,
+              siteId: organizationContext.requestedSiteId ?? '',
+            },
+          };
+        }
 
         /** If no record is found for requested client, return a detailed error message. */
         return {
@@ -296,6 +309,21 @@ export class AuthService {
         accessRecords.slice(0, 1),
         organizationContext,
       );
+    }
+
+    /** If the user's email is in the system admin list, grant ephemeral system access. */
+    if (this.userIsSystemAdmin(user)) {
+      this.logger.log(
+        `Granting ephemeral system access to bootstrap admin: ${user.email}`,
+      );
+      return {
+        grant: {
+          scope: RoleScope.SYSTEM,
+          capabilities: [...VALID_CAPABILITIES],
+          clientId: '',
+          siteId: '',
+        },
+      };
     }
 
     /** If no access record is found, return a detailed error message. */
@@ -356,6 +384,11 @@ export class AuthService {
     }
 
     return null;
+  }
+
+  private userIsSystemAdmin(user: StatelessUser): boolean {
+    const systemAdminEmails = this.config.get('SYSTEM_ADMIN_EMAILS');
+    return systemAdminEmails.includes(user.email.toLowerCase());
   }
 
   /**

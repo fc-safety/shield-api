@@ -76,6 +76,17 @@ export const configSchema = z.object({
       falsy: ['false', '0'],
     })
     .optional(),
+
+  // System Admin Emails (for pre-setup bootstrap access)
+  SYSTEM_ADMIN_EMAILS: z
+    .string()
+    .default('')
+    .transform((v) =>
+      v
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
 });
 
 export type Config = z.infer<typeof configSchema>;

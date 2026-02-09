@@ -1,14 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClsService } from 'nestjs-cls';
-import { PeopleService } from 'src/clients/people/people.service';
+import { ApiClsService } from './api-cls.service';
 import { AuthController } from './auth.controller';
-import { StatelessUserData } from './user.schema';
-import { RoleScope } from './utils/scope';
 
 describe('AuthController', () => {
   let controller: AuthController;
 
-  const mockUser: StatelessUserData = {
+  const mockAccessGrant = {
+    scope: 'client',
+    capabilities: ['read-assets', 'write-assets'],
+    clientId: 'client-123',
+    siteId: 'site-123',
+  };
+
+  const mockPerson = {
+    id: 'person-123',
+  };
+
+  const mockUser = {
     idpId: 'idp-123',
     email: 'test@example.com',
     username: 'testuser',
@@ -18,45 +26,17 @@ describe('AuthController', () => {
     picture: 'https://example.com/pic.jpg',
   };
 
-  const mockPersonBasicInfo = {
-    id: 'person-123',
-    idpId: 'idp-123',
-    email: 'test@example.com',
-    username: 'testuser',
-    firstName: 'Test',
-    lastName: 'User',
-    clientAccess: [
-      {
-        clientId: 'client-123',
-        clientName: 'Test Client',
-        clientExternalId: 'ext-client-123',
-        siteId: 'site-123',
-        siteName: 'Test Site',
-        isPrimary: true,
-        role: {
-          id: 'role-123',
-          name: 'Admin',
-          scope: RoleScope.CLIENT,
-          capabilities: ['read-assets', 'write-assets'],
-        },
-      },
-    ],
-  };
-
-  const mockClsService = {
-    get: jest.fn().mockReturnValue(mockUser),
-  };
-
-  const mockPeopleService = {
-    getPersonBasicInfo: jest.fn().mockResolvedValue(mockPersonBasicInfo),
+  const mockApiClsService = {
+    requireUser: jest.fn().mockReturnValue(mockUser),
+    requirePerson: jest.fn().mockReturnValue(mockPerson),
+    requireAccessGrant: jest.fn().mockReturnValue(mockAccessGrant),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
-        { provide: ClsService, useValue: mockClsService },
-        { provide: PeopleService, useValue: mockPeopleService },
+        { provide: ApiClsService, useValue: mockApiClsService },
       ],
     }).compile();
 
@@ -80,33 +60,26 @@ describe('AuthController', () => {
         familyName: 'User',
         picture: 'https://example.com/pic.jpg',
         personId: 'person-123',
-        clientAccess: mockPersonBasicInfo.clientAccess,
+        accessGrant: mockAccessGrant,
       });
     });
 
-    it('should call PeopleService.getPersonBasicInfo', async () => {
+    it('should require user from CLS', async () => {
       await controller.getCurrentUser();
 
-      expect(mockPeopleService.getPersonBasicInfo).toHaveBeenCalled();
+      expect(mockApiClsService.requireUser).toHaveBeenCalled();
     });
 
-    it('should get user from CLS', async () => {
+    it('should require person from CLS', async () => {
       await controller.getCurrentUser();
 
-      expect(mockClsService.get).toHaveBeenCalledWith('user');
+      expect(mockApiClsService.requirePerson).toHaveBeenCalled();
     });
 
-    it('should return empty clientAccess for users with no client access', async () => {
-      mockPeopleService.getPersonBasicInfo.mockResolvedValueOnce({
-        ...mockPersonBasicInfo,
-        id: null,
-        clientAccess: [],
-      });
+    it('should require access grant from CLS', async () => {
+      await controller.getCurrentUser();
 
-      const result = await controller.getCurrentUser();
-
-      expect(result.personId).toBeNull();
-      expect(result.clientAccess).toEqual([]);
+      expect(mockApiClsService.requireAccessGrant).toHaveBeenCalled();
     });
   });
 });

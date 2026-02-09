@@ -331,7 +331,7 @@ export class InvitationsService {
       idpId: user.idpId,
       clientId: invitation.clientId,
       siteId: invitation.siteId,
-      deleteFn: this.memoryCache.mdel,
+      deleteFn: (keys) => this.memoryCache.mdel(keys),
     });
 
     return {

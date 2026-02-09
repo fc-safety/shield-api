@@ -1,6 +1,7 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ApiClsService } from 'src/auth/api-cls.service';
+import { ApiConfigService } from 'src/config/api-config.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ClientAccessService } from './client-access.service';
 
@@ -8,6 +9,7 @@ describe('ClientAccessService', () => {
   let service: ClientAccessService;
   let mockPrismaService: any;
   let mockApiClsService: any;
+  let mockApiConfigService: any;
   let mockCacheManager: any;
 
   beforeEach(async () => {
@@ -17,6 +19,10 @@ describe('ClientAccessService', () => {
 
     mockApiClsService = {
       get: jest.fn(),
+    };
+
+    mockApiConfigService = {
+      get: jest.fn().mockReturnValue([]),
     };
 
     mockCacheManager = {
@@ -30,6 +36,7 @@ describe('ClientAccessService', () => {
         ClientAccessService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ApiClsService, useValue: mockApiClsService },
+        { provide: ApiConfigService, useValue: mockApiConfigService },
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
       ],
     }).compile();

@@ -1,5 +1,6 @@
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ApiConfigService } from 'src/config/api-config.service';
 import { ApiClsService } from './api-cls.service';
 import { AuthService } from './auth.service';
 import { AuthGuard } from './guards/auth.guard';
@@ -21,6 +22,10 @@ describe('AuthGuard', () => {
     validateJwtToken: jest.fn(),
   };
 
+  const mockApiConfigService = {
+    get: jest.fn().mockReturnValue([]),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -28,6 +33,7 @@ describe('AuthGuard', () => {
         { provide: Reflector, useValue: mockReflector },
         { provide: AuthService, useValue: mockAuthService },
         { provide: ApiClsService, useValue: mockApiClsService },
+        { provide: ApiConfigService, useValue: mockApiConfigService },
       ],
     }).compile();
 

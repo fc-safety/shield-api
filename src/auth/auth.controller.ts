@@ -1,12 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
-import { ClsService } from 'nestjs-cls';
-import {
-  PeopleService,
-  PersonBasicInfo,
-} from 'src/clients/people/people.service';
+import { ApiClsService } from './api-cls.service';
+import { TAccessGrant } from './auth.types';
 import { SkipAccessGrantValidation } from './guards/auth.guard';
 import { CheckIsAuthenticated } from './policies.guard';
-import { StatelessUserData } from './user.schema';
 
 /**
  * Response shape for GET /auth/me endpoint.
@@ -27,15 +23,12 @@ export interface CurrentUserResponse {
   personId: string | null;
 
   // All client access records for this user
-  clientAccess: PersonBasicInfo['clientAccess'];
+  accessGrant: TAccessGrant;
 }
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly cls: ClsService,
-    private readonly peopleService: PeopleService,
-  ) {}
+  constructor(private readonly cls: ApiClsService) {}
 
   /**
    * Get the current authenticated user's data.
@@ -46,8 +39,9 @@ export class AuthController {
   @CheckIsAuthenticated()
   @SkipAccessGrantValidation()
   async getCurrentUser(): Promise<CurrentUserResponse> {
-    const user = this.cls.get<StatelessUserData>('user');
-    const personInfo = await this.peopleService.getPersonBasicInfo();
+    const user = this.cls.requireUser();
+    const person = this.cls.requirePerson();
+    const accessGrant = this.cls.requireAccessGrant();
 
     return {
       // Identity info from token
@@ -60,10 +54,10 @@ export class AuthController {
       picture: user.picture,
 
       // Person info from database
-      personId: personInfo.id,
+      personId: person.id,
 
-      // All client access records
-      clientAccess: personInfo.clientAccess,
+      // Access grant for the user
+      accessGrant,
     };
   }
 }

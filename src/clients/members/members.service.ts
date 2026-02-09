@@ -211,7 +211,7 @@ export class MembersService {
         idpId: person.idpId,
         clientId: clientAccess.clientId,
         siteId: clientAccess.siteId,
-        deleteFn: this.memoryCache.mdel,
+        deleteFn: (keys) => this.memoryCache.mdel(keys),
       });
     }
 
@@ -275,7 +275,7 @@ export class MembersService {
         idpId: person.idpId,
         clientId: clientAccess.clientId,
         siteId: clientAccess.siteId,
-        deleteFn: this.memoryCache.mdel,
+        deleteFn: (keys) => this.memoryCache.mdel(keys),
       });
     }
 
@@ -354,7 +354,7 @@ export class MembersService {
         idpId: person.idpId,
         clientId: accessGrant.clientId,
         siteIds: accessRowsToDelete.map((a) => a.siteId),
-        deleteFn: this.memoryCache.mdel,
+        deleteFn: (keys) => this.memoryCache.mdel(keys),
       });
     }
 

@@ -132,6 +132,10 @@ const reduceAccessGrants = (
       clientId = accessGrant.clientId;
       siteId = accessGrant.siteId;
     }
+
+    for (const capability of accessGrant.capabilities) {
+      combinedCapabilities.add(capability);
+    }
   }
 
   return new AccessGrant({

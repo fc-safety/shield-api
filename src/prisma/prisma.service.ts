@@ -3,7 +3,7 @@ import { ApiClsService } from 'src/auth/api-cls.service';
 import { TAccessGrant, TScope } from 'src/auth/auth.types';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { isNil } from 'src/common/utils';
-import { Prisma, PrismaClient } from 'src/generated/prisma/client';
+import { Prisma, PrismaClient, RoleScope } from 'src/generated/prisma/client';
 import { RedisService } from 'src/redis/redis.service';
 import { PrismaAdapter } from './prisma.adapter';
 
@@ -306,7 +306,15 @@ export class PrismaService
     const accessGrant = this.cls.get('accessGrant');
 
     const mode = this.cls.get('mode');
-    const shouldBypassRLS = mode === 'cron';
+    const isSystemAdmin =
+      !!accessGrant && accessGrant.scope === RoleScope.SYSTEM;
+
+    const shouldBypassRLS =
+      mode === 'cron' ||
+      !!options.shouldBypassRLSAsSystemAdmin ||
+      viewContext === 'admin';
+    const canBypassRLS = mode === 'cron' || isSystemAdmin;
+    const bypassRLS = shouldBypassRLS && canBypassRLS;
 
     let rlsContext: IPrismaRLSContext | undefined = options.rlsContext;
     if (accessGrant && person) {
@@ -343,7 +351,7 @@ export class PrismaService
         query: {
           $allModels: {
             async $allOperations({ args, query, operation, model }) {
-              if (!shouldBypassRLS && accessGrant) {
+              if (!bypassRLS && accessGrant) {
                 setModelClientOwnershipForAccessGrant(
                   args,
                   model,
@@ -380,7 +388,7 @@ export class PrismaService
       ) => {
         const rlsContextStatements = buildRLSContextStatements(
           extendedPrisma,
-          shouldBypassRLS,
+          bypassRLS,
           rlsContext,
         );
 
@@ -416,7 +424,7 @@ export class PrismaService
             return extendedPrisma.$transaction(
               async (tx) => {
                 await Promise.all(
-                  buildRLSContextStatements(tx, shouldBypassRLS, rlsContext),
+                  buildRLSContextStatements(tx, bypassRLS, rlsContext),
                 );
                 return fn(tx);
               },
@@ -461,6 +469,7 @@ export interface IPrismaRLSContext {
 }
 
 export interface PrimaryExtensionOptions {
+  shouldBypassRLSAsSystemAdmin?: boolean;
   rlsContext?: IPrismaRLSContext;
 }
 

@@ -10,6 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { isIPv4, isIPv6 } from 'net';
 import { getViewContext } from 'src/common/utils';
+import { ApiConfigService } from 'src/config/api-config.service';
 import { ApiClsService } from '../api-cls.service';
 import { AccessGrantException } from '../auth.exception';
 import { AuthService } from '../auth.service';
@@ -42,6 +43,7 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly authService: AuthService,
     private readonly cls: ApiClsService,
+    private readonly config: ApiConfigService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -121,6 +123,11 @@ export class AuthGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
     return skipAccessGrantValidation;
+  }
+
+  private userIsSystemAdmin(user: StatelessUser): boolean {
+    const systemAdminEmails = this.config.get('SYSTEM_ADMIN_EMAILS');
+    return systemAdminEmails.includes(user.email.toLowerCase());
   }
 
   /**

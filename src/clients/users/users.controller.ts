@@ -18,7 +18,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
-@CheckScope(RoleScope.GLOBAL)
+@CheckScope(RoleScope.SYSTEM)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
