@@ -19,7 +19,7 @@ export class ProductRequestsService {
   ) {}
 
   async create(data: CreateProductRequestDto) {
-    return this.prisma.forUser().then((client) =>
+    return this.prisma.build().then((client) =>
       client.productRequest
         .create({
           data,
@@ -34,7 +34,7 @@ export class ProductRequestsService {
   }
 
   async findAll(query?: QueryProductRequestDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.productRequest.findManyForPage(
         buildPrismaFindArgs<typeof prisma.productRequest>(query, {
           include: {
@@ -67,7 +67,7 @@ export class ProductRequestsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forViewContext().then((client) =>
+    return this.prisma.build().then((client) =>
       client.productRequest.findUnique({
         where: { id },
         include: {
@@ -99,7 +99,7 @@ export class ProductRequestsService {
   }
 
   async update(id: string, data: UpdateProductRequestDto) {
-    return this.prisma.forUser().then((client) =>
+    return this.prisma.build().then((client) =>
       client.productRequest.update({
         where: { id },
         data,
@@ -112,7 +112,7 @@ export class ProductRequestsService {
   }
 
   async remove(id: string) {
-    return this.prisma.forUser().then((client) =>
+    return this.prisma.build().then((client) =>
       client.productRequest.delete({
         where: { id },
       }),
@@ -120,7 +120,7 @@ export class ProductRequestsService {
   }
 
   async updateStatuses(data: UpdateProductRequestStatusDto) {
-    return this.prisma.forViewContext().then((client) =>
+    return this.prisma.build().then((client) =>
       client.productRequest.updateMany({
         where: {
           id: {
@@ -139,7 +139,7 @@ export class ProductRequestsService {
   }
 
   async cancel(id: string) {
-    return this.prisma.forViewContext().then((client) =>
+    return this.prisma.build().then((client) =>
       client.productRequest.update({
         where: {
           id,
@@ -157,7 +157,7 @@ export class ProductRequestsService {
   }
 
   async review(id: string, data: ReviewProductRequestDto) {
-    return this.prisma.forUser().then((client) =>
+    return this.prisma.build().then((client) =>
       client.productRequest.update({
         where: { id },
         data,

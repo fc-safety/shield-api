@@ -41,12 +41,12 @@ export class TagsService {
 
   async create(createTagDto: CreateTagDto) {
     return this.prisma
-      .forViewContext()
+      .build()
       .then((prisma) => prisma.tag.create({ data: createTagDto }));
   }
 
   async findAll(queryTagDto: QueryTagDto | undefined) {
-    return this.prisma.forViewContext().then(async (prisma) =>
+    return this.prisma.build().then(async (prisma) =>
       prisma.tag.findManyForPage(
         buildPrismaFindArgs<typeof prisma.tag>(queryTagDto, {
           include: {
@@ -65,7 +65,7 @@ export class TagsService {
 
   async findOne(id: string) {
     return this.prisma
-      .forViewContext()
+      .build()
       .then((prisma) =>
         prisma.tag.findUniqueOrThrow({
           where: { id },
@@ -81,7 +81,7 @@ export class TagsService {
 
   async findOneForInspection(externalId: string) {
     // Get current user context for validation and error handling
-    const currentUser = (await this.prisma.forUser()).$rlsContext();
+    const currentUser = (await this.prisma.build()).$rlsContext();
 
     // Bypass RLS for initial tag lookup - access is validated at app level below
     const tag = await this.prisma
@@ -203,7 +203,7 @@ export class TagsService {
   }
 
   async findOneForAssetSetup(externalId: string) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.tag
         .findFirstOrThrow({
           where: { externalId },
@@ -263,7 +263,7 @@ export class TagsService {
 
     // If the tag is registered to a client, the user must have access to that client
     // (either primary or via PersonClientAccess)
-    const rlsContext = (await this.prisma.forUser()).$rlsContext();
+    const rlsContext = (await this.prisma.build()).$rlsContext();
     if (!rlsContext) {
       throw new BadRequestException('Unable to determine user context.');
     }
@@ -301,10 +301,9 @@ export class TagsService {
     { client: newClient, ...dto }: RegisterTagDto,
   ) {
     // Determine if the user can and intends to act as a global admin.
-    const accessGrant = this.cls.get('accessGrant');
-    const viewContext = this.cls.get('viewContext');
+    const accessGrant = this.cls.requireAccessGrant();
     const actingAsSystemAdmin =
-      accessGrant?.isSystemAdmin() === true && viewContext === 'admin';
+      accessGrant.isSystemAdmin() && this.cls.viewContext === 'admin';
 
     // Get tag data from inspection token.
     const { tagExternalId, serialNumber } =
@@ -312,8 +311,7 @@ export class TagsService {
 
     // If acting as a global admin, simply upsert registration data.
     if (actingAsSystemAdmin && newClient !== undefined) {
-      const prisma = await this.prisma.build({ viewContext: 'admin' });
-      return prisma.tag.upsert({
+      return this.prisma.bypassRLS().tag.upsert({
         where: { externalId: tagExternalId },
         update: {
           ...dto,
@@ -337,7 +335,7 @@ export class TagsService {
       where: { externalId: tagExternalId },
     });
 
-    return this.prisma.forUser().then(async (prisma) => {
+    return this.prisma.build().then(async (prisma) => {
       const person = prisma.$rlsContext();
 
       if (!person) {
@@ -385,7 +383,7 @@ export class TagsService {
   }
 
   async update(id: string, updateTagDto: UpdateTagDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.tag
         .update({
           where: { id },
@@ -397,7 +395,7 @@ export class TagsService {
 
   async remove(id: string) {
     return this.prisma
-      .forViewContext()
+      .build()
       .then((prisma) => prisma.tag.delete({ where: { id } }));
   }
 

@@ -46,6 +46,10 @@ export const isScopeAtLeast = (scope: TScope, required: TScope): boolean => {
   return SCOPE_HIERARCHY.indexOf(scope) <= SCOPE_HIERARCHY.indexOf(required);
 };
 
+export const getScopesAtLeast = (scope: TScope): TScope[] => {
+  return SCOPE_HIERARCHY.slice(0, SCOPE_HIERARCHY.indexOf(scope) + 1);
+};
+
 /**
  * Check if a scope allows access to all sites in a client.
  */

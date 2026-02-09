@@ -9,44 +9,23 @@ import { z } from 'zod';
 
 const QueryUserFiltersSchema = z
   .object({
-    personId: z
-      .union([
-        z.string(),
-        z.object({ in: z.array(z.string()) }),
-      ])
-      .optional(),
-    person: z
-      .object({
-        firstName: prismaStringFilter(z.string()).optional(),
-        lastName: prismaStringFilter(z.string()).optional(),
-        email: prismaStringFilter(z.string()).optional(),
-        active: z.boolean().optional(),
-      })
-      .optional(),
-    site: z
-      .object({
-        externalId: z.string().optional(),
-      })
-      .optional(),
+    id: z.union([z.string(), z.object({ in: z.array(z.string()) })]).optional(),
+    firstName: prismaStringFilter(z.string()).optional(),
+    lastName: prismaStringFilter(z.string()).optional(),
+    email: prismaStringFilter(z.string()).optional(),
+    phoneNumber: prismaStringFilter(z.string()).optional(),
+    active: z.boolean().optional(),
   })
-  .partial() satisfies z.Schema<Prisma.PersonClientAccessWhereInput>;
+  .partial() satisfies z.Schema<Prisma.PersonWhereInput>;
 
 const QueryUserOrderSchema = z
   .object({
-    person: z
-      .object({
-        firstName: PrismaOrderEmum.optional(),
-        lastName: PrismaOrderEmum.optional(),
-        email: PrismaOrderEmum.optional(),
-      })
-      .optional(),
-    site: z
-      .object({
-        externalId: PrismaOrderEmum.optional(),
-      })
-      .optional(),
+    firstName: PrismaOrderEmum.optional(),
+    lastName: PrismaOrderEmum.optional(),
+    email: PrismaOrderEmum.optional(),
+    createdOn: PrismaOrderEmum.optional(),
   })
-  .partial() satisfies z.Schema<Prisma.PersonClientAccessOrderByWithRelationInput>;
+  .partial() satisfies z.Schema<Prisma.PersonOrderByWithRelationInput>;
 
 export const QueryUserSchema = QueryUserFiltersSchema.extend(
   buildFixedQuerySchema(QueryUserOrderSchema),

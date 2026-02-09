@@ -1,14 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from './prisma.service';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { RedisService } from 'src/redis/redis.service';
-import { PeopleService } from 'src/clients/people/people.service';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { PrismaAdapter } from './prisma.adapter';
 
 describe('PrismaService', () => {
   let service: PrismaService;
 
-  const mockClsService = {
+  const mockApiClsService = {
     get: jest.fn(),
     set: jest.fn(),
   };
@@ -20,8 +20,10 @@ describe('PrismaService', () => {
     }),
   };
 
-  const mockPeopleService = {
-    findByIdpId: jest.fn(),
+  const mockMemoryCacheService = {
+    get: jest.fn(),
+    set: jest.fn(),
+    getOrSet: jest.fn(),
   };
 
   const mockPrismaAdapter = {
@@ -34,9 +36,9 @@ describe('PrismaService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PrismaService,
-        { provide: ClsService, useValue: mockClsService },
+        { provide: ApiClsService, useValue: mockApiClsService },
         { provide: RedisService, useValue: mockRedisService },
-        { provide: PeopleService, useValue: mockPeopleService },
+        { provide: MemoryCacheService, useValue: mockMemoryCacheService },
         { provide: PrismaAdapter, useValue: mockPrismaAdapter },
       ],
     }).compile();

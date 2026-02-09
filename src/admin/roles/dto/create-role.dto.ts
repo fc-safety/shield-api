@@ -17,10 +17,6 @@ export const CreateRoleSchema = z.object({
     .optional()
     .describe('Indicates whether clients can assign this role to users.')
     .default(false),
-  clientId: z
-    .string()
-    .optional()
-    .describe('Optional client ID to scope this role to a specific client.'),
 });
 
 export class CreateRoleDto extends createZodDto(CreateRoleSchema) {}

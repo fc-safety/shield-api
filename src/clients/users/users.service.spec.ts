@@ -1,7 +1,4 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, TestingModule } from '@nestjs/testing';
-import { RolesService } from 'src/admin/roles/roles.service';
-import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
@@ -12,139 +9,113 @@ import { UsersService } from './users.service';
 describe('UsersService', () => {
   let service: UsersService;
 
-  const mockPersonClientAccessResults = [
+  const mockPersonResults = [
     {
-      id: 'pca-1',
+      id: 'person-1',
       createdOn: new Date('2024-01-01'),
       modifiedOn: new Date('2024-01-02'),
-      isPrimary: true,
-      personId: 'person-1',
-      clientId: 'client-1',
-      siteId: 'site-1',
-      roleId: 'role-1',
-      person: {
-        id: 'person-1',
-        createdOn: new Date('2024-01-01'),
-        modifiedOn: new Date('2024-01-02'),
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john@example.com',
-        username: 'john@example.com',
-        idpId: 'idp-1',
-        phoneNumber: '123-456-7890',
-        position: 'Manager',
-        active: true,
-      },
-      site: { externalId: 'site-ext-1' },
-      client: { externalId: 'client-ext-1' },
-      role: {
-        id: 'role-1',
-        name: 'Admin',
-        description: 'Admin role',
-        createdOn: new Date('2024-01-01'),
-        modifiedOn: new Date('2024-01-01'),
-        clientAssignable: true,
-        notificationGroups: [],
-        scope: 'CLIENT',
-        capabilities: ['manage-users'],
-        clientId: null,
-      },
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john@example.com',
+      username: 'john@example.com',
+      idpId: 'idp-1',
+      phoneNumber: '123-456-7890',
+      position: 'Manager',
+      active: true,
+      clientAccess: [
+        {
+          id: 'pca-1',
+          isPrimary: true,
+          client: {
+            id: 'client-1',
+            externalId: 'client-ext-1',
+            name: 'Client 1',
+          },
+          site: { id: 'site-1', externalId: 'site-ext-1', name: 'Site 1' },
+          role: { id: 'role-1', name: 'Admin', scope: 'CLIENT' },
+        },
+      ],
     },
     {
-      id: 'pca-2',
+      id: 'person-2',
       createdOn: new Date('2024-01-01'),
       modifiedOn: new Date('2024-01-02'),
-      isPrimary: false,
-      personId: 'person-2',
-      clientId: 'client-1',
-      siteId: 'site-2',
-      roleId: 'role-2',
-      person: {
-        id: 'person-2',
-        createdOn: new Date('2024-01-01'),
-        modifiedOn: new Date('2024-01-02'),
-        firstName: 'Jane',
-        lastName: 'Smith',
-        email: 'jane@example.com',
-        username: 'jane@example.com',
-        idpId: 'idp-2',
-        phoneNumber: null,
-        position: null,
-        active: true,
-      },
-      site: { externalId: 'site-ext-2' },
-      client: { externalId: 'client-ext-1' },
-      role: {
-        id: 'role-2',
-        name: 'Inspector',
-        description: 'Inspector role',
-        createdOn: new Date('2024-01-01'),
-        modifiedOn: new Date('2024-01-01'),
-        clientAssignable: true,
-        notificationGroups: [],
-        scope: 'SITE',
-        capabilities: ['perform-inspections'],
-        clientId: null,
-      },
+      firstName: 'Jane',
+      lastName: 'Smith',
+      email: 'jane@example.com',
+      username: 'jane@example.com',
+      idpId: 'idp-2',
+      phoneNumber: null,
+      position: null,
+      active: true,
+      clientAccess: [
+        {
+          id: 'pca-2',
+          isPrimary: false,
+          client: {
+            id: 'client-1',
+            externalId: 'client-ext-1',
+            name: 'Client 1',
+          },
+          site: { id: 'site-2', externalId: 'site-ext-2', name: 'Site 2' },
+          role: { id: 'role-2', name: 'Inspector', scope: 'SITE' },
+        },
+      ],
     },
   ];
 
   const mockFindManyForPage = jest.fn().mockResolvedValue({
-    results: mockPersonClientAccessResults,
+    results: mockPersonResults,
     count: 2,
     limit: 10,
     offset: 0,
   });
 
+  const mockFindUniqueOrThrow = jest
+    .fn()
+    .mockResolvedValue(mockPersonResults[0]);
+  const mockUpdate = jest.fn().mockResolvedValue(mockPersonResults[0]);
+
   const mockPrismaClient = {
-    personClientAccess: {
+    person: {
       findManyForPage: mockFindManyForPage,
-      findFirstOrThrow: jest.fn().mockResolvedValue(mockPersonClientAccessResults[0]),
+      findUniqueOrThrow: mockFindUniqueOrThrow,
+      update: mockUpdate,
     },
+    $transaction: jest.fn().mockImplementation((cb) =>
+      cb({
+        person: {
+          findManyForPage: mockFindManyForPage,
+          findUniqueOrThrow: mockFindUniqueOrThrow,
+          update: mockUpdate,
+        },
+      }),
+    ),
   };
 
   const mockPrismaService = {
-    build: jest.fn().mockResolvedValue(mockPrismaClient),
     bypassRLS: jest.fn().mockReturnValue(mockPrismaClient),
   };
 
   const mockKeycloakService = {
-    findUsersByAttribute: jest.fn(),
     client: {
       users: {
-        create: jest.fn(),
-        update: jest.fn(),
-        del: jest.fn(),
+        update: jest.fn().mockResolvedValue(undefined),
+        resetPassword: jest.fn().mockResolvedValue(undefined),
+        resetPasswordEmail: jest.fn().mockResolvedValue(undefined),
       },
     },
   };
 
-  const mockRolesService = {
-    getRole: jest.fn(),
-    getRoles: jest.fn(),
-  };
-
-  const mockApiClsService = {
-    get: jest.fn(),
-    set: jest.fn(),
-    requireUser: jest.fn(),
-    requirePerson: jest.fn(),
-    requireAccessGrant: jest.fn(),
-  };
+  // Static method mock
+  (KeycloakService as any).mergeAttributes = jest.fn().mockReturnValue({});
 
   const mockNotificationsService = {
-    sendNotifications: jest.fn(),
-    queueEmail: jest.fn(),
+    queueEmail: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockApiConfigService = {
-    get: jest.fn().mockReturnValue('test-audience'),
-  };
-
-  const mockCacheManager = {
-    get: jest.fn().mockResolvedValue(null),
-    set: jest.fn().mockResolvedValue(undefined),
-    del: jest.fn().mockResolvedValue(undefined),
+    get: jest.fn().mockReturnValue('https://frontend.example.com'),
   };
 
   beforeEach(async () => {
@@ -155,11 +126,8 @@ describe('UsersService', () => {
         UsersService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: KeycloakService, useValue: mockKeycloakService },
-        { provide: RolesService, useValue: mockRolesService },
-        { provide: ApiClsService, useValue: mockApiClsService },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: ApiConfigService, useValue: mockApiConfigService },
-        { provide: CACHE_MANAGER, useValue: mockCacheManager },
       ],
     }).compile();
 
@@ -171,31 +139,27 @@ describe('UsersService', () => {
   });
 
   describe('findAll', () => {
-    it('should return users from database via PersonClientAccess', async () => {
+    it('should return users from Person table with clientAccess', async () => {
       const result = await service.findAll();
 
+      expect(mockPrismaService.bypassRLS).toHaveBeenCalled();
       expect(result.results).toHaveLength(2);
       expect(result.count).toBe(2);
       expect(result.offset).toBe(0);
 
-      // Verify first user transformation
+      // Verify first user
       expect(result.results[0]).toMatchObject({
         id: 'person-1',
         firstName: 'John',
         lastName: 'Doe',
-        name: 'John Doe',
         email: 'john@example.com',
         phoneNumber: '123-456-7890',
-        position: 'Manager',
         active: true,
-        siteExternalId: 'site-ext-1',
-        clientExternalId: 'client-ext-1',
-        roleName: 'Admin',
       });
 
-      // Verify role is included
-      expect(result.results[0].roles).toHaveLength(1);
-      expect(result.results[0].roles[0].name).toBe('Admin');
+      // Verify clientAccess is included
+      expect(result.results[0].clientAccess).toHaveLength(1);
+      expect(result.results[0].clientAccess[0].role.name).toBe('Admin');
     });
 
     it('should apply pagination correctly', async () => {
@@ -213,31 +177,16 @@ describe('UsersService', () => {
       );
     });
 
-    it('should filter by personId when provided', async () => {
+    it('should filter by id when provided', async () => {
       const query = new QueryUserDto();
-      query.personId = 'person-1';
+      query.id = 'person-1';
 
       await service.findAll(query);
 
       expect(mockFindManyForPage).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            personId: 'person-1',
-          }),
-        }),
-      );
-    });
-
-    it('should filter by site externalId when provided', async () => {
-      const query = new QueryUserDto();
-      query.site = { externalId: 'site-ext-1' };
-
-      await service.findAll(query);
-
-      expect(mockFindManyForPage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            site: { externalId: 'site-ext-1' },
+            id: 'person-1',
           }),
         }),
       );
@@ -245,13 +194,13 @@ describe('UsersService', () => {
 
     it('should apply custom ordering when specified', async () => {
       const query = new QueryUserDto();
-      query.order = { person: { email: 'desc' } };
+      query.order = { email: 'desc' };
 
       await service.findAll(query);
 
       expect(mockFindManyForPage).toHaveBeenCalledWith(
         expect.objectContaining({
-          orderBy: { person: { email: 'desc' } },
+          orderBy: { email: 'desc' },
         }),
       );
     });
@@ -259,13 +208,12 @@ describe('UsersService', () => {
     it('should handle users with null optional fields', async () => {
       const result = await service.findAll();
 
-      // Second user has null phoneNumber and position
+      // Second user has null phoneNumber
       expect(result.results[1]).toMatchObject({
         id: 'person-2',
         firstName: 'Jane',
         lastName: 'Smith',
-        phoneNumber: undefined,
-        position: undefined,
+        phoneNumber: null,
       });
     });
   });
@@ -274,6 +222,7 @@ describe('UsersService', () => {
     it('should return a single user by id', async () => {
       const result = await service.findOne('person-1');
 
+      expect(mockPrismaService.bypassRLS).toHaveBeenCalled();
       expect(result).toMatchObject({
         id: 'person-1',
         firstName: 'John',
@@ -282,16 +231,155 @@ describe('UsersService', () => {
       });
     });
 
-    it('should query PersonClientAccess with personId filter', async () => {
+    it('should query Person with id filter and include clientAccess', async () => {
       await service.findOne('person-1');
 
-      expect(mockPrismaClient.personClientAccess.findFirstOrThrow).toHaveBeenCalledWith({
-        where: { personId: 'person-1' },
+      expect(mockFindUniqueOrThrow).toHaveBeenCalledWith({
+        where: { id: 'person-1' },
         include: expect.objectContaining({
-          person: true,
-          role: true,
+          clientAccess: expect.objectContaining({
+            include: expect.objectContaining({
+              client: expect.any(Object),
+              site: expect.any(Object),
+              role: expect.any(Object),
+            }),
+          }),
         }),
       });
+    });
+  });
+
+  describe('update', () => {
+    it('should update person in database', async () => {
+      await service.update('person-1', { firstName: 'Johnny' });
+
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'person-1' },
+          data: expect.objectContaining({
+            firstName: 'Johnny',
+          }),
+        }),
+      );
+    });
+
+    it('should sync changes to Keycloak if person has idpId', async () => {
+      await service.update('person-1', { firstName: 'Johnny' });
+
+      expect(mockKeycloakService.client.users.update).toHaveBeenCalledWith(
+        { id: 'idp-1' },
+        expect.objectContaining({
+          firstName: 'Johnny',
+        }),
+      );
+    });
+
+    it('should not call Keycloak if person has no idpId', async () => {
+      mockFindUniqueOrThrow.mockResolvedValueOnce({
+        ...mockPersonResults[0],
+        idpId: null,
+      });
+
+      await service.update('person-1', { firstName: 'Johnny' });
+
+      expect(mockKeycloakService.client.users.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('should reset password via Keycloak', async () => {
+      await service.resetPassword('person-1', {
+        password: 'newPassword123!',
+        sendEmail: false,
+      });
+
+      expect(
+        mockKeycloakService.client.users.resetPassword,
+      ).toHaveBeenCalledWith({
+        id: 'idp-1',
+        credential: {
+          type: 'password',
+          value: 'newPassword123!',
+        },
+      });
+    });
+
+    it('should send email notification when sendEmail is true', async () => {
+      await service.resetPassword('person-1', {
+        password: 'newPassword123!',
+        sendEmail: true,
+      });
+
+      expect(mockNotificationsService.queueEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: ['john@example.com'],
+          templateName: 'manager_password_reset',
+        }),
+      );
+    });
+
+    it('should throw BadRequestException if person has no idpId', async () => {
+      mockFindUniqueOrThrow.mockResolvedValueOnce({
+        ...mockPersonResults[0],
+        idpId: null,
+      });
+
+      await expect(
+        service.resetPassword('person-1', {
+          password: 'newPassword123!',
+          sendEmail: false,
+        }),
+      ).rejects.toThrow('User has no identity provider account');
+    });
+  });
+
+  describe('sendResetPasswordEmail', () => {
+    it('should send reset password email via Keycloak', async () => {
+      await service.sendResetPasswordEmail('person-1', 'shield-web');
+
+      expect(
+        mockKeycloakService.client.users.resetPasswordEmail,
+      ).toHaveBeenCalledWith({
+        id: 'idp-1',
+        client_id: 'shield-web',
+        redirect_uri: 'https://frontend.example.com',
+      });
+    });
+
+    it('should throw BadRequestException if person has no idpId', async () => {
+      mockFindUniqueOrThrow.mockResolvedValueOnce({
+        ...mockPersonResults[0],
+        idpId: null,
+      });
+
+      await expect(
+        service.sendResetPasswordEmail('person-1', 'shield-web'),
+      ).rejects.toThrow('User has no identity provider account');
+    });
+  });
+
+  describe('generatePassword', () => {
+    it('should generate a password of specified length', () => {
+      const result = service.generatePassword(16);
+
+      expect(result.password).toHaveLength(16);
+    });
+
+    it('should generate a password with default length of 12', () => {
+      const result = service.generatePassword();
+
+      expect(result.password).toHaveLength(12);
+    });
+
+    it('should include required character types', () => {
+      // Multiple tests to increase confidence (password is shuffled)
+      for (let i = 0; i < 10; i++) {
+        const pw = service.generatePassword(20).password;
+        expect(pw).toMatch(/[A-Z]/); // uppercase
+        expect(pw).toMatch(/[a-z]/); // lowercase
+        expect(pw).toMatch(/[0-9]/); // number
+        expect(pw).toMatch(/[!@#$%^&*()]/); // special
+      }
     });
   });
 });

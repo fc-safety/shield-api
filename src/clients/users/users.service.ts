@@ -1,310 +1,197 @@
 import { NetworkError as KeycloakNetworkError } from '@keycloak/keycloak-admin-client';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
   ConflictException,
-  Inject,
   Injectable,
-  NotFoundException,
 } from '@nestjs/common';
-import { type Cache } from 'cache-manager';
 import crypto from 'crypto';
-import { databaseRoleToRole } from 'src/admin/roles/model/role';
-import { RolesService } from 'src/admin/roles/roles.service';
-import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import { CustomQueryFilter } from 'src/auth/keycloak/types';
-import { as404OrThrow, isNil } from 'src/common/utils';
+import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { Prisma, PrismaClient } from 'src/generated/prisma/client';
+import { RoleScope } from 'src/generated/prisma/enums';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { QueryUserDto } from './dto/query-user.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import {
-  personClientAccessToClientUser,
-  validateKeycloakUser,
-} from './model/client-user';
 
+/**
+ * Response model for user queries.
+ * Returns Person with nested clientAccess containing site/client/role info.
+ */
+export interface UserResponse {
+  id: string;
+  createdOn: Date;
+  modifiedOn: Date;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string | null;
+  position: string | null;
+  active: boolean;
+  idpId: string | null;
+  clientAccess: Array<{
+    id: string;
+    isPrimary: boolean;
+    client: { id: string; externalId: string; name: string };
+    site: { id: string; externalId: string; name: string };
+    role: { id: string; name: string; scope: RoleScope };
+  }>;
+}
+
+/**
+ * Include configuration for Person queries with clientAccess relation.
+ */
+const personInclude = {
+  clientAccess: {
+    include: {
+      client: { select: { id: true, externalId: true, name: true } },
+      site: { select: { id: true, externalId: true, name: true } },
+      role: { select: { id: true, name: true, scope: true } },
+    },
+  },
+};
+
+/**
+ * UsersService - System admin only service for managing all users.
+ *
+ * This service provides full visibility over all users in the system.
+ * The Person table is the source of truth, with Keycloak used only for
+ * password operations.
+ */
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly keycloak: KeycloakService,
-    private readonly roles: RolesService,
-    private readonly cls: ApiClsService,
     private readonly notifications: NotificationsService,
     private readonly config: ApiConfigService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   /**
-   * Common include for user queries.
+   * List all users with optional filters.
+   * Uses bypassRLS since this is admin-only.
    */
-  private get userInclude() {
-    return {
-      person: true,
-      site: { select: { externalId: true } },
-      client: { select: { externalId: true } },
-      role: true,
-    };
-  }
-
   async findAll(query: QueryUserDto = new QueryUserDto()) {
-    const prisma = await this.prisma.build();
+    const prisma = this.prisma.bypassRLS();
 
-    const result = await prisma.personClientAccess.findManyForPage(
-      buildPrismaFindArgs<typeof prisma.personClientAccess>(query, {
-        include: this.userInclude,
+    return prisma.person.findManyForPage(
+      buildPrismaFindArgs<typeof prisma.person>(query, {
+        include: personInclude,
       }),
     );
-
-    return {
-      ...result,
-      results: result.results.map(personClientAccessToClientUser),
-    };
   }
 
-  async findOne(id: string) {
-    const prisma = await this.prisma.build();
+  /**
+   * Get a single user by ID with all their client access entries.
+   */
+  async findOne(id: string): Promise<UserResponse> {
+    const prisma = this.prisma.bypassRLS();
 
-    const personClientAccess = await prisma.personClientAccess
-      .findFirstOrThrow({
-        where: { personId: id },
-        include: this.userInclude,
+    return prisma.person
+      .findUniqueOrThrow({
+        where: { id },
+        include: personInclude,
       })
       .catch(as404OrThrow);
-
-    return personClientAccessToClientUser(personClientAccess);
   }
 
+  /**
+   * Update a user's profile information.
+   * Syncs changes to Keycloak if the user has an IDP account.
+   */
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
-  ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
+  ): Promise<UserResponse> {
+    const prisma = this.prisma.bypassRLS();
 
-    const usernameIsEmail = keycloakUser.username === keycloakUser.email;
+    // Find the person first
+    const person = await prisma.person
+      .findUniqueOrThrow({ where: { id } })
+      .catch(as404OrThrow);
 
-    const attributes = KeycloakService.mergeAttributes(
-      keycloakUser.attributes,
-      ['phone_number', updateUserDto.phoneNumber],
-      ['site_id', updateUserDto.siteExternalId],
-      ['user_updated_at', new Date().toISOString()],
-      ['user_position', updateUserDto.position],
-      ['user_legacy_id', updateUserDto.legacyUserId],
-    );
-
-    await this.keycloak.client.users
-      .update(
-        {
-          id: keycloakUser.id,
-        },
-        {
-          enabled: updateUserDto.active ?? keycloakUser.enabled,
-          firstName: updateUserDto.firstName ?? keycloakUser.firstName,
-          lastName: updateUserDto.lastName ?? keycloakUser.lastName,
-          username:
-            (usernameIsEmail ? updateUserDto.email : updateUserDto.username) ??
-            keycloakUser.username,
-          email: updateUserDto.email ?? keycloakUser.email,
-          attributes,
-        },
-      )
-      .catch((e) => {
-        if (e instanceof KeycloakNetworkError && e.response.status === 409) {
-          throw new ConflictException(e.message);
-        }
-        throw e;
-      });
-
-    // Sync changed fields to Person record
-    const prisma = (bypassRLS
-      ? this.prisma.bypassRLS()
-      : await this.prisma.forViewContext()) as unknown as PrismaClient;
-
-    const personUpdate: Prisma.PersonUpdateInput = {};
-    if (updateUserDto.firstName !== undefined) {
-      personUpdate.firstName = updateUserDto.firstName;
-    }
-    if (updateUserDto.lastName !== undefined) {
-      personUpdate.lastName = updateUserDto.lastName;
-    }
-    if (updateUserDto.email !== undefined) {
-      personUpdate.email = updateUserDto.email;
-    }
-    if (updateUserDto.phoneNumber !== undefined) {
-      personUpdate.phoneNumber = updateUserDto.phoneNumber;
-    }
-    if (updateUserDto.position !== undefined) {
-      personUpdate.position = updateUserDto.position;
-    }
-    if (updateUserDto.active !== undefined) {
-      personUpdate.active = updateUserDto.active;
-    }
-
-    if (Object.keys(personUpdate).length > 0) {
-      await prisma.person.update({
+    return prisma.$transaction(async (tx) => {
+      // Update Person record in database
+      const updatedPerson = await tx.person.update({
         where: { id },
-        data: personUpdate,
+        data: {
+          ...(updateUserDto.firstName !== undefined && {
+            firstName: updateUserDto.firstName,
+          }),
+          ...(updateUserDto.lastName !== undefined && {
+            lastName: updateUserDto.lastName,
+          }),
+          ...(updateUserDto.email !== undefined && {
+            email: updateUserDto.email,
+          }),
+          ...(updateUserDto.phoneNumber !== undefined && {
+            phoneNumber: updateUserDto.phoneNumber,
+          }),
+          ...(updateUserDto.active !== undefined && {
+            active: updateUserDto.active,
+          }),
+        },
+        include: personInclude,
       });
-    }
-  }
 
-  async remove(
-    id: string,
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-    bypassRLS?: boolean,
-  ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId, bypassRLS);
-    await this.keycloak.client.users.del({ id: keycloakUser.id });
-  }
+      // Then sync to Keycloak if the person has an IDP account.
+      if (person.idpId) {
+        try {
+          await this.keycloak.client.users.update(
+            { id: person.idpId },
+            {
+              enabled: updateUserDto.active ?? person.active,
+              firstName: updateUserDto.firstName ?? person.firstName,
+              lastName: updateUserDto.lastName ?? person.lastName,
+              email: updateUserDto.email ?? person.email,
+              // Keep username in sync with email if they were the same
+              username:
+                person.username === person.email
+                  ? (updateUserDto.email ?? person.email)
+                  : (person.username ?? person.email),
+              attributes: KeycloakService.mergeAttributes(
+                {},
+                [
+                  'phone_number',
+                  updateUserDto.phoneNumber ?? person.phoneNumber,
+                ],
+                ['user_updated_at', new Date().toISOString()],
+              ),
+            },
+          );
+        } catch (e) {
+          if (e instanceof KeycloakNetworkError && e.response.status === 409) {
+            throw new ConflictException(
+              'Email or username already exists in identity provider',
+            );
+          }
+          throw e;
+        }
+      }
 
-  /**
-   * Add a role to a user. Since PersonClientAccess supports one role per client,
-   * this will replace the existing role if one exists.
-   */
-  async addRole(
-    id: string,
-    addRoleDto: { roleId: string },
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-  ) {
-    const client = await this.getClient(clientId);
-
-    const prisma = await this.prisma.build();
-
-    const person = await prisma.person.findUnique({
-      where: { idpId: id },
+      return updatedPerson;
     });
-
-    if (!person) {
-      throw new NotFoundException(`Person ${id} not found`);
-    }
-
-    // Verify role exists
-    const role = await prisma.role.findUnique({
-      where: { id: addRoleDto.roleId },
-    });
-    if (!role) {
-      throw new NotFoundException(`Role ${addRoleDto.roleId} not found`);
-    }
-
-    // Check if user already has this role
-    const existing = await prisma.personClientAccess.findUnique({
-      where: {
-        personId_clientId: {
-          personId: id,
-          clientId: client.id,
-        },
-      },
-    });
-
-    if (existing?.roleId === addRoleDto.roleId) {
-      throw new BadRequestException(
-        `User already has role ${addRoleDto.roleId}`,
-      );
-    }
-
-    // Update or create PersonClientAccess with the role
-    await prisma.personClientAccess.upsert({
-      where: {
-        personId_clientId: {
-          personId: person.id,
-          clientId: client.id,
-        },
-      },
-      update: {
-        roleId: addRoleDto.roleId,
-      },
-      create: {
-        personId: person.id,
-        clientId: client.id,
-        siteId: client.sites[0]?.id ?? '',
-        roleId: addRoleDto.roleId,
-      },
-    });
-
-    // Invalidate cache (id is idpId in this method)
-    await this.invalidatePersonClientAccessCache({
-      idpId: id,
-      clientExternalId: client.externalId,
-      personId: person.id,
-      clientId: client.id,
-    });
-
-    return databaseRoleToRole(role);
   }
 
   /**
-   * Remove a specific role from a user.
-   * This removes the PersonClientAccess entry for this client.
+   * Reset a user's password via Keycloak.
+   * Optionally sends an email with the new password.
    */
-  async removeRole(
-    id: string,
-    removeRoleDto: { roleId: string },
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-  ) {
-    const client = await this.getClient(clientId);
-    await this.getKeycloakUser(id, clientId); // Verify user exists
+  async resetPassword(id: string, resetPasswordDto: ResetPasswordDto) {
+    const prisma = this.prisma.bypassRLS();
 
-    const prisma = await this.prisma.build();
+    const person = await prisma.person
+      .findUniqueOrThrow({ where: { id } })
+      .catch(as404OrThrow);
 
-    // Get person's idpId for cache invalidation
-    const person = await prisma.person.findUnique({
-      where: { id },
-      select: { idpId: true },
-    });
-
-    // Check if user has this role
-    const existing = await prisma.personClientAccess.findUnique({
-      where: {
-        personId_clientId: {
-          personId: id,
-          clientId: client.id,
-        },
-      },
-    });
-
-    if (!existing || existing.roleId !== removeRoleDto.roleId) {
-      throw new BadRequestException(
-        `User does not have role ${removeRoleDto.roleId}`,
-      );
+    if (!person.idpId) {
+      throw new BadRequestException('User has no identity provider account');
     }
-
-    // Remove the PersonClientAccess entry
-    await prisma.personClientAccess.delete({
-      where: {
-        personId_clientId: {
-          personId: id,
-          clientId: client.id,
-        },
-      },
-    });
-
-    // Invalidate cache
-    await this.invalidatePersonClientAccessCache({
-      idpId: person?.idpId ?? null,
-      clientExternalId: client.externalId,
-      personId: id,
-      clientId: client.id,
-    });
-
-    return removeRoleDto.roleId;
-  }
-
-  async resetPassword(
-    id: string,
-    resetPasswordDto: ResetPasswordDto,
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-  ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId);
 
     await this.keycloak.client.users.resetPassword({
-      id: keycloakUser.id,
+      id: person.idpId,
       credential: {
         type: 'password',
         value: resetPasswordDto.password,
@@ -313,41 +200,44 @@ export class UsersService {
 
     if (resetPasswordDto.sendEmail) {
       await this.notifications.queueEmail({
-        to: [keycloakUser.email],
+        to: [person.email],
         templateName: 'manager_password_reset',
         templateProps: {
-          recipientFirstName: keycloakUser.firstName ?? '',
+          recipientFirstName: person.firstName,
           password: resetPasswordDto.password,
           frontendUrl: this.config.get('FRONTEND_URL'),
         },
       });
     }
 
-    return {
-      success: true,
-    };
+    return { success: true };
   }
 
-  async sendResetPasswordEmail(
-    id: string,
-    appClientId: string,
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-  ) {
-    const keycloakUser = await this.getKeycloakUser(id, clientId);
+  /**
+   * Send a password reset email via Keycloak.
+   */
+  async sendResetPasswordEmail(id: string, appClientId: string) {
+    const prisma = this.prisma.bypassRLS();
+
+    const person = await prisma.person
+      .findUniqueOrThrow({ where: { id } })
+      .catch(as404OrThrow);
+
+    if (!person.idpId) {
+      throw new BadRequestException('User has no identity provider account');
+    }
 
     await this.keycloak.client.users.resetPasswordEmail({
-      id: keycloakUser.id,
+      id: person.idpId,
       client_id: appClientId,
       redirect_uri: this.config.get('FRONTEND_URL'),
     });
 
-    return {
-      success: true,
-    };
+    return { success: true };
   }
 
   /**
-   * Generates a cryptographically secure random password
+   * Generates a cryptographically secure random password.
    * @param length The length of the password to generate (default: 12)
    * @returns A secure random password string
    */
@@ -381,108 +271,5 @@ export class UsersService {
       .join('');
 
     return { password };
-  }
-
-  private async getClient(
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-  ) {
-    if (!isNil(clientId) && typeof clientId !== 'string') {
-      return clientId;
-    }
-
-    const prisma = await this.prisma.build();
-
-    return prisma.client
-      .findUniqueOrThrow({
-        where: { id: clientId ?? this.cls.requireAccessGrant().clientId },
-        include: {
-          sites: true,
-        },
-      })
-      .catch(as404OrThrow);
-  }
-
-  private async getKeycloakUser(
-    id: string,
-    clientId?: string | Prisma.ClientGetPayload<{ include: { sites: true } }>,
-  ) {
-    const client = await this.getClient(clientId);
-    const user = await this.keycloak
-      .findUsersByAttribute({
-        filter: {
-          AND: [
-            ...this.buildSiteFilters(client),
-            { q: { key: 'user_id', value: id } },
-          ],
-        },
-      })
-      .then((r) => r.results.at(0));
-
-    if (!user || !validateKeycloakUser(user)) {
-      throw new NotFoundException();
-    }
-
-    return user;
-  }
-
-  private buildSiteFilters(
-    client: Prisma.ClientGetPayload<{
-      include: {
-        sites: true;
-      };
-    }>,
-  ) {
-    const filters: CustomQueryFilter[] = [
-      { q: { key: 'client_id', value: client.externalId } },
-    ];
-
-    const thisUser = this.cls.get('user');
-    // Check if user has scope that allows access to multiple sites
-    const hasMultiSiteAccess = thisUser?.scopeAllows('CLIENT') ?? false;
-    if (!hasMultiSiteAccess) {
-      filters.push({
-        q: {
-          key: 'site_id',
-          value: client.sites.map((s) => s.externalId),
-          op: 'in',
-        },
-      });
-    }
-
-    return filters;
-  }
-
-  /**
-   * Invalidate all caches related to a person's client access.
-   * This includes caches in both ClientsService and PeopleService.
-   */
-  private async invalidatePersonClientAccessCache(params: {
-    idpId: string | null;
-    clientExternalId: string;
-    personId: string;
-    clientId: string;
-  }) {
-    const { idpId, clientExternalId, personId, clientId } = params;
-
-    // Only invalidate caches that use idpId if we have it
-    const cacheKeys = [
-      // PeopleService.getSwitchedClientContext cache
-      `person-switched:${personId}:${clientExternalId}`,
-      // PeopleService.getPrimaryClientRole cache
-      `person-primary-role:${personId}:${clientId}`,
-    ];
-
-    if (idpId) {
-      cacheKeys.push(
-        // ClientsService.validateClientAccess cache
-        `client-access:${idpId}:${clientExternalId}`,
-        // PeopleService.getPersonRepresentation cache (primary client)
-        `person:idpId=${idpId}`,
-        // PeopleService.getPrimaryClientAccess cache
-        `primary-client-access:${idpId}`,
-      );
-    }
-
-    await Promise.all(cacheKeys.map((key) => this.cache.del(key)));
   }
 }

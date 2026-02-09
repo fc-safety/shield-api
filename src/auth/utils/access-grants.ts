@@ -153,7 +153,47 @@ const buildAccessGrantResponseCacheKey = (
 ) =>
   `access-grant:idpId:${idpId}|client:${requestedClientId ?? 'default'}|site:${requestedSiteId ?? 'default'}`;
 
-export { AccessGrant, buildAccessGrantResponseCacheKey, reduceAccessGrants };
+const clearAccessGrantResponseCache = async ({
+  idpId,
+  clientId,
+  siteId,
+  siteIds,
+  deleteFn,
+}: {
+  idpId: string;
+  clientId: string;
+  siteId?: string | null;
+  siteIds?: string[];
+  deleteFn: (keys: string[]) => Promise<void>;
+}) => {
+  const keys: string[] = [buildAccessGrantResponseCacheKey(idpId)];
+
+  const allSiteIds: string[] = [];
+  if (siteId) {
+    allSiteIds.push(siteId);
+  }
+  if (siteIds) {
+    allSiteIds.push(...siteIds);
+  }
+
+  allSiteIds.forEach((siteId) => {
+    keys.push(
+      buildAccessGrantResponseCacheKey(idpId, {
+        requestedClientId: clientId,
+        requestedSiteId: siteId,
+      }),
+    );
+  });
+
+  await deleteFn(keys);
+};
+
+export {
+  AccessGrant,
+  buildAccessGrantResponseCacheKey,
+  clearAccessGrantResponseCache,
+  reduceAccessGrants,
+};
 export type {
   IAccessGrantData,
   IAccessGrantResultDetails,

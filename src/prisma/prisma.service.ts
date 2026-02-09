@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ApiClsService } from 'src/auth/api-cls.service';
 import { TAccessGrant, TScope } from 'src/auth/auth.types';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
-import { isNil, ViewContext } from 'src/common/utils';
+import { isNil } from 'src/common/utils';
 import { Prisma, PrismaClient } from 'src/generated/prisma/client';
 import { RedisService } from 'src/redis/redis.service';
 import { PrismaAdapter } from './prisma.adapter';
@@ -69,16 +69,8 @@ export class PrismaService
     });
   }
 
-  public async forUser() {
-    return this.build({ viewContext: 'user' });
-  }
-
   public bypassRLS(options?: BypassRLSExtensionOptions) {
     return this.$extends(this.buildBypassRLSExtension(options));
-  }
-
-  public async forViewContext(_viewContext?: ViewContext) {
-    return this.build({ viewContext: _viewContext });
   }
 
   public async build(options: PrimaryExtensionOptions = {}) {
@@ -309,17 +301,14 @@ export class PrismaService
   }
 
   private async buildPrimaryExtension(options: PrimaryExtensionOptions) {
-    const context = options.viewContext ?? this.cls.get('viewContext');
-
+    const viewContext = this.cls.viewContext;
     const person = this.cls.get('person');
     const accessGrant = this.cls.get('accessGrant');
 
-    const isSystemAdmin = accessGrant?.isSystemAdmin() ?? false;
     const mode = this.cls.get('mode');
-    const cronMode = mode === 'cron';
-    const shouldBypassRLS = cronMode || (isSystemAdmin && context === 'admin');
+    const shouldBypassRLS = mode === 'cron';
 
-    let rlsContext: IPrismaRLSContext | undefined;
+    let rlsContext: IPrismaRLSContext | undefined = options.rlsContext;
     if (accessGrant && person) {
       const allowedSiteIds = await this.getAllowedSiteIdsForSite(
         accessGrant.siteId,
@@ -343,7 +332,7 @@ export class PrismaService
       const extendedPrisma = prisma.$extends({
         client: {
           $rlsContext: () => rlsContext,
-          $viewContext: context,
+          $viewContext: viewContext,
           $mode: mode ?? 'request',
         },
         model: {
@@ -472,7 +461,6 @@ export interface IPrismaRLSContext {
 }
 
 export interface PrimaryExtensionOptions {
-  viewContext?: ViewContext;
   rlsContext?: IPrismaRLSContext;
 }
 

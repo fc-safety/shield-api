@@ -83,6 +83,7 @@ npx nest g decorator auth/roles --flat
 ```
 
 **Testing requirements:**
+
 - **Never use `--no-spec`** - Always generate test files with new modules/services/controllers
 - After generating new files, run `npm test` to verify the default tests pass
 - If a generated spec file fails, fix it immediately before continuing
@@ -134,6 +135,7 @@ Most endpoints accepting a JSON request body should use DTO validation. Modules 
 **Structure:** `src/<module>/dto/<name>.dto.ts`
 
 **Pattern:**
+
 ```typescript
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -147,6 +149,7 @@ export class CreatePlanDto extends createZodDto(createPlanSchema) {}
 ```
 
 **Naming conventions:**
+
 - File: `<name>.dto.ts` (e.g., `create-plan.dto.ts`, `update-plan.dto.ts`)
 - Schema: `<name>Schema` (e.g., `createPlanSchema`, `updatePlanSchema`)
 - Class: `<Name>Dto` (e.g., `CreatePlanDto`, `UpdatePlanDto`)
@@ -154,6 +157,7 @@ export class CreatePlanDto extends createZodDto(createPlanSchema) {}
 **Discriminated unions:** `createZodDto()` does not support `z.discriminatedUnion()` due to a TypeScript limitation (TS2509 - cannot extend a union type). See [nestjs-zod#41](https://github.com/BenLorantfy/nestjs-zod/issues/41).
 
 Workaround - use a type alias and apply validation directly in the controller:
+
 ```typescript
 // In DTO file
 export const createEntrySchema = z.discriminatedUnion('category', [
@@ -170,6 +174,7 @@ create(@Body(new ZodValidationPipe(createEntrySchema)) dto: CreateEntryDto) {
 ```
 
 **Query Parameter DTOs:** Use the same pattern for validating query parameters. Create a DTO with a Zod schema and use it with the `@Query()` decorator:
+
 ```typescript
 // In DTO file (e.g., list-entries-query.dto.ts)
 import { createZodDto } from 'nestjs-zod';
@@ -193,10 +198,11 @@ findAll(@Query() query: ListEntriesQueryDto) {
 Note: Use `z.coerce.number()` for numeric query params since they arrive as strings.
 
 **Passing query DTOs to services:** Pass the query DTO to the service's `findAll` method. The query parameter should be optional so the method can be called without filters:
+
 ```typescript
 // In service
 async findAll(planId: string, query?: FindEntriesQueryDto) {
-  const prisma = await this.prisma.forUser();
+  const prisma = await this.prisma.build();
   const where: Prisma.EntryWhereInput = { planId };
 
   if (query?.taskKey) {
@@ -217,21 +223,22 @@ findAll(
 ```
 
 **Passing DTOs to Prisma:** Pass validated DTOs directly to `create` and `update` methods. The Zod schema ensures the data shape matches the database schema, so manual attribute mapping is unnecessary:
+
 ```typescript
 // Good - pass DTO directly
 async create(dto: CreatePlanDto) {
-  const prisma = await this.prisma.forUser();
+  const prisma = await this.prisma.build();
   return prisma.plan.create({ data: dto });
 }
 
 async update(id: string, dto: UpdatePlanDto) {
-  const prisma = await this.prisma.forUser();
+  const prisma = await this.prisma.build();
   return prisma.plan.update({ where: { id }, data: dto });
 }
 
 // Bad - manual mapping is superfluous
 async create(dto: CreatePlanDto) {
-  const prisma = await this.prisma.forUser();
+  const prisma = await this.prisma.build();
   return prisma.plan.create({
     data: {
       name: dto.name,
@@ -263,16 +270,19 @@ These are set via database defaults in Prisma models and enforced through RLS po
 Users can access multiple clients via the `x-client-id` header. Each client access has its own site and role (permissions).
 
 **Key models:**
+
 - `PersonClientAccess` - Maps a person to a client with a specific site and role
 - `Role` - Collection of permissions (can be global or client-specific)
 - `RolePermission` - Individual permission strings
 
 **Request flow:**
+
 1. `AuthGuard` extracts `x-client-id` header → stores in CLS as `activeClientId`
 2. `ActiveClientGuard` validates access via `PersonClientAccess` table
 3. `PeopleService.getPersonRepresentation()` builds context with switched client/site/permissions
 
 **Key files:**
+
 - `src/auth/auth.guard.ts` - Extracts header
 - `src/clients/guards/active-client.guard.ts` - Validates access
 - `src/clients/clients/clients.service.ts` - `validateClientAccess()` with caching
@@ -286,7 +296,7 @@ RLS context is managed in `src/prisma/prisma.service.ts`. For authenticated quer
 
 ```typescript
 // Standard user context - applies RLS based on current user
-const prisma = await this.prisma.forUser();
+const prisma = await this.prisma.build();
 await prisma.asset.findMany();
 
 // Bypass RLS for admin operations
@@ -298,6 +308,7 @@ const prisma = await this.prisma.forContext('admin');
 ```
 
 The `forUser()` method sets session variables before each query:
+
 ```sql
 SELECT set_config('app.current_client_id', '<client_id>', TRUE);
 SELECT set_config('app.current_site_id', '<site_id>', TRUE);
@@ -384,6 +395,7 @@ When adding new features or making architectural changes:
 3. **Keep documentation concise** - focus on the "why" and "how", not obvious implementation details
 
 Feature documentation in `docs/` should include:
+
 - Overview and motivation
 - Key models/services involved
 - Request flow or architecture diagrams (as text)

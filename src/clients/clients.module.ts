@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ClientAccessModule } from './client-access/client-access.module';
 import { ClientsModule as ClientsResourceModule } from './clients/clients.module';
 import { InvitationsModule } from './invitations/invitations.module';
+import { MembersModule } from './members/members.module';
 import { PeopleModule } from './people/people.module';
 import { SitesModule } from './sites/sites.module';
 import { UsersModule } from './users/users.module';
@@ -11,6 +12,7 @@ import { UsersModule } from './users/users.module';
     ClientAccessModule,
     ClientsResourceModule,
     InvitationsModule,
+    MembersModule,
     PeopleModule,
     SitesModule,
     UsersModule,

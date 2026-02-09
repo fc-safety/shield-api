@@ -57,4 +57,8 @@ export class ApiClsService {
     }
     return person;
   }
+
+  public get viewContext() {
+    return this.get('viewContext') ?? 'user';
+  }
 }

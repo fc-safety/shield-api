@@ -17,7 +17,7 @@ export class ConsumablesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createConsumableDto: CreateConsumableDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.consumable.create({
         data: createConsumableDto,
       }),
@@ -25,7 +25,7 @@ export class ConsumablesService {
   }
 
   async findAll(queryConsumableDto?: QueryConsumableDto) {
-    return this.prisma.forUser().then(async (prisma) =>
+    return this.prisma.build().then(async (prisma) =>
       prisma.consumable.findManyForPage(
         buildPrismaFindArgs<typeof prisma.consumable>(queryConsumableDto, {
           include: {
@@ -39,7 +39,7 @@ export class ConsumablesService {
 
   async findOne(id: string) {
     return this.prisma
-      .forUser()
+      .build()
       .then((prisma) =>
         prisma.consumable.findUniqueOrThrow({
           where: { id },
@@ -53,7 +53,7 @@ export class ConsumablesService {
   }
 
   async update(id: string, updateConsumableDto: UpdateConsumableDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.consumable
         .update({
           where: { id },
@@ -64,7 +64,7 @@ export class ConsumablesService {
   }
 
   async remove(id: string) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.consumable
         .delete({
           where: { id },

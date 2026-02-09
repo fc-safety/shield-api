@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClsService } from 'nestjs-cls';
-import { UsersService } from 'src/clients/users/users.service';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { MembersService } from 'src/clients/members/members.service';
 import { ConsumablesService } from '../consumables/consumables.service';
 import { AssetsService } from './assets.service';
 
@@ -34,12 +34,12 @@ describe('AssetsService', () => {
     sendNotifications: jest.fn(),
   };
 
-  const mockUsersService = {
+  const mockMembersService = {
     findAll: jest.fn(),
     findOne: jest.fn(),
   };
 
-  const mockClsService = {
+  const mockApiClsService = {
     get: jest.fn(),
     set: jest.fn(),
   };
@@ -51,8 +51,8 @@ describe('AssetsService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ConsumablesService, useValue: mockConsumablesService },
         { provide: NotificationsService, useValue: mockNotificationsService },
-        { provide: UsersService, useValue: mockUsersService },
-        { provide: ClsService, useValue: mockClsService },
+        { provide: MembersService, useValue: mockMembersService },
+        { provide: ApiClsService, useValue: mockApiClsService },
       ],
     }).compile();
 

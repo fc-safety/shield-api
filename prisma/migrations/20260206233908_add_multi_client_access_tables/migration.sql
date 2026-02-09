@@ -65,27 +65,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE;
 
-
 -- Fix Person RLS policy to support multi-client access
 -- Previously, the Person SELECT policy only allowed visibility when Person.clientId
 -- matched the current client. This broke multi-client access where a Person's primary
 -- client differs from the client they have access to via PersonClientAccess.
 
--- Drop the existing Person SELECT policy
+-- PART 1: Drop the existing Person SELECT policy BEFORE altering person table.
 DROP POLICY IF EXISTS client_isolation_policy ON "Person";
 DROP POLICY IF EXISTS client_isolation_policy_select ON "Person";
-
--- Create updated SELECT policy that allows visibility when:
--- - Person has access to the current client via PersonClientAccess
-CREATE POLICY client_isolation_policy ON "Person"
-    USING (
-        EXISTS (
-            SELECT 1 FROM "PersonClientAccess" pca
-            WHERE pca."personId" = "Person"."id"
-            AND validate_client(pca."clientId")
-        )
-    );
-
 
 -- CreateEnum
 CREATE TYPE "RoleScope" AS ENUM ('SYSTEM', 'GLOBAL', 'CLIENT', 'SITE_GROUP', 'SITE', 'SELF');
@@ -106,8 +93,8 @@ DROP INDEX "Person_clientId_idx";
 DROP INDEX "Person_clientId_siteId_idx";
 
 -- AlterTable
-ALTER TABLE "Person" DROP COLUMN "clientId",
-DROP COLUMN "siteId",
+ALTER TABLE "Person" DROP COLUMN "clientId" CASCADE,
+DROP COLUMN "siteId" CASCADE,
 ADD COLUMN     "active" BOOLEAN NOT NULL DEFAULT true,
 ADD COLUMN     "phoneNumber" TEXT,
 ADD COLUMN     "position" TEXT;
@@ -218,6 +205,17 @@ ALTER TABLE "Invitation" ADD CONSTRAINT "Invitation_roleId_fkey" FOREIGN KEY ("r
 -- AddForeignKey
 ALTER TABLE "Invitation" ADD CONSTRAINT "Invitation_siteId_fkey" FOREIGN KEY ("siteId") REFERENCES "Site"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- PART 2: Add new RLS policy AFTER PersonClientAccess table is created.
+-- Create updated SELECT policy that allows visibility when:
+-- - Person has access to the current client via PersonClientAccess
+CREATE POLICY client_isolation_policy ON "Person"
+    USING (
+        EXISTS (
+            SELECT 1 FROM "PersonClientAccess" pca
+            WHERE pca."personId" = "Person"."id"
+            AND validate_client(pca."clientId")
+        )
+    );
 
 -- RLS policies for PersonClientAccess
 -- Can only manage access for clients you belong to

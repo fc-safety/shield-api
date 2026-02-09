@@ -95,28 +95,15 @@ export class RolesService {
   async createRole(createRoleDto: CreateRoleDto): Promise<Role> {
     const prisma = this.prisma.bypassRLS();
 
-    // Validate client exists if clientId provided
-    if (createRoleDto.clientId) {
-      const client = await prisma.client.findUnique({
-        where: { id: createRoleDto.clientId },
-      });
-      if (!client) {
-        throw new NotFoundException(
-          `Client with ID ${createRoleDto.clientId} not found`,
-        );
-      }
-    }
-
     // Check for duplicate name within same client scope
     const existingRole = await prisma.role.findFirst({
       where: {
         name: createRoleDto.name,
-        clientId: createRoleDto.clientId ?? null,
       },
     });
     if (existingRole) {
       throw new BadRequestException(
-        `Role with name "${createRoleDto.name}" already exists${createRoleDto.clientId ? ' for this client' : ''}`,
+        `Role with name "${createRoleDto.name}" already exists`,
       );
     }
 
@@ -143,7 +130,6 @@ export class RolesService {
       data: {
         name: createRoleDto.name,
         description: createRoleDto.description,
-        clientId: createRoleDto.clientId,
         clientAssignable: createRoleDto.clientAssignable,
         notificationGroups: createRoleDto.notificationGroups ?? [],
         scope: createRoleDto.scope,
@@ -235,7 +221,6 @@ export class RolesService {
       const duplicateRole = await prisma.role.findFirst({
         where: {
           name: updateRoleDto.name,
-          clientId: existingRole.clientId,
           id: { not: roleId },
         },
       });

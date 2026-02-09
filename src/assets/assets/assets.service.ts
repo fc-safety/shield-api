@@ -2,7 +2,7 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { subDays } from 'date-fns';
 import { jsx } from 'react/jsx-runtime';
 import { ApiClsService } from 'src/auth/api-cls.service';
-import { UsersService } from 'src/clients/users/users.service';
+import { MembersService } from 'src/clients/members/members.service';
 import { testAlertRule } from 'src/common/alert-utils';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
 import { as404OrThrow } from 'src/common/utils';
@@ -40,13 +40,13 @@ export class AssetsService {
     private readonly prisma: PrismaService,
     private readonly consumablesService: ConsumablesService,
     private readonly notifications: NotificationsService,
-    private readonly usersService: UsersService,
+    private readonly membersService: MembersService,
     private readonly cls: ApiClsService,
   ) {}
 
   async create(createAssetDto: Prisma.AssetCreateInput) {
     return this.prisma
-      .forViewContext()
+      .build()
       .then((prisma) => prisma.asset.create({ data: createAssetDto }));
   }
 
@@ -145,7 +145,7 @@ export class AssetsService {
   }
 
   async findManyWithLatestInspection(queryAssetDto: QueryAssetDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.asset.findManyForPage(
         buildPrismaFindArgs<typeof prisma.asset>(queryAssetDto, {
           include: {
@@ -160,7 +160,7 @@ export class AssetsService {
 
   async addTag(id: string, tagExternalId: string, tagSerialNumber: string) {
     return this.prisma
-      .forUser()
+      .build()
       .then((prisma) =>
         prisma.asset.update({
           where: { id },
@@ -179,7 +179,7 @@ export class AssetsService {
 
   async findOneAlert(id: string, alertId: string) {
     return this.prisma
-      .forUser()
+      .build()
       .then((prisma) =>
         prisma.alert.findUniqueOrThrow({
           where: {
@@ -210,7 +210,7 @@ export class AssetsService {
   }
 
   async update(id: string, updateAssetDto: UpdateAssetDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.asset
         .update({
           where: { id },
@@ -266,7 +266,7 @@ export class AssetsService {
   }
 
   async setup(id: string, setupAssetDto: SetupAssetDto) {
-    const prismaClient = await this.prisma.forUser();
+    const prismaClient = await this.prisma.build();
 
     const updatedAsset = await prismaClient
       .$transaction((tx) =>
@@ -306,7 +306,7 @@ export class AssetsService {
   }
 
   async updateSetup(id: string, updateSetupAssetDto: UpdateSetupAssetDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.asset
         .update({
           where: { id, setupOn: { not: null } },
@@ -317,7 +317,7 @@ export class AssetsService {
   }
 
   async getMetadataKeys() {
-    const prisma = await this.prisma.forViewContext();
+    const prisma = await this.prisma.build();
 
     const conditionMetadataKeysPromise = prisma.$queryRaw<
       Array<{ key: string }>
@@ -376,7 +376,7 @@ ORDER BY key
   }
 
   async getMetadataValues(key: string) {
-    const prisma = await this.prisma.forViewContext();
+    const prisma = await this.prisma.build();
 
     const conditionMetadataKeysPromise = prisma.$queryRaw<
       Array<{ metadata_value: string }>
@@ -673,7 +673,7 @@ ORDER BY metadata_value
 
   async remove(id: string) {
     return this.prisma
-      .forViewContext()
+      .build()
       .then((prisma) => prisma.asset.delete({ where: { id } }));
   }
 
@@ -684,8 +684,8 @@ ORDER BY metadata_value
       throw new UnauthorizedException();
     }
 
-    const users = await this.usersService.findAll({
-      id: body.userIds,
+    const members = await this.membersService.findAll({
+      id: { in: body.userIds },
       limit: 10000,
       offset: 0,
     });
@@ -700,18 +700,18 @@ ORDER BY metadata_value
     };
 
     await this.notifications.sendEmails(
-      users.results.map((user) => ({
+      members.results.map((member) => ({
         react: jsx(TeamInspectionReminderTemplateReact, {
           ...templateProps,
-          firstName: user.firstName,
+          firstName: member.firstName,
         }),
-        to: [user.email],
+        to: [member.email],
         subject: 'Team Inspection Reminder',
       })),
     );
 
     await Promise.allSettled(
-      users.results
+      members.results
         .filter(
           (user): user is typeof user & { phoneNumber: string } =>
             !!user.phoneNumber,

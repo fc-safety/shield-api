@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProductsService } from './products.service';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 
 describe('ProductsService', () => {
   let service: ProductsService;
@@ -18,7 +18,7 @@ describe('ProductsService', () => {
     }),
   };
 
-  const mockClsService = {
+  const mockApiClsService = {
     get: jest.fn(),
     set: jest.fn(),
   };
@@ -28,7 +28,7 @@ describe('ProductsService', () => {
       providers: [
         ProductsService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: ClsService, useValue: mockClsService },
+        { provide: ApiClsService, useValue: mockApiClsService },
       ],
     }).compile();
 

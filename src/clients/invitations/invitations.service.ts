@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { nanoid } from 'nanoid';
 import { ApiClsService } from 'src/auth/api-cls.service';
-import { buildAccessGrantResponseCacheKey } from 'src/auth/utils/access-grants';
+import { clearAccessGrantResponseCache } from 'src/auth/utils/access-grants';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
@@ -326,17 +326,13 @@ export class InvitationsService {
       return newAccess;
     });
 
-    // Invalidate cache for the user's new client access. Invalidate for both
-    // known client and site, as well as unknown (default) client and site.
-    await Promise.allSettled([
-      this.memoryCache.del(
-        buildAccessGrantResponseCacheKey(user.idpId, {
-          requestedClientId: clientAccess.client.id,
-          requestedSiteId: clientAccess.site.id,
-        }),
-      ),
-      this.memoryCache.del(buildAccessGrantResponseCacheKey(user.idpId)),
-    ]);
+    // Invalidate cache for the user's new client access.
+    await clearAccessGrantResponseCache({
+      idpId: user.idpId,
+      clientId: invitation.clientId,
+      siteId: invitation.siteId,
+      deleteFn: this.memoryCache.mdel,
+    });
 
     return {
       success: true,

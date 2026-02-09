@@ -168,7 +168,7 @@ export class AssetQuestionsController {
   }
 
   @Post('migrate-to-conditions')
-  @CheckPolicies(({ user }) => user.isSystemAdmin())
+  @CheckPolicies(({ accessGrant }) => accessGrant.isSystemAdmin())
   migrateQuestionsToConditions() {
     return this.assetQuestionsService.migrateQuestionsToConditions();
   }

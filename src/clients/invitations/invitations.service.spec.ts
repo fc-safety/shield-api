@@ -1,10 +1,9 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ApiClsService } from 'src/auth/api-cls.service';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { ApiConfigService } from '../../config/api-config.service';
-import { ClsService } from 'nestjs-cls';
 import { InvitationsService } from './invitations.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ClientsService } from '../clients/clients.service';
 
 describe('InvitationsService', () => {
   let service: InvitationsService;
@@ -40,7 +39,7 @@ describe('InvitationsService', () => {
     }),
   };
 
-  const mockClsService = {
+  const mockApiClsService = {
     get: jest.fn(),
   };
 
@@ -48,14 +47,11 @@ describe('InvitationsService', () => {
     get: jest.fn().mockReturnValue('http://localhost:3000'),
   };
 
-  const mockCacheManager = {
+  const mockMemoryCacheService = {
     get: jest.fn(),
     set: jest.fn(),
     del: jest.fn(),
-  };
-
-  const mockClientsService = {
-    getPrimaryClientAccess: jest.fn(),
+    getOrSet: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -63,10 +59,9 @@ describe('InvitationsService', () => {
       providers: [
         InvitationsService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: ClsService, useValue: mockClsService },
+        { provide: ApiClsService, useValue: mockApiClsService },
         { provide: ApiConfigService, useValue: mockApiConfigService },
-        { provide: ClientsService, useValue: mockClientsService },
-        { provide: CACHE_MANAGER, useValue: mockCacheManager },
+        { provide: MemoryCacheService, useValue: mockMemoryCacheService },
       ],
     }).compile();
 

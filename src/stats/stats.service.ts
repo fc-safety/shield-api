@@ -63,7 +63,7 @@ export class StatsService {
     const xMonthsAgo =
       months === 1 ? new Date() : startOfMonth(subMonths(new Date(), months));
 
-    return this.prisma.forUser().then(async (prisma) => {
+    return this.prisma.build().then(async (prisma) => {
       const getAssetInspections = async (options: {
         latestOnlyBeforeCutoff?: boolean;
       }) =>

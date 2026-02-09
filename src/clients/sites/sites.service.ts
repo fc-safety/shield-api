@@ -59,12 +59,12 @@ export class SitesService {
 
   async create(createSiteDto: CreateSiteDto) {
     return this.prisma
-      .forViewContext()
+      .build()
       .then((prisma) => prisma.site.create({ data: createSiteDto }));
   }
 
   async findAll(querySiteDto: QuerySiteDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.site.findManyForPage(
         buildPrismaFindArgs<typeof prisma.site>(querySiteDto, {
           include: {
@@ -78,7 +78,7 @@ export class SitesService {
 
   async findOne(id: string) {
     return this.prisma
-      .forViewContext()
+      .build()
       .then((prisma) =>
         prisma.site.findUniqueOrThrow({
           where: { id },
@@ -111,7 +111,7 @@ export class SitesService {
   }
 
   async update(id: string, updateSiteDto: UpdateSiteDto) {
-    const prisma = await this.prisma.forViewContext();
+    const prisma = await this.prisma.build();
     const result = await prisma.site
       .update({
         where: { id },
@@ -123,7 +123,7 @@ export class SitesService {
   }
 
   async remove(id: string) {
-    const prisma = await this.prisma.forViewContext();
+    const prisma = await this.prisma.build();
     const result = await prisma.site.delete({ where: { id } });
     // Invalidate cache to ensure deleted site status is not cached
     this.invalidateSiteStatusCache(result.externalId);

@@ -128,7 +128,6 @@ async function seedSystemRoles() {
     let role = await prisma.role.findFirst({
       where: {
         name: roleData.name,
-        clientId: null,
       },
     });
 
@@ -152,7 +151,6 @@ async function seedSystemRoles() {
           name: roleData.name,
           description: roleData.description,
           isSystem: roleData.isSystem,
-          clientId: null,
           scope: roleData.scope,
           capabilities: roleData.capabilities,
           clientAssignable: roleData.clientAssignable,

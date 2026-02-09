@@ -15,6 +15,20 @@ import {
   PublicPolicyHandlerContext,
 } from './utils/policies';
 
+// Re-export decorators for convenient imports
+export {
+  CheckAllCapabilities,
+  CheckAnyCapability,
+  CheckCapability,
+  CheckClientAdmin,
+  CheckGlobalAdmin,
+  CheckIsAuthenticated,
+  CheckPolicies,
+  CheckPublicPolicies,
+  CheckScope,
+  CheckSystemAdmin,
+} from './utils/policies';
+
 @Injectable()
 export class PoliciesGuard implements CanActivate {
   logger = new Logger(PoliciesGuard.name);

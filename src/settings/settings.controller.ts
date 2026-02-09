@@ -5,7 +5,7 @@ import { GlobalSettingsDto } from './dto/global-settings.dto';
 import { SettingsService } from './settings.service';
 
 @Controller('settings')
-@CheckPolicies(({ user }) => user.isSystemAdmin())
+@CheckPolicies(({ accessGrant }) => accessGrant.isSystemAdmin())
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 

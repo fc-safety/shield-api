@@ -23,6 +23,7 @@ import {
   reduceAccessGrants,
 } from './utils/access-grants';
 import { TCapability } from './utils/capabilities';
+import { getScopesAtLeast, isScopeAtLeast, TScope } from './utils/scope';
 
 const createId32 = cuid2Init({ length: 32 });
 const createSecret = () => createId32() + createId32();
@@ -136,6 +137,50 @@ export class AuthService {
   ): Promise<TAccessGrantResult> {
     const prismaBypassRLS = this.prisma.bypassRLS();
 
+    // If a specific client is requeste and the user is a global admin, grant the user
+    // access to the client and site.
+    if (organizationContext.requestedClientId) {
+      const userGlobalRole = await this.getMostPermissiveRole(
+        user,
+        RoleScope.GLOBAL,
+      );
+
+      if (userGlobalRole) {
+        // If no site is specified, use the primary site (or first site) for the client.
+        let siteId = organizationContext.requestedSiteId;
+        if (!siteId) {
+          const site = await prismaBypassRLS.site.findFirst({
+            where: {
+              clientId: organizationContext.requestedClientId,
+            },
+            orderBy: {
+              primary: 'desc',
+              createdOn: 'asc',
+            },
+          });
+
+          siteId = site?.id;
+        }
+
+        if (siteId) {
+          return {
+            grant: {
+              scope: userGlobalRole.scope,
+              capabilities: userGlobalRole.capabilities as TCapability[],
+              clientId: organizationContext.requestedClientId,
+              siteId: siteId,
+            },
+          };
+        } else {
+          // In the rare, but possible scenario where a client has no sites,
+          // continue with regular flow but log a warning.
+          this.logger.warn(
+            `Attempted to grant client access to global admin, but no site was found for client ${organizationContext.requestedClientId}.`,
+          );
+        }
+      }
+    }
+
     const whereIsUsersPrimaryAccessRecord: Prisma.PersonClientAccessWhereInput =
       {
         person: { idpId: user.idpId },
@@ -191,6 +236,12 @@ export class AuthService {
     const accessRecords = await prismaBypassRLS.personClientAccess.findMany(
       accessRecordQueryArgs,
     );
+
+    console.debug('accessRecords', {
+      accessRecords,
+      organizationContext,
+      accessRecordQueryArgs,
+    });
 
     /** Allow or deny based on presence of an access record for the requested client (and site). */
     if (organizationContext.requestedClientId) {
@@ -258,6 +309,53 @@ export class AuthService {
         primaryRoleId: null,
       },
     };
+  }
+
+  private async getMostPermissiveRole(
+    user: StatelessUser,
+    scopeAtLeast: TScope,
+  ) {
+    const allowedScopes = getScopesAtLeast(scopeAtLeast);
+    const userAllowedRoles = await this.prisma
+      .bypassRLS()
+      .personClientAccess.findMany({
+        where: {
+          person: { idpId: user.idpId },
+          role: {
+            scope: {
+              in: allowedScopes,
+            },
+          },
+        },
+        select: {
+          roleId: true,
+          role: true,
+        },
+        distinct: ['roleId'],
+      })
+      .then((rows) => rows.map(({ role }) => role));
+
+    if (userAllowedRoles.length > 0) {
+      return userAllowedRoles.reduce((mostPermissive, current) => {
+        if (
+          current.scope !== mostPermissive.scope &&
+          isScopeAtLeast(current.scope, mostPermissive.scope)
+        ) {
+          return current;
+        }
+
+        if (
+          current.scope === mostPermissive.scope &&
+          current.capabilities.length > mostPermissive.capabilities.length
+        ) {
+          return current;
+        }
+
+        return mostPermissive;
+      }, userAllowedRoles[0]);
+    }
+
+    return null;
   }
 
   /**

@@ -1,11 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClsService } from 'nestjs-cls';
-import { RolesService } from 'src/admin/roles/roles.service';
 import { AssetsService } from 'src/assets/assets/assets.service';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
-import { UsersService } from '../users/users.service';
 import { ClientsService } from './clients.service';
 import { GenerateDemoInspectionsDto } from './dto/generate-demo-inspections.dto';
 
@@ -42,23 +40,17 @@ describe('ClientsService', () => {
       handleAlertTriggers: jest.fn().mockResolvedValue(undefined),
     };
 
-    const mockCacheManager = {
-      get: jest.fn(),
-      set: jest.fn(),
-      del: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ClientsService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: UsersService, useValue: {} },
-        { provide: RolesService, useValue: {} },
-        { provide: ClsService, useValue: { get: jest.fn() } },
+        {
+          provide: ApiClsService,
+          useValue: { get: jest.fn(), requireAccessGrant: jest.fn() },
+        },
         { provide: KeycloakService, useValue: mockKeycloakService },
         { provide: AssetQuestionsService, useValue: mockAssetQuestionsService },
         { provide: AssetsService, useValue: mockAssetsService },
-        { provide: 'CACHE_MANAGER', useValue: mockCacheManager },
       ],
     }).compile();
 
@@ -163,6 +155,11 @@ describe('ClientsService', () => {
             lastName: 'Doe',
           }),
         },
+        role: {
+          findFirstOrThrow: jest
+            .fn()
+            .mockResolvedValue({ id: 'inspector-role-id' }),
+        },
         asset: {
           update: jest.fn(),
         },
@@ -262,101 +259,6 @@ describe('ClientsService', () => {
           ]),
         );
       }
-    });
-  });
-
-  describe('validateClientAccess', () => {
-    let mockCacheManager: any;
-
-    beforeEach(() => {
-      mockCacheManager = {
-        get: jest.fn(),
-        set: jest.fn(),
-        del: jest.fn(),
-      };
-
-      // Re-inject the cache manager for these tests
-      (service as any).cache = mockCacheManager;
-    });
-
-    it('should return site external ID when user has access to client', async () => {
-      const mockAccess = {
-        site: { externalId: 'site-ext-123' },
-      };
-
-      mockCacheManager.get.mockResolvedValue(undefined);
-      mockPrismaService.bypassRLS = jest.fn().mockReturnValue({
-        personClientAccess: {
-          findFirst: jest.fn().mockResolvedValue(mockAccess),
-        },
-      });
-
-      const result = await service.validateClientAccess(
-        'idp-user-123',
-        'client-ext-456',
-      );
-
-      expect(result).toBe('site-ext-123');
-      expect(mockCacheManager.set).toHaveBeenCalledWith(
-        'client-access:idp-user-123:client-ext-456',
-        'site-ext-123',
-        60 * 60 * 1000,
-      );
-    });
-
-    it('should return null when user does not have access to client', async () => {
-      mockCacheManager.get.mockResolvedValue(undefined);
-      mockPrismaService.bypassRLS = jest.fn().mockReturnValue({
-        personClientAccess: {
-          findFirst: jest.fn().mockResolvedValue(null),
-        },
-      });
-
-      const result = await service.validateClientAccess(
-        'idp-user-123',
-        'client-ext-456',
-      );
-
-      expect(result).toBeNull();
-      expect(mockCacheManager.set).toHaveBeenCalledWith(
-        'client-access:idp-user-123:client-ext-456',
-        null,
-        60 * 60 * 1000,
-      );
-    });
-
-    it('should return cached value when available', async () => {
-      mockCacheManager.get.mockResolvedValue('cached-site-ext');
-
-      const result = await service.validateClientAccess(
-        'idp-user-123',
-        'client-ext-456',
-      );
-
-      expect(result).toBe('cached-site-ext');
-      expect(mockPrismaService.bypassRLS).not.toHaveBeenCalled();
-    });
-
-    it('should query with correct where clause', async () => {
-      const mockFindFirst = jest.fn().mockResolvedValue(null);
-      mockCacheManager.get.mockResolvedValue(undefined);
-      mockPrismaService.bypassRLS = jest.fn().mockReturnValue({
-        personClientAccess: {
-          findFirst: mockFindFirst,
-        },
-      });
-
-      await service.validateClientAccess('idp-user-123', 'client-ext-456');
-
-      expect(mockFindFirst).toHaveBeenCalledWith({
-        where: {
-          person: { idpId: 'idp-user-123' },
-          client: { externalId: 'client-ext-456' },
-        },
-        select: {
-          site: { select: { externalId: true } },
-        },
-      });
     });
   });
 });

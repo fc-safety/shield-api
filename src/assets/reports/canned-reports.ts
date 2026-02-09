@@ -40,7 +40,7 @@ const ActiveAssetsCannedReport: CannedReport<ActiveAssetRow> = {
     'manufacturerName',
   ],
   build: async (prismaService) => {
-    const prisma = await prismaService.forViewContext();
+    const prisma = await prismaService.build();
     return prisma.$queryRawTyped(getActiveAssets());
   },
   dateRangeSupport: 'NONE',
@@ -78,7 +78,7 @@ const OverdueAssetsCannedReport: CannedReport<OverdueAssetRow> = {
     'manufacturerName',
   ],
   build: async (prismaService) => {
-    const prisma = await prismaService.forViewContext();
+    const prisma = await prismaService.build();
     return prisma.$queryRawTyped(getOverdueAssets(null));
   },
   dateRangeSupport: 'NONE',
@@ -109,7 +109,7 @@ const AllInspectionsCannedReport: CannedReport<InspectionRow> = {
     'manufacturerName',
   ],
   build: async (prismaService, query) => {
-    const prisma = await prismaService.forViewContext();
+    const prisma = await prismaService.build();
     return prisma.$queryRawTyped(
       getRecentInspections(query.startDate ?? null, query.endDate ?? null),
     );
@@ -145,7 +145,7 @@ const ExpiringConsumablesCannedReport: CannedReport<ExpiringConsumableRow> = {
     'siteName',
   ],
   build: async (prismaService, query) => {
-    const prisma = await prismaService.forViewContext();
+    const prisma = await prismaService.build();
     return prisma.$queryRawTyped(
       getExpiringConsumables(query.startDate ?? null, query.endDate ?? null),
     );
@@ -181,7 +181,7 @@ const ExpiredConsumablesCannedReport: CannedReport<ExpiredConsumableRow> = {
     'siteName',
   ],
   build: async (prismaService) => {
-    const prisma = await prismaService.forViewContext();
+    const prisma = await prismaService.build();
     return prisma.$queryRawTyped(getExpiredConsumables());
   },
   dateRangeSupport: 'NONE',
@@ -223,7 +223,7 @@ const RecentAlertsCannedReport: CannedReport<RecentAlertRow> = {
     'siteName',
   ],
   build: async (prismaService, query) => {
-    const prisma = await prismaService.forViewContext();
+    const prisma = await prismaService.build();
     return prisma.$queryRawTyped(
       getRecentAlerts(query.startDate ?? null, query.endDate ?? null),
     );
@@ -267,7 +267,7 @@ const UnresolvedAlertsCannedReport: CannedReport<UnresolvedAlertRow> = {
     'siteName',
   ],
   build: async (prismaService, query) => {
-    const prisma = await prismaService.forViewContext();
+    const prisma = await prismaService.build();
     return prisma.$queryRawTyped(
       getUnresolvedAlerts(query.startDate ?? null, query.endDate ?? null),
     );

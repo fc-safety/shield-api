@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
-import pRetry from 'p-retry';
 import { AssetsService } from 'src/assets/assets/assets.service';
 import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
@@ -24,9 +23,6 @@ import {
 import { getAssetsToRenewForDemoClient } from 'src/generated/prisma/sql';
 import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
-import { CreateUserDto } from '../users/dto/create-user.dto';
-import { QueryUserDto } from '../users/dto/query-user.dto';
-import { UsersService } from '../users/users.service';
 import { ClearDemoInspectionsQueryDto } from './dto/clear-demo-inspections-query.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { DuplicateDemoClientDto } from './dto/duplicate-demo-client.dto';
@@ -42,7 +38,6 @@ export class ClientsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly usersService: UsersService,
     private readonly cls: ApiClsService,
     private readonly keycloakService: KeycloakService,
     private readonly assetQuestionsService: AssetQuestionsService,
@@ -163,7 +158,7 @@ export class ClientsService {
   }
 
   async findUserOrganization() {
-    const prisma = await this.prisma.build({ viewContext: 'user' });
+    const prisma = await this.prisma.build();
     const rlsContext = prisma.$rlsContext();
     if (!rlsContext) {
       throw new NotFoundException(
@@ -227,28 +222,7 @@ export class ClientsService {
 
   async remove(id: string) {
     const prisma = await this.prisma.build();
-    return prisma.$transaction(async (tx) => {
-      const client = await tx.client.findUniqueOrThrow({
-        where: { id },
-        include: { sites: true },
-      });
-      const result = await tx.client.delete({ where: { id } });
-
-      const users = await this.usersService
-        .findAll(
-          QueryUserDto.create({
-            limit: 5000,
-          }),
-          client,
-        )
-        .then((users) => users.results);
-
-      await Promise.all(
-        users.map((user) => this.usersService.remove(user.id, client)),
-      );
-
-      return result;
-    });
+    return prisma.client.delete({ where: { id } }).catch(as404OrThrow);
   }
 
   async duplicateDemo(id: string, options: DuplicateDemoClientDto) {
@@ -309,7 +283,6 @@ export class ClientsService {
       });
 
       const siteIdsMap = new Map<string, string>();
-      const siteExternalIdsMap = new Map<string, string>();
       await Promise.all(
         sites.map(async (site) => {
           const {
@@ -335,7 +308,6 @@ export class ClientsService {
             },
           });
           siteIdsMap.set(site.id, duplicateSite.id);
-          siteExternalIdsMap.set(site.externalId, duplicateSite.externalId);
         }),
       );
 
@@ -415,63 +387,36 @@ export class ClientsService {
         }),
       );
 
-      const query = QueryUserDto.create({
-        limit: 1000,
+      // Duplicate members: create new Person records with access to the duplicate client
+      const sourceMembers = await tx.person.findMany({
+        where: {
+          clientAccess: { some: { clientId: existingClient.id } },
+        },
+        include: {
+          clientAccess: { where: { clientId: existingClient.id } },
+        },
       });
-      const users = await this.usersService
-        .findAll(query, existingClient)
-        .then((users) => users.results);
 
-      const newUserIds: string[] = [];
+      for (const member of sourceMembers) {
+        const newEmail = member.email.split('@')[0] + '@' + options.emailDomain;
 
-      try {
-        await Promise.all(
-          users.map(async (user) => {
-            const newEmail =
-              user.email.split('@')[0] + '@' + options.emailDomain;
-
-            const newUser = await this.usersService.create(
-              CreateUserDto.create({
-                email: newEmail,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                siteExternalId: siteExternalIdsMap.get(user.siteExternalId),
-                phoneNumber: user.phoneNumber,
-                position: user.position,
-                password: options.password,
-              }),
-              duplicateClient,
-            );
-            newUserIds.push(newUser.id);
-
-            // Assign all roles from the source user
-            if (user.roles.length === 0) {
-              return;
-            }
-
-            const roleIds = user.roles.map((role) => role.id);
-
-            if (roleIds.length === 0) {
-              return;
-            }
-
-            await this.usersService.setRoles(
-              newUser.id,
-              { roleIds },
-              duplicateClient,
-            );
-          }),
-        );
-      } catch (e) {
-        await Promise.all(
-          newUserIds.map((userId) =>
-            pRetry(() => this.usersService.remove(userId, duplicateClient), {
-              retries: 3,
-            }),
-          ),
-        );
-
-        throw e;
+        await tx.person.create({
+          data: {
+            firstName: member.firstName,
+            lastName: member.lastName,
+            email: newEmail,
+            phoneNumber: member.phoneNumber,
+            position: member.position,
+            clientAccess: {
+              create: member.clientAccess.map((access) => ({
+                clientId: duplicateClient.id,
+                siteId: siteIdsMap.get(access.siteId) || access.siteId,
+                roleId: access.roleId,
+                isPrimary: access.isPrimary,
+              })),
+            },
+          },
+        });
       }
 
       return duplicateClient;

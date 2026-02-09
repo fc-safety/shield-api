@@ -48,6 +48,6 @@ import { PoliciesGuard } from './policies.guard';
     },
     AuthService,
   ],
-  exports: [ClsModule, AuthService],
+  exports: [ClsModule, AuthService, ApiClsService],
 })
 export class AuthModule {}

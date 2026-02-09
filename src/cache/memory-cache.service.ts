@@ -38,6 +38,13 @@ export class MemoryCacheService {
   }
 
   /**
+   * Delete multiple values from the cache.
+   */
+  async mdel(keys: string[]): Promise<void> {
+    await this.cache.mdel(keys);
+  }
+
+  /**
    * Get a value from the cache, or compute and cache it if not present.
    *
    * This method handles concurrent requests for the same key by coalescing

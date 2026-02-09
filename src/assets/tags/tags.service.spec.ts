@@ -1,6 +1,6 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { AuthService } from 'src/auth/auth.service';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -9,7 +9,7 @@ import { TagsService } from './tags.service';
 describe('TagsService', () => {
   let service: TagsService;
   let mockPrismaService: any;
-  let mockClsService: any;
+  let mockApiClsService: any;
 
   const mockApiConfigService = {
     get: jest.fn().mockReturnValue('test-value'),
@@ -55,7 +55,7 @@ describe('TagsService', () => {
       bypassRLS: jest.fn(),
     };
 
-    mockClsService = {
+    mockApiClsService = {
       get: jest.fn(),
       set: jest.fn(),
     };
@@ -65,7 +65,7 @@ describe('TagsService', () => {
         TagsService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ApiConfigService, useValue: mockApiConfigService },
-        { provide: ClsService, useValue: mockClsService },
+        { provide: ApiClsService, useValue: mockApiClsService },
         { provide: AuthService, useValue: mockAuthService },
       ],
     }).compile();
@@ -83,8 +83,8 @@ describe('TagsService', () => {
       user: any,
       personClientAccess: any = null,
     ) => {
-      // Mock forUser() to return an object with $rlsContext()
-      mockPrismaService.forUser.mockResolvedValue({
+      // Mock build() to return an object with $rlsContext()
+      mockPrismaService.build.mockResolvedValue({
         $rlsContext: jest.fn().mockReturnValue({
           clientId: 'primary-client-internal',
           siteId: 'site-internal-1',
@@ -102,7 +102,7 @@ describe('TagsService', () => {
       });
 
       // Mock CLS to return user (no clientId on user - uses PersonClientAccess)
-      mockClsService.get.mockImplementation((key: string) => {
+      mockApiClsService.get.mockImplementation((key: string) => {
         if (key === 'user') return user;
         return undefined;
       });
@@ -165,8 +165,8 @@ describe('TagsService', () => {
     it('should throw UnauthorizedException when user is not authenticated', async () => {
       const mockTag = createMockTag();
 
-      // Mock forUser() to return an object with $rlsContext()
-      mockPrismaService.forUser.mockResolvedValue({
+      // Mock build() to return an object with $rlsContext()
+      mockPrismaService.build.mockResolvedValue({
         $rlsContext: jest.fn().mockReturnValue(null),
       });
 
@@ -179,7 +179,7 @@ describe('TagsService', () => {
         },
       });
 
-      mockClsService.get.mockReturnValue(undefined); // No user
+      mockApiClsService.get.mockReturnValue(undefined); // No user
 
       await expect(service.findOneForInspection('ext-tag-1')).rejects.toThrow(
         UnauthorizedException,
@@ -236,7 +236,7 @@ describe('TagsService', () => {
         },
       });
 
-      mockPrismaService.forUser.mockResolvedValue({
+      mockPrismaService.build.mockResolvedValue({
         $rlsContext: jest.fn().mockReturnValue({
           clientId: 'primary-client-internal', // Different from tag
           siteId: 'site-1',
@@ -245,7 +245,7 @@ describe('TagsService', () => {
         }),
       });
 
-      mockClsService.get.mockImplementation((key: string) => {
+      mockApiClsService.get.mockImplementation((key: string) => {
         if (key === 'user') {
           return createMockUser();
         }

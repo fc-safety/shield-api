@@ -17,7 +17,7 @@ export class ProductCategoriesService {
   ) {}
 
   async create(createProductCategoryDto: CreateProductCategoryDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.productCategory.create({
         data: createProductCategoryDto,
       }),
@@ -25,7 +25,7 @@ export class ProductCategoriesService {
   }
 
   async findAll(queryProductCategoryDto?: QueryProductCategoryDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.productCategory.findManyForPage(
         buildPrismaFindArgs<typeof prisma.productCategory>(
           queryProductCategoryDto,
@@ -43,7 +43,7 @@ export class ProductCategoriesService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.productCategory
         .findUniqueOrThrow({
           where: { id },
@@ -68,7 +68,7 @@ export class ProductCategoriesService {
   }
 
   async update(id: string, updateProductCategoryDto: UpdateProductCategoryDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.productCategory
         .update({
           where: { id },
@@ -80,14 +80,14 @@ export class ProductCategoriesService {
 
   async remove(id: string) {
     return this.prisma
-      .forViewContext()
+      .build()
       .then((prisma) => prisma.productCategory.delete({ where: { id } }));
   }
 
   // QUESTIONS
 
   async addQuestion(id: string, input: CreateAssetQuestionDto) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.assetQuestion
         .create({
           data: { ...input, productCategory: { connect: { id } } },
@@ -101,7 +101,7 @@ export class ProductCategoriesService {
     questionId: string,
     input: UpdateAssetQuestionDto,
   ) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.assetQuestion
         .update({
           where: { id: questionId },
@@ -112,7 +112,7 @@ export class ProductCategoriesService {
   }
 
   async deleteQuestion(questionId: string) {
-    return this.prisma.forViewContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.assetQuestion
         .delete({
           where: { id: questionId },

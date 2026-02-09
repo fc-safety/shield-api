@@ -14,15 +14,15 @@ import {
   isToday,
 } from 'date-fns';
 import React from 'react';
-import { Role } from 'src/admin/roles/model/role';
 import {
-  RoleScope,
-  scopeAllowsAllClientSites,
-  scopeAllowsMultipleClients,
-  TScope,
-} from 'src/auth/utils/scope';
-import { ClientUser } from 'src/clients/users/model/client-user';
-import { UsersService } from 'src/clients/users/users.service';
+  buildSiteHierarchy,
+  filterAssetsByVisibleSites,
+  getVisibleAssetsForMember,
+  getVisibleSiteIdsForMember,
+  ISiteHierarchy,
+  isSingleSiteUser,
+  TPersonWithClientAccess,
+} from 'src/auth/utils/site-visibility';
 import { groupBy } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { Prisma } from 'src/generated/prisma/client';
@@ -39,7 +39,6 @@ import {
   SendInspectionAlertTriggeredEmailJobData,
 } from '../lib/types';
 import {
-  INotificationGroup,
   isInspectionReminderNotificationGroup,
   NotificationGroupId,
   NotificationGroups,
@@ -70,7 +69,6 @@ export class ClientNotificationsProcessor
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly users: UsersService,
     @InjectQueue(QUEUE_NAMES.CLIENT_NOTIFICATIONS)
     private readonly clientNotificationsQueue: Queue,
     @InjectQueue(QUEUE_NAMES.SEND_NOTIFICATIONS)
@@ -91,8 +89,8 @@ export class ClientNotificationsProcessor
   }
 
   @OnWorkerEvent('error')
-  onFailed(job: Job<unknown>, error: Error) {
-    this.logger.error('Processor failed', { job, error });
+  onError(job: Job<unknown>, error: Error) {
+    this.logger.error('Processor error', { job, error });
   }
 
   @OnWorkerEvent('ready')
@@ -137,9 +135,16 @@ export class ClientNotificationsProcessor
   private async processClientInspectionReminders(
     job: Job<ClientNotificationJobData>,
   ): Promise<any> {
-    const client = await this.prisma.bypassRLS().client.findUniqueOrThrow({
+    const client = await this.prisma.bypassRLS().client.findUnique({
       where: { id: job.data.clientId },
     });
+
+    if (!client) {
+      this.logger.warn(
+        `Client ${job.data.clientId} not found, skipping inspection reminders`,
+      );
+      return {};
+    }
 
     if (client.demoMode) {
       this.logger.debug(
@@ -148,19 +153,15 @@ export class ClientNotificationsProcessor
       return {};
     }
 
-    // All users for the client.
-    const clientUsers = await this.getClientUsers(job.data.clientId);
-
     // This mapping indicates which users should receive which reminder notification types.
-    const usersByNotificationGroupId = getUsersGroupedByNotificationGroupId(
-      clientUsers,
-      INSPECTION_REMINDER_NOTIFICATION_GROUPS,
-    );
+    const membersByNotificationGroupId =
+      await this.getMembersByNotificationGroups(
+        job.data.clientId,
+        INSPECTION_REMINDER_NOTIFICATION_GROUPS.map((g) => g.id),
+      );
 
-    // These mappings indicate which user roles should have visibility into which client assets.
-    const assetScopeMappings = await this.getAssetScopeMappings(
-      job.data.clientId,
-    );
+    // Build site hierarchy for efficient visibility lookups.
+    const siteHierarchy = await this.getSiteHierarchy(job.data.clientId);
 
     /**
      * A mapping of notification group ID to a list of assets that should receive notifications for that group.
@@ -206,40 +207,42 @@ export class ClientNotificationsProcessor
             thresholdConfig: group.config,
           })
         ) {
-          if (!inspectionReminderBuckets.has(group.id)) {
-            inspectionReminderBuckets.set(group.id, []);
-          }
           inspectionReminderBuckets.get(group.id)?.push(asset);
           break;
         }
       }
     }
 
-    // For each bucket, send notifications to the users that should receive them.
+    // Collect all email jobs to send in bulk.
+    const emailJobs: {
+      name: string;
+      data: SendEmailJobData<NotificationGroupId>;
+    }[] = [];
+
+    // For each bucket, prepare notifications for users that should receive them.
     for (const [
       notificationGroupId,
-      assets,
+      bucketAssets,
     ] of inspectionReminderBuckets.entries()) {
-      const users = usersByNotificationGroupId.get(notificationGroupId);
+      const members = membersByNotificationGroupId[notificationGroupId] ?? [];
 
-      if (assets.length === 0) {
+      if (bucketAssets.length === 0) {
         continue;
       }
 
-      if (!users || users.length === 0) {
+      if (!members || members.length === 0) {
         this.logger.debug(
           `--> Skipping notification group "${notificationGroupId}" because there are no users to send to.`,
         );
         continue;
       }
 
-      for (const user of users) {
-        const visibleAssetIds = getVisibleAssetIdsForUser(
-          user,
-          assetScopeMappings,
-        );
-        const visibleAssets = assets.filter((a) =>
-          visibleAssetIds.includes(a.id),
+      for (const member of members) {
+        const visibleAssets = getVisibleAssetsForMember(
+          member,
+          job.data.clientId,
+          bucketAssets,
+          siteHierarchy,
         );
 
         // If user has no visibility into these assets, skip.
@@ -252,14 +255,14 @@ export class ClientNotificationsProcessor
 
         // Prepare presentation properties to be passed to the template.
         const props: SharedInspectionReminderTemplateProps = {
-          recipientFirstName: user.firstName,
-          singleSite: isSingleSiteUser(user),
+          recipientFirstName: member.firstName,
+          singleSite: isSingleSiteUser(member, job.data.clientId),
           frontendUrl: this.config.get('FRONTEND_URL'),
           assetsDueForInspectionBySite: Object.entries(assetsBySite).map(
-            ([, assets]) => ({
-              siteId: assets.at(0)?.site.id ?? 'unknown',
-              siteName: assets.at(0)?.site.name ?? 'Unknown',
-              assetsDueForInspection: assets.map((a) => ({
+            ([, siteAssets]) => ({
+              siteId: siteAssets.at(0)?.site.id ?? 'unknown',
+              siteName: siteAssets.at(0)?.site.name ?? 'Unknown',
+              assetsDueForInspection: siteAssets.map((a) => ({
                 assetId: a.id,
                 assetName: a.name,
                 categoryId: a.product.productCategory.id,
@@ -276,12 +279,23 @@ export class ClientNotificationsProcessor
           ),
         };
 
-        await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
-          templateName: notificationGroupId,
-          to: [user.email],
-          templateProps: props,
-        } satisfies SendEmailJobData<typeof notificationGroupId>);
+        emailJobs.push({
+          name: NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
+          data: {
+            templateName: notificationGroupId,
+            to: [member.email],
+            templateProps: props,
+          },
+        });
       }
+    }
+
+    // Send all notifications in bulk.
+    if (emailJobs.length > 0) {
+      await this.notificationsQueue.addBulk(emailJobs);
+      this.logger.debug(
+        `--> Queued ${emailJobs.length} inspection reminder emails for client ${job.data.clientId}`,
+      );
     }
 
     return {};
@@ -294,9 +308,16 @@ export class ClientNotificationsProcessor
       `--> Processing client monthly inspection reports for client ${job.data.clientId}...`,
     );
 
-    const client = await this.prisma.bypassRLS().client.findUniqueOrThrow({
+    const client = await this.prisma.bypassRLS().client.findUnique({
       where: { id: job.data.clientId },
     });
+
+    if (!client) {
+      this.logger.warn(
+        `Client ${job.data.clientId} not found, skipping monthly reports`,
+      );
+      return {};
+    }
 
     if (client.demoMode) {
       this.logger.debug(
@@ -305,34 +326,30 @@ export class ClientNotificationsProcessor
       return {};
     }
 
-    // All users for the client.
-    const clientUsers = await this.getClientUsers(job.data.clientId);
-
     // This mapping indicates which users should receive which reminder notification types.
-    const usersByNotificationGroupId = getUsersGroupedByNotificationGroupId(
-      clientUsers,
-      Object.values(NotificationGroups).filter((g) =>
-        (
-          [
-            'monthly_compliance_report',
-            'monthly_consumables_report',
-          ] satisfies NotificationGroupId[] as string[]
-        ).includes(g.id),
-      ),
-    );
+    const membersByNotificationGroupId =
+      await this.getMembersByNotificationGroups(job.data.clientId, [
+        'monthly_compliance_report',
+        'monthly_consumables_report',
+      ]);
 
-    // These mappings indicate which user roles should have visibility into which client assets.
-    const assetScopeMappings = await this.getAssetScopeMappings(
-      job.data.clientId,
-    );
+    // Build site hierarchy for efficient visibility lookups.
+    const siteHierarchy = await this.getSiteHierarchy(job.data.clientId);
 
-    // Build and send monthly inspection reports.
-    const monthlyComplianceReportUsers = usersByNotificationGroupId.get(
-      'monthly_compliance_report',
-    );
+    // Collect all email jobs to send in bulk.
+    const emailJobs: {
+      name: string;
+      data:
+        | SendEmailJobData<'monthly_compliance_report'>
+        | SendEmailJobData<'monthly_consumables_report'>;
+    }[] = [];
+
+    // Build monthly compliance reports.
+    const monthlyComplianceReportMembers =
+      membersByNotificationGroupId.monthly_compliance_report;
     if (
-      monthlyComplianceReportUsers &&
-      monthlyComplianceReportUsers.length > 0
+      monthlyComplianceReportMembers &&
+      monthlyComplianceReportMembers.length > 0
     ) {
       // Get all assets for the client with their latest inspection.
       const assets = await this.prisma.bypassRLS().asset.findMany({
@@ -353,14 +370,13 @@ export class ClientNotificationsProcessor
         },
       });
 
-      // For each user, determine visible assets and then build and send the report.
-      for (const user of monthlyComplianceReportUsers) {
-        const visibleAssetIds = getVisibleAssetIdsForUser(
-          user,
-          assetScopeMappings,
-        );
-        const visibleAssets = assets.filter((a) =>
-          visibleAssetIds.includes(a.id),
+      // For each user, determine visible assets and prepare the report.
+      for (const member of monthlyComplianceReportMembers) {
+        const visibleAssets = getVisibleAssetsForMember(
+          member,
+          job.data.clientId,
+          assets,
+          siteHierarchy,
         );
 
         if (visibleAssets.length === 0) {
@@ -371,9 +387,9 @@ export class ClientNotificationsProcessor
         const assetsBySite = groupBy(visibleAssets, (a) => a.site.id);
 
         const props = {
-          recipientFirstName: user.firstName,
+          recipientFirstName: member.firstName,
           clientName: client.name,
-          singleSite: isSingleSiteUser(user),
+          singleSite: isSingleSiteUser(member, job.data.clientId),
           frontendUrl: this.config.get('FRONTEND_URL'),
           reportRowsBySite: Object.entries(assetsBySite).map(
             ([, siteAssets]) => {
@@ -429,21 +445,23 @@ export class ClientNotificationsProcessor
           typeof MonthlyInspectionReportTemplateReact
         >;
 
-        await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
-          templateName: 'monthly_compliance_report',
-          to: [user.email],
-          templateProps: props,
-        } satisfies SendEmailJobData<'monthly_compliance_report'>);
+        emailJobs.push({
+          name: NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
+          data: {
+            templateName: 'monthly_compliance_report',
+            to: [member.email],
+            templateProps: props,
+          },
+        });
       }
     }
 
-    // Build and send asset compliance reports.
-    const monthlyConsumableReportUsers = usersByNotificationGroupId.get(
-      'monthly_consumables_report',
-    );
+    // Build monthly consumables reports.
+    const monthlyConsumableReportMembers =
+      membersByNotificationGroupId.monthly_consumables_report;
     if (
-      monthlyConsumableReportUsers &&
-      monthlyConsumableReportUsers.length > 0
+      monthlyConsumableReportMembers &&
+      monthlyConsumableReportMembers.length > 0
     ) {
       const consumables = await this.prisma
         .bypassRLS()
@@ -476,13 +494,18 @@ export class ClientNotificationsProcessor
           ),
         );
 
-      for (const user of monthlyConsumableReportUsers) {
-        const visibleAssetIds = getVisibleAssetIdsForUser(
-          user,
-          assetScopeMappings,
+      for (const member of monthlyConsumableReportMembers) {
+        // Get visible site IDs for this member
+        const visibleSiteIds = getVisibleSiteIdsForMember(
+          member,
+          job.data.clientId,
+          siteHierarchy,
         );
-        const visibleConsumables = consumables.filter(
-          (c) => c.assetId && visibleAssetIds.includes(c.assetId),
+
+        // Filter consumables by their site (consumables have a direct site relationship)
+        const visibleConsumables = filterAssetsByVisibleSites(
+          consumables,
+          visibleSiteIds,
         );
 
         if (visibleConsumables.length === 0) {
@@ -515,7 +538,7 @@ export class ClientNotificationsProcessor
         });
 
         const props = {
-          recipientFirstName: user.firstName,
+          recipientFirstName: member.firstName,
           clientName: client.name,
           frontendUrl: this.config.get('FRONTEND_URL'),
           data: {
@@ -533,12 +556,23 @@ export class ClientNotificationsProcessor
           typeof MonthlyConsumableReportTemplateReact
         >;
 
-        await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
-          templateName: 'monthly_consumables_report',
-          to: [user.email],
-          templateProps: props,
-        } satisfies SendEmailJobData<'monthly_consumables_report'>);
+        emailJobs.push({
+          name: NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
+          data: {
+            templateName: 'monthly_consumables_report',
+            to: [member.email],
+            templateProps: props,
+          },
+        });
       }
+    }
+
+    // Send all notifications in bulk.
+    if (emailJobs.length > 0) {
+      await this.notificationsQueue.addBulk(emailJobs);
+      this.logger.debug(
+        `--> Queued ${emailJobs.length} monthly report emails for client ${job.data.clientId}`,
+      );
     }
 
     return {};
@@ -549,7 +583,7 @@ export class ClientNotificationsProcessor
   ) {
     const { alertId } = job.data;
 
-    const alert = await this.prisma.bypassRLS().alert.findUniqueOrThrow({
+    const alert = await this.prisma.bypassRLS().alert.findUnique({
       where: { id: alertId },
       include: {
         site: true,
@@ -571,14 +605,10 @@ export class ClientNotificationsProcessor
       },
     });
 
-    // All users for the client.
-    const clientUsers = await this.getClientUsers(alert.clientId);
-
-    // This mapping indicates which users should receive which reminder notification types.
-    const usersByNotificationGroupId = getUsersGroupedByNotificationGroupId(
-      clientUsers,
-      [NotificationGroups.inspection_alert_triggered],
-    );
+    if (!alert) {
+      this.logger.warn(`Alert ${alertId} not found, skipping notification`);
+      return;
+    }
 
     const genericProps: Omit<
       NonNullable<
@@ -610,100 +640,123 @@ export class ClientNotificationsProcessor
       frontendUrl: this.config.get('FRONTEND_URL'),
     };
 
-    for (const user of usersByNotificationGroupId.get(
-      'inspection_alert_triggered',
-    ) ?? []) {
-      await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, {
-        templateName: 'inspection_alert_triggered',
-        to: [user.email],
-        templateProps: {
-          ...genericProps,
-          recipientFirstName: user.firstName,
+    const membersGroupedByNotificationId =
+      await this.getMembersByNotificationGroups(alert.clientId, [
+        NotificationGroups.inspection_alert_triggered.id,
+      ]);
+
+    // Build site hierarchy for visibility checks
+    const siteHierarchy = await this.getSiteHierarchy(alert.clientId);
+
+    // Collect email jobs for members with visibility to this alert's site
+    const emailJobs: {
+      name: string;
+      data: SendEmailJobData<'inspection_alert_triggered'>;
+    }[] = [];
+
+    for (const member of membersGroupedByNotificationId[
+      NotificationGroups.inspection_alert_triggered.id
+    ]) {
+      // Check if member can see this alert's site
+      const visibleSiteIds = getVisibleSiteIdsForMember(
+        member,
+        alert.clientId,
+        siteHierarchy,
+      );
+
+      // Skip if member doesn't have visibility to this site
+      // (null means full access, so only skip if it's an array that doesn't include the site)
+      if (visibleSiteIds !== null && !visibleSiteIds.includes(alert.siteId)) {
+        continue;
+      }
+
+      emailJobs.push({
+        name: NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
+        data: {
+          templateName: 'inspection_alert_triggered',
+          to: [member.email],
+          templateProps: {
+            ...genericProps,
+            recipientFirstName: member.firstName,
+          },
         },
-      } satisfies SendEmailJobData<'inspection_alert_triggered'>);
+      });
+    }
+
+    // Send all notifications in bulk.
+    if (emailJobs.length > 0) {
+      await this.notificationsQueue.addBulk(emailJobs);
+      this.logger.debug(
+        `--> Queued ${emailJobs.length} alert notification emails for alert ${alertId}`,
+      );
     }
   }
 
   // Utility methods
 
-  private async getClientUsers(clientId: string) {
-    return this.users
-      .findAll({ limit: 10000, offset: 0 }, clientId, true)
-      .then((response) => response.results);
-  }
-
-  /**
-   * Returns a mapping of asset scope to a list of sites and asset IDs. Used to efficiently determine
-   * which users should have visibility into which assets.
-   *
-   * @param clientId The ID of the client to get the asset scope mappings for.
-   * @returns A mapping of asset scope to a list of sites and asset IDs.
-   */
-  private async getAssetScopeMappings(clientId: string) {
-    const sites = await this.prisma.bypassRLS().site.findMany({
-      select: { id: true, externalId: true, name: true },
-      where: { clientId },
+  private async getMembersByNotificationGroups<
+    const T extends readonly NotificationGroupId[],
+  >(
+    clientId: string,
+    notificationGroupIds: T,
+  ): Promise<Record<T[number], TPersonWithClientAccess[]>> {
+    const people = await this.prisma.bypassRLS().person.findMany({
+      where: {
+        clientAccess: {
+          some: {
+            clientId,
+            role: {
+              notificationGroups: {
+                hasSome: [...notificationGroupIds],
+              },
+            },
+          },
+        },
+      },
+      include: {
+        clientAccess: {
+          where: { clientId },
+          include: {
+            role: true,
+          },
+        },
+      },
     });
 
-    // Client-level scopes (GLOBAL, SYSTEM) see all assets in the client
-    // We only need to compute per-site mappings for more restricted scopes
-    const clientLevelScopes: TScope[] = [
-      RoleScope.CLIENT,
-      RoleScope.SITE_GROUP,
-      RoleScope.SITE,
-      RoleScope.SELF,
-    ];
+    const grouped = {} as Record<T[number], TPersonWithClientAccess[]>;
+    for (const id of notificationGroupIds) {
+      grouped[id] = [];
+    }
 
-    const assetScopeMappings: Partial<
-      Record<
-        TScope,
-        {
-          siteId: string;
-          siteExternalId: string;
-          siteName: string;
-          assetIds: string[];
-        }[]
-      >
-    > = {
-      [RoleScope.CLIENT]: [],
-      [RoleScope.SITE_GROUP]: [],
-      [RoleScope.SITE]: [],
-      [RoleScope.SELF]: [],
-    };
-
-    for (const scope of clientLevelScopes) {
-      for (const site of sites) {
-        const usersPrismaClient = await this.prisma.build({
-          person: {
-            id: '1',
-            idpId: '1',
-            siteId: site.id,
-            allowedSiteIdsStr: site.id, // This accepts a comma-delimited list of site IDs.
-            clientId: clientId,
-            scope,
-            capabilities: [],
-            hasMultiClientScope: scopeAllowsMultipleClients(scope),
-            hasMultiSiteScope: scopeAllowsAllClientSites(scope),
-          },
-        });
-        const assetIds = await usersPrismaClient.asset
-          .findMany({
-            select: {
-              id: true,
-            },
-          })
-          .then((assets) => assets.map((a) => a.id));
-        // Scope is one of the initialized keys, so this is safe
-        assetScopeMappings[scope]!.push({
-          siteId: site.id,
-          siteExternalId: site.externalId,
-          siteName: site.name,
-          assetIds,
-        });
+    for (const person of people) {
+      for (const id of notificationGroupIds) {
+        if (
+          person.clientAccess.some((ca) =>
+            ca.role.notificationGroups.includes(id),
+          )
+        ) {
+          grouped[id].push(person);
+        }
       }
     }
 
-    return assetScopeMappings;
+    return grouped;
+  }
+
+  /**
+   * Build site hierarchy for a client. Used to determine which sites
+   * a user can access based on their scope.
+   *
+   * @param clientId The ID of the client to get the site hierarchy for.
+   * @returns Site hierarchy with precomputed descendants.
+   */
+  private async getSiteHierarchy(clientId: string): Promise<ISiteHierarchy> {
+    const sites = await this.prisma.bypassRLS().site.findMany({
+      select: { id: true, parentSiteId: true },
+      where: { clientId },
+    });
+
+    return buildSiteHierarchy(sites);
   }
 }
 
@@ -735,7 +788,7 @@ function isThresholdMetToday(props: {
   lastInspectedOn: Date;
   thresholdConfig: { pctThreshold: number; daysThreshold: number };
 }) {
-  // Get threshold a days, using the lesser of the static days or percent of inspection cycle.
+  // Get threshold as days, using the lesser of the static days or percent of inspection cycle.
   const pctThresholdAsDays =
     props.inspectionCycle * props.thresholdConfig.pctThreshold;
   const thresholdDays = Math.min(
@@ -750,120 +803,4 @@ function isThresholdMetToday(props: {
     (props.inspectionCycle - thresholdDays) * 24 * 60 * 60 * 1000,
   );
   return isToday(thresholdDate);
-}
-
-/**
- * Returns the scope for a given role.
- *
- * @param role The role to get the scope for.
- * @returns The scope for the given role.
- */
-function getRoleScope(role: Pick<Role, 'scope'>): TScope {
-  return role.scope;
-}
-
-/**
- * Get the highest scope level across all of a user's roles.
- * Most permissive wins: SYSTEM > GLOBAL > CLIENT > SITE_GROUP > SITE > SELF
- */
-function getUserScope(user: ClientUser): TScope {
-  if (user.roles.length === 0) return RoleScope.SELF;
-
-  // Get all scope levels from user's roles
-  const scopeLevels = user.roles.map((role) => getRoleScope(role));
-
-  if (scopeLevels.length === 0) return RoleScope.SELF;
-
-  // Return the highest (most permissive) scope level
-  // SCOPE_HIERARCHY is ordered from most to least permissive
-  for (const scope of [
-    RoleScope.SYSTEM,
-    RoleScope.GLOBAL,
-    RoleScope.CLIENT,
-    RoleScope.SITE_GROUP,
-    RoleScope.SITE,
-    RoleScope.SELF,
-  ]) {
-    if (scopeLevels.includes(scope)) {
-      return scope;
-    }
-  }
-
-  return RoleScope.SELF;
-}
-
-/**
- * Check if a user is restricted to a single site.
- * Returns true only if ALL of the user's roles have SITE or SELF scope.
- */
-function isSingleSiteUser(user: ClientUser) {
-  if (user.roles.length === 0) return true;
-
-  // Get all scope levels from user's roles
-  const scopeLevels = user.roles.map((role) => getRoleScope(role));
-
-  if (scopeLevels.length === 0) return true;
-
-  // User is single-site only if ALL roles are SITE or SELF
-  return scopeLevels.every((s) => s === RoleScope.SITE || s === RoleScope.SELF);
-}
-
-/**
- * Returns a mapping of notification group ID to a list of users that should receive notifications for that group.
- * A user receives notifications if ANY of their roles includes the notification group.
- *
- * @param users The users to group by notification group ID.
- * @returns A mapping of notification group ID to a list of users that should receive notifications for that group.
- */
-function getUsersGroupedByNotificationGroupId(
-  users: ClientUser[],
-  notificationGroups: INotificationGroup[],
-) {
-  return new Map(
-    notificationGroups.map((g) => [
-      g.id,
-      users.filter((u) => {
-        if (u.roles.length === 0) {
-          return false;
-        }
-
-        // Check if ANY of the user's roles includes this notification group
-        return u.roles.some((role) => {
-          return role.notificationGroups.includes(g.id);
-        });
-      }),
-    ]),
-  );
-}
-
-function getVisibleAssetIdsForUser(
-  user: ClientUser,
-  assetScopeMappings: Partial<
-    Record<
-      TScope,
-      {
-        siteId: string;
-        siteExternalId: string;
-        siteName: string;
-        assetIds: string[];
-      }[]
-    >
-  >,
-) {
-  const scope = getUserScope(user);
-
-  // For GLOBAL and SYSTEM scopes, they have access to all assets (handled at query time)
-  // For client-level scopes, look up from the mappings
-  const scopeMapping = assetScopeMappings[scope];
-  if (!scopeMapping) {
-    // GLOBAL or SYSTEM - return empty since they're not in the mappings
-    // (these users have access to everything)
-    return [];
-  }
-
-  return (
-    scopeMapping.find(
-      ({ siteExternalId }) => siteExternalId === user.siteExternalId,
-    )?.assetIds ?? []
-  );
 }

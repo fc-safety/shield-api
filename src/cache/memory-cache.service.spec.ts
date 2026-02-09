@@ -165,9 +165,9 @@ describe('MemoryCacheService', () => {
       const successFactory = jest.fn().mockResolvedValue('success');
 
       // First request fails
-      await expect(service.getOrSet('test-key', failingFactory)).rejects.toThrow(
-        'Factory failed',
-      );
+      await expect(
+        service.getOrSet('test-key', failingFactory),
+      ).rejects.toThrow('Factory failed');
 
       // Second request should be able to try again (not stuck on failed promise)
       const result = await service.getOrSet('test-key', successFactory);
