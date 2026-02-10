@@ -61,9 +61,6 @@ export class StatelessUser {
   readonly givenName?: string;
   readonly familyName?: string;
   readonly picture?: string;
-  // TODO: Move these to separate CLS variables
-  // readonly scope: TScope;
-  // readonly capabilities: TCapability[];
 
   constructor(data: StatelessUserData) {
     this.idpId = data.idpId;

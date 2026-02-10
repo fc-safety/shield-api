@@ -14,7 +14,7 @@ import {
   SkipAccessGrantValidation,
 } from '../../auth/guards/auth.guard';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
-import { QueryInvitationDto } from './dto/query-invitationd.dto';
+import { QueryInvitationDto } from './dto/query-invitation.dto';
 import { InvitationsService } from './invitations.service';
 
 @Controller('invitations')

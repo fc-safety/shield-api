@@ -15,7 +15,7 @@ import { ApiConfigService } from '../../config/api-config.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
-import { QueryInvitationDto } from './dto/query-invitationd.dto';
+import { QueryInvitationDto } from './dto/query-invitation.dto';
 
 @Injectable()
 export class InvitationsService {
@@ -181,40 +181,44 @@ export class InvitationsService {
   async validateCode(code: string) {
     const prisma = this.prisma.bypassRLS();
 
-    const invitation = await prisma.invitation.findUnique({
-      where: { code },
-      include: {
-        client: {
-          select: {
-            id: true,
-            name: true,
+    const invitation = await prisma.$transaction(async (tx) => {
+      const invitation = await tx.invitation.findUnique({
+        where: { code },
+        include: {
+          client: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-      },
-    });
-
-    if (!invitation) {
-      throw new NotFoundException('Invitation not found');
-    }
-
-    // Check if expired or revoked
-    if (invitation.status === 'EXPIRED' || invitation.status === 'REVOKED') {
-      throw new GoneException('This invitation has expired or been revoked');
-    }
-
-    if (invitation.status === 'ACCEPTED') {
-      throw new GoneException('This invitation has already been used');
-    }
-
-    // Check if expired by date
-    if (new Date() > invitation.expiresOn) {
-      // Auto-update status to EXPIRED
-      await prisma.invitation.update({
-        where: { id: invitation.id },
-        data: { status: 'EXPIRED' },
       });
-      throw new GoneException('This invitation has expired');
-    }
+
+      if (!invitation) {
+        throw new NotFoundException('Invitation not found');
+      }
+
+      // Check if expired or revoked
+      if (invitation.status === 'EXPIRED' || invitation.status === 'REVOKED') {
+        throw new GoneException('This invitation has expired or been revoked');
+      }
+
+      if (invitation.status === 'ACCEPTED') {
+        throw new GoneException('This invitation has already been used');
+      }
+
+      // Check if expired by date
+      if (new Date() > invitation.expiresOn) {
+        // Auto-update status to EXPIRED
+        await tx.invitation.update({
+          where: { id: invitation.id },
+          data: { status: 'EXPIRED' },
+        });
+        throw new GoneException('This invitation has expired');
+      }
+
+      return invitation;
+    });
 
     return {
       valid: true,
@@ -232,59 +236,61 @@ export class InvitationsService {
     const person = this.cls.requirePerson();
     const prisma = this.prisma.bypassRLS();
 
-    const invitation = await prisma.invitation.findUnique({
-      where: { code },
-      include: this.invitationInclude,
-    });
-
-    if (!invitation) {
-      throw new NotFoundException('Invitation not found');
-    }
-
-    // Check status
-    if (invitation.status === 'EXPIRED' || invitation.status === 'REVOKED') {
-      throw new GoneException('This invitation has expired');
-    }
-
-    if (invitation.status === 'ACCEPTED') {
-      throw new GoneException('This invitation has already been used');
-    }
-
-    // Check expiration date
-    if (new Date() > invitation.expiresOn) {
-      await prisma.invitation.update({
-        where: { id: invitation.id },
-        data: { status: 'EXPIRED' },
-      });
-      throw new GoneException('This invitation has expired');
-    }
-
-    // Check email restriction
-    if (
-      invitation.email &&
-      person.email.toLowerCase() !== invitation.email.toLowerCase()
-    ) {
-      throw new ForbiddenException(
-        'This invitation is restricted to a different email address',
-      );
-    }
-
-    // Use the site and role from the invitation (both are required)
-    const { siteId, roleId } = invitation;
-
-    // Check if this is the user's first client access
-    const existingPrimaryAccess = await prisma.personClientAccess.findFirst({
-      where: { personId: person.id, isPrimary: true },
-    });
-
-    // Is primary if first access grant, or if existing primary access is for the same client and site.
-    const isPrimary =
-      !existingPrimaryAccess ||
-      (existingPrimaryAccess.clientId === invitation.clientId &&
-        existingPrimaryAccess.siteId === siteId);
-
-    // Create client access and update invitation in a transaction
+    // Create client access and update invitation in a transaction. This prevents
+    // race conditions where the invitation is accepted and the client access is not created,
+    // or where the invitation is accepted in separate request.
     const clientAccess = await prisma.$transaction(async (tx) => {
+      const invitation = await tx.invitation.findUnique({
+        where: { code },
+        include: this.invitationInclude,
+      });
+
+      if (!invitation) {
+        throw new NotFoundException('Invitation not found');
+      }
+
+      // Check status
+      if (invitation.status === 'EXPIRED' || invitation.status === 'REVOKED') {
+        throw new GoneException('This invitation has expired');
+      }
+
+      if (invitation.status === 'ACCEPTED') {
+        throw new GoneException('This invitation has already been used');
+      }
+
+      // Check expiration date
+      if (new Date() > invitation.expiresOn) {
+        await tx.invitation.update({
+          where: { id: invitation.id },
+          data: { status: 'EXPIRED' },
+        });
+        throw new GoneException('This invitation has expired');
+      }
+
+      // Check email restriction
+      if (
+        invitation.email &&
+        person.email.toLowerCase() !== invitation.email.toLowerCase()
+      ) {
+        throw new ForbiddenException(
+          'This invitation is restricted to a different email address',
+        );
+      }
+
+      // Use the site and role from the invitation (both are required)
+      const { siteId, roleId } = invitation;
+
+      // Check if this is the user's first client access
+      const existingPrimaryAccess = await tx.personClientAccess.findFirst({
+        where: { personId: person.id, isPrimary: true },
+      });
+
+      // Is primary if first access grant, or if existing primary access is for the same client and site.
+      const isPrimary =
+        !existingPrimaryAccess ||
+        (existingPrimaryAccess.clientId === invitation.clientId &&
+          existingPrimaryAccess.siteId === siteId);
+
       const newAccess = await tx.personClientAccess.upsert({
         where: {
           personId_clientId_siteId_roleId: {
@@ -343,8 +349,8 @@ export class InvitationsService {
     // Invalidate cache for the user's new client access.
     await clearAccessGrantResponseCache({
       idpId: user.idpId,
-      clientId: invitation.clientId,
-      siteId: invitation.siteId,
+      clientId: clientAccess.clientId,
+      siteId: clientAccess.siteId,
       deleteFn: (keys) => this.memoryCache.mdel(keys),
     });
 
