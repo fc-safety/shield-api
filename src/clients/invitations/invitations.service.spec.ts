@@ -2,8 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ApiClsService } from 'src/auth/api-cls.service';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { ApiConfigService } from '../../config/api-config.service';
-import { InvitationsService } from './invitations.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { InvitationsService } from './invitations.service';
 
 describe('InvitationsService', () => {
   let service: InvitationsService;
@@ -54,6 +55,10 @@ describe('InvitationsService', () => {
     getOrSet: jest.fn(),
   };
 
+  const mockNotificationsService = {
+    queueEmail: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -62,6 +67,7 @@ describe('InvitationsService', () => {
         { provide: ApiClsService, useValue: mockApiClsService },
         { provide: ApiConfigService, useValue: mockApiConfigService },
         { provide: MemoryCacheService, useValue: mockMemoryCacheService },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 

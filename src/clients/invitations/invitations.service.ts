@@ -12,6 +12,7 @@ import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from '../../config/api-config.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { QueryInvitationDto } from './dto/query-invitationd.dto';
@@ -23,6 +24,7 @@ export class InvitationsService {
     private readonly cls: ApiClsService,
     private readonly config: ApiConfigService,
     private readonly memoryCache: MemoryCacheService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -120,7 +122,19 @@ export class InvitationsService {
       include: this.invitationInclude,
     });
 
-    // TODO: Trigger send invitation email.
+    await this.notifications.queueEmail({
+      templateName: 'invitation',
+      to: [invitation.email],
+      templateProps: {
+        clientName: invitation.client.name,
+        siteName: invitation.site.name,
+        roleName: invitation.role.name,
+        inviterFirstName: invitation.createdBy.firstName,
+        inviterLastName: invitation.createdBy.lastName,
+        inviteUrl: this.getInviteUrl(invitation.code),
+        expiresOn: invitation.expiresOn.toISOString(),
+      },
+    });
 
     return {
       ...invitation,

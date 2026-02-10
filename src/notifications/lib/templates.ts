@@ -11,6 +11,7 @@ import MonthlyInspectionReportTemplateReact from '../templates/monthly_inspectio
 import NewLandingFormLeadTemplateReact from '../templates/new-landing-form-lead';
 import NewProductRequestTemplateReact from '../templates/new-product-request';
 import TeamInspectionReminderTemplateReact from '../templates/team-inspection-reminder';
+import InvitationTemplateReact from '../templates/invitation';
 import TestTemplateReact from '../templates/test';
 
 export const TEMPLATE_NAME_MAP = {
@@ -29,6 +30,7 @@ export const TEMPLATE_NAME_MAP = {
   // Other general templates
   new_product_request: NewProductRequestTemplateReact,
   team_inspection_reminder: TeamInspectionReminderTemplateReact,
+  invitation: InvitationTemplateReact,
   manager_password_reset: ManagerPasswordResetTemplateReact,
   new_landing_form_lead: NewLandingFormLeadTemplateReact,
   test: TestTemplateReact,
