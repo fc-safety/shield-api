@@ -7,7 +7,7 @@ export class UpdateUserDto extends createZodDto(
       active: z.boolean().optional(),
       firstName: z.string().nonempty().optional(),
       lastName: z.string().nonempty().optional(),
-      email: z.string().email().optional(),
+      email: z.email().optional(),
       phoneNumber: z.string().optional().nullable(),
     })
     .partial(),

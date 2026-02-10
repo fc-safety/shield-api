@@ -4,7 +4,6 @@ import {
   Get,
   Param,
   ParseIntPipe,
-  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -33,21 +32,18 @@ export class UsersController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
   @Patch(':id')
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() updateUserDto: UpdateUserDto,
-  ) {
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(id, updateUserDto);
   }
 
   @Post(':id/reset-password')
   resetPassword(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() resetPasswordDto: ResetPasswordDto,
   ) {
     return this.usersService.resetPassword(id, resetPasswordDto);
@@ -55,7 +51,7 @@ export class UsersController {
 
   @Post(':id/send-reset-password-email')
   sendResetPasswordEmail(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Query() query: SendResetPasswordQueryDto,
   ) {
     return this.usersService.sendResetPasswordEmail(id, query.appClientId);

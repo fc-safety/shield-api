@@ -29,15 +29,18 @@ describe('AuthController', () => {
   const mockApiClsService = {
     requireUser: jest.fn().mockReturnValue(mockUser),
     requirePerson: jest.fn().mockReturnValue(mockPerson),
-    requireAccessGrant: jest.fn().mockReturnValue(mockAccessGrant),
+    get: jest.fn((key) => {
+      if (key === 'accessGrant') {
+        return mockAccessGrant;
+      }
+      return null;
+    }),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [
-        { provide: ApiClsService, useValue: mockApiClsService },
-      ],
+      providers: [{ provide: ApiClsService, useValue: mockApiClsService }],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
@@ -76,10 +79,13 @@ describe('AuthController', () => {
       expect(mockApiClsService.requirePerson).toHaveBeenCalled();
     });
 
-    it('should require access grant from CLS', async () => {
-      await controller.getCurrentUser();
+    it('should handle null access grant from CLS', async () => {
+      mockApiClsService.get.mockReturnValueOnce(null);
 
-      expect(mockApiClsService.requireAccessGrant).toHaveBeenCalled();
+      const result = await controller.getCurrentUser();
+
+      expect(result.accessGrant).toBeNull();
+      expect(mockApiClsService.get).toHaveBeenCalledWith('accessGrant');
     });
   });
 });

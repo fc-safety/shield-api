@@ -2,10 +2,22 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable } from '@nestjs/common';
 import { type Cache } from 'cache-manager';
 import { ApiClsService } from 'src/auth/api-cls.service';
-import { VALID_CAPABILITIES } from 'src/auth/utils/capabilities';
+import { reduceAccessGrants } from 'src/auth/utils/access-grants';
+import { TCapability, VALID_CAPABILITIES } from 'src/auth/utils/capabilities';
+import { TScope } from 'src/auth/utils/scope';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { RoleScope } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+
+export interface TMyClientAccess {
+  clientId: string;
+  clientName: string;
+  siteId: string;
+  siteName: string;
+  roleId: string;
+  scope: TScope;
+  capabilities: TCapability[];
+}
 
 @Injectable()
 export class ClientAccessService {
@@ -18,8 +30,10 @@ export class ClientAccessService {
 
   /**
    * Get all client access entries for the current user.
+   * Access records are grouped by client+site and roles are merged via reduceAccessGrants,
+   * so the result contains one entry per client/site combination.
    */
-  async getMyClientAccess() {
+  async getMyClientAccess(): Promise<TMyClientAccess[]> {
     const user = this.cls.get('user');
     if (!user) {
       return [];
@@ -29,26 +43,24 @@ export class ClientAccessService {
       where: {
         person: { idpId: user.idpId },
       },
-      include: {
+      select: {
         client: {
           select: {
             id: true,
-            externalId: true,
             name: true,
           },
         },
         site: {
           select: {
             id: true,
-            externalId: true,
             name: true,
           },
         },
         role: {
           select: {
             id: true,
-            name: true,
-            description: true,
+            scope: true,
+            capabilities: true,
           },
         },
       },
@@ -64,36 +76,52 @@ export class ClientAccessService {
       if (systemAdminEmails.includes(user.email.toLowerCase())) {
         return [
           {
-            id: 'system-admin-bootstrap',
-            isPrimary: true,
-            createdOn: new Date(),
-            modifiedOn: new Date(),
-            personId: 'unknown',
             clientId: 'unknown',
+            clientName: 'System Administration',
             siteId: 'unknown',
-            roleId: 'system-admin-bootstrap',
-            client: {
-              id: 'unknown',
-              externalId: null,
-              name: 'System Administration',
-            },
-            site: {
-              id: 'unknown',
-              externalId: null,
-              name: 'System',
-            },
-            role: {
-              id: 'system-admin-bootstrap',
-              name: 'System Admin',
-              description: 'Bootstrap system administrator access',
-              scope: RoleScope.SYSTEM,
-              capabilities: [...VALID_CAPABILITIES],
-            },
+            siteName: 'System',
+            roleId: 'system-admin',
+            scope: RoleScope.SYSTEM,
+            capabilities: [...VALID_CAPABILITIES],
           },
         ];
       }
+
+      return [];
     }
 
-    return accesses;
+    // Group access records by client+site and merge roles within each group.
+    const grouped = new Map<string, typeof accesses>();
+    for (const access of accesses) {
+      const key = `${access.client.id}:${access.site.id}`;
+      const group = grouped.get(key);
+      if (group) {
+        group.push(access);
+      } else {
+        grouped.set(key, [access]);
+      }
+    }
+
+    return Array.from(grouped.values()).map((group) => {
+      const first = group[0];
+      const merged = reduceAccessGrants(
+        group.map((a) => ({
+          scope: a.role.scope,
+          capabilities: a.role.capabilities as TCapability[],
+          clientId: a.client.id,
+          siteId: a.site.id,
+        })),
+      );
+
+      return {
+        clientId: first.client.id,
+        clientName: first.client.name,
+        siteId: first.site.id,
+        siteName: first.site.name,
+        roleId: first.role.id,
+        scope: merged.scope,
+        capabilities: merged.capabilities,
+      };
+    });
   }
 }

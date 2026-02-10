@@ -23,7 +23,7 @@ export interface CurrentUserResponse {
   personId: string | null;
 
   // All client access records for this user
-  accessGrant: TAccessGrant;
+  accessGrant: TAccessGrant | null;
 }
 
 @Controller('auth')
@@ -41,7 +41,7 @@ export class AuthController {
   async getCurrentUser(): Promise<CurrentUserResponse> {
     const user = this.cls.requireUser();
     const person = this.cls.requirePerson();
-    const accessGrant = this.cls.requireAccessGrant();
+    const accessGrant = this.cls.get('accessGrant');
 
     return {
       // Identity info from token
@@ -57,7 +57,7 @@ export class AuthController {
       personId: person.id,
 
       // Access grant for the user
-      accessGrant,
+      accessGrant: accessGrant ?? null,
     };
   }
 }

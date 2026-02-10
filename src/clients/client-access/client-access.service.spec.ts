@@ -57,13 +57,12 @@ describe('ClientAccessService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should return client access entries for current user', async () => {
+    it('should return flat client access entries for current user', async () => {
       const mockAccesses = [
         {
-          id: 'access-1',
-          client: { id: 'client-1', externalId: 'ext-1', name: 'Client 1' },
-          site: { id: 'site-1', externalId: 'ext-site-1', name: 'Site 1' },
-          role: { id: 'role-1', name: 'Admin', description: null },
+          client: { id: 'client-1', name: 'Client 1' },
+          site: { id: 'site-1', name: 'Site 1' },
+          role: { scope: 'CLIENT', capabilities: ['manage-assets'] },
         },
       ];
 
@@ -76,7 +75,54 @@ describe('ClientAccessService', () => {
 
       const result = await service.getMyClientAccess();
 
-      expect(result).toEqual(mockAccesses);
+      expect(result).toEqual([
+        {
+          clientId: 'client-1',
+          clientName: 'Client 1',
+          siteId: 'site-1',
+          siteName: 'Site 1',
+          scope: 'CLIENT',
+          capabilities: ['manage-assets'],
+        },
+      ]);
+    });
+
+    it('should merge roles when user has multiple accesses for same client+site', async () => {
+      const mockAccesses = [
+        {
+          client: { id: 'client-1', name: 'Client 1' },
+          site: { id: 'site-1', name: 'Site 1' },
+          role: { scope: 'SITE', capabilities: ['perform-inspections'] },
+        },
+        {
+          client: { id: 'client-1', name: 'Client 1' },
+          site: { id: 'site-1', name: 'Site 1' },
+          role: { scope: 'CLIENT', capabilities: ['manage-assets'] },
+        },
+      ];
+
+      mockApiClsService.get.mockReturnValue({ idpId: 'user-idp-1' });
+      mockPrismaService.bypassRLS.mockReturnValue({
+        personClientAccess: {
+          findMany: jest.fn().mockResolvedValue(mockAccesses),
+        },
+      });
+
+      const result = await service.getMyClientAccess();
+
+      expect(result).toEqual([
+        {
+          clientId: 'client-1',
+          clientName: 'Client 1',
+          siteId: 'site-1',
+          siteName: 'Site 1',
+          scope: 'CLIENT',
+          capabilities: expect.arrayContaining([
+            'perform-inspections',
+            'manage-assets',
+          ]),
+        },
+      ]);
     });
   });
 });
