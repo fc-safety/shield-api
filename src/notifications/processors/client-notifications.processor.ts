@@ -89,8 +89,8 @@ export class ClientNotificationsProcessor
   }
 
   @OnWorkerEvent('error')
-  onError(job: Job<unknown>, error: Error) {
-    this.logger.error('Processor error', { job, error });
+  onError(error: Error) {
+    this.logger.error('Processor error', { error });
   }
 
   @OnWorkerEvent('ready')
@@ -113,7 +113,7 @@ export class ClientNotificationsProcessor
         return await this.processClientMonthlyInspectionReports(
           job as Job<ClientNotificationJobData>,
         );
-      case NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL:
+      case CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL:
         return await this.sendInspectionAlertTriggeredEmail(
           job as Job<SendInspectionAlertTriggeredEmailJobData>,
         );
@@ -469,7 +469,7 @@ export class ClientNotificationsProcessor
           where: {
             clientId: job.data.clientId,
             expiresOn: {
-              not: null,
+              gte: new Date(),
               lte: addDays(new Date(), 90),
             },
           },
@@ -656,7 +656,7 @@ export class ClientNotificationsProcessor
 
     for (const member of membersGroupedByNotificationId[
       NotificationGroups.inspection_alert_triggered.id
-    ]) {
+    ] ?? []) {
       // Check if member can see this alert's site
       const visibleSiteIds = getVisibleSiteIdsForMember(
         member,
@@ -690,6 +690,8 @@ export class ClientNotificationsProcessor
         `--> Queued ${emailJobs.length} alert notification emails for alert ${alertId}`,
       );
     }
+
+    return {};
   }
 
   // Utility methods
