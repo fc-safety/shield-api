@@ -62,6 +62,25 @@ const DEFAULT_ROLES: Array<{
     clientAssignable: true,
   },
   {
+    name: 'Site Group Manager',
+    description:
+      'Manage assets, inspections, and alerts for assigned site group and site subgroups within a client.',
+    isSystem: false,
+    scope: RoleScope.SITE_GROUP,
+    capabilities: [
+      CAPABILITIES.PERFORM_INSPECTIONS,
+      CAPABILITIES.SUBMIT_REQUESTS,
+      CAPABILITIES.MANAGE_ASSETS,
+      CAPABILITIES.MANAGE_ROUTES,
+      CAPABILITIES.RESOLVE_ALERTS,
+      CAPABILITIES.VIEW_REPORTS,
+      CAPABILITIES.MANAGE_USERS,
+      CAPABILITIES.APPROVE_REQUESTS,
+      CAPABILITIES.REGISTER_TAGS,
+    ],
+    clientAssignable: true,
+  },
+  {
     name: 'Site Manager',
     description:
       'Manage assets, inspections, and alerts for assigned sites within a client.',

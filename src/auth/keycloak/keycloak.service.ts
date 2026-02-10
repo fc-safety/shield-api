@@ -286,9 +286,9 @@ export class KeycloakService {
   public async getOrCreateManagedRolesGroup<F extends boolean = false>(
     returnFull?: F,
   ): Promise<F extends true ? GroupRepresentation : { id: string }> {
-    let group = (
-      await this.client.groups.find({ q: 'managed_by:shield-api' })
-    ).at(0);
+    let group = await this.client.groups
+      .find({ q: 'managed_by:shield-api' })
+      .then((groups) => groups.at(0));
     if (group) {
       if (!group.id) {
         throw new Error('Failed to create managed roles group');
@@ -543,5 +543,21 @@ export class KeycloakService {
     (error as any).groupIds = groupIds;
 
     throw error;
+  }
+
+  /**
+   * Get the subgroups under the managed "Roles" parent group.
+   * Each subgroup represents a DB role and has a `shield_role_id` attribute.
+   */
+  async getManagedRoleSubgroups(): Promise<GroupRepresentation[]> {
+    const parent = await this.getOrCreateManagedRolesGroup();
+    return this.client.groups.listSubGroups({ parentId: parent.id });
+  }
+
+  /**
+   * List the Keycloak groups a user belongs to.
+   */
+  async listUserGroups(userId: string): Promise<GroupRepresentation[]> {
+    return this.client.users.listGroups({ id: userId });
   }
 }

@@ -77,6 +77,13 @@ export const configSchema = z.object({
     })
     .optional(),
 
+  SYNC_KEYCLOAK_ACCESS_ON_STARTUP: z
+    .stringbool({
+      truthy: ['true', '1'],
+      falsy: ['false', '0'],
+    })
+    .default(false),
+
   // System Admin Emails (for pre-setup bootstrap access)
   SYSTEM_ADMIN_EMAILS: z
     .string()
