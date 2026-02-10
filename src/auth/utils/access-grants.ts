@@ -170,8 +170,13 @@ const clearAccessGrantResponseCache = async ({
   siteIds?: string[];
   deleteFn: (keys: string[]) => Promise<void>;
 }) => {
-  const keys: string[] = [buildAccessGrantResponseCacheKey(idpId)];
+  // Add keys for no (default) client ID and client ID with no (default) site ID.
+  const keys: string[] = [
+    buildAccessGrantResponseCacheKey(idpId),
+    buildAccessGrantResponseCacheKey(idpId, { requestedClientId: clientId }),
+  ];
 
+  // Add keys for all additional site IDs.
   const allSiteIds: string[] = [];
   if (siteId) {
     allSiteIds.push(siteId);

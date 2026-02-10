@@ -137,52 +137,9 @@ export class AuthService {
   ): Promise<TAccessGrantResult> {
     const prismaBypassRLS = this.prisma.bypassRLS();
 
-    // If a specific client is requeste and the user is a global admin, grant the user
+    // If a specific client is requested and the user is a global admin, grant the user
     // access to the client and site.
     if (organizationContext.requestedClientId) {
-      const userGlobalRole = await this.getMostPermissiveRole(
-        user,
-        RoleScope.GLOBAL,
-      );
-
-      if (userGlobalRole) {
-        // If no site is specified, use the primary site (or first site) for the client.
-        let siteId = organizationContext.requestedSiteId;
-        if (!siteId) {
-          const site = await prismaBypassRLS.site.findFirst({
-            where: {
-              clientId: organizationContext.requestedClientId,
-            },
-            orderBy: [
-              {
-                primary: 'desc',
-              },
-              {
-                createdOn: 'asc',
-              },
-            ],
-          });
-
-          siteId = site?.id;
-        }
-
-        if (siteId) {
-          return {
-            grant: {
-              scope: userGlobalRole.scope,
-              capabilities: userGlobalRole.capabilities as TCapability[],
-              clientId: organizationContext.requestedClientId,
-              siteId: siteId,
-            },
-          };
-        } else {
-          // In the rare, but possible scenario where a client has no sites,
-          // continue with regular flow but log a warning.
-          this.logger.warn(
-            `Attempted to grant client access to global admin, but no site was found for client ${organizationContext.requestedClientId}.`,
-          );
-        }
-      }
     }
 
     const whereIsUsersPrimaryAccessRecord: Prisma.PersonClientAccessWhereInput =
@@ -255,8 +212,55 @@ export class AuthService {
           (accessRecord) => accessRecord.isPrimary,
         );
 
+        // Get user's most permissive GLOBAL role to grant access to the requested client
+        // if role is present.
+        const userGlobalRole = await this.getMostPermissiveRole(
+          user,
+          RoleScope.GLOBAL,
+        );
+
+        // If the user has a GLOBAL role, grant access to the requested client.
+        if (userGlobalRole) {
+          // If no site is specified, use the primary site (or first site) for the client.
+          let siteId = organizationContext.requestedSiteId;
+          if (!siteId) {
+            const site = await prismaBypassRLS.site.findFirst({
+              where: {
+                clientId: organizationContext.requestedClientId,
+              },
+              orderBy: [
+                {
+                  primary: 'desc',
+                },
+                {
+                  createdOn: 'asc',
+                },
+              ],
+            });
+
+            siteId = site?.id;
+          }
+
+          if (siteId) {
+            return {
+              grant: {
+                scope: userGlobalRole.scope,
+                capabilities: userGlobalRole.capabilities as TCapability[],
+                clientId: organizationContext.requestedClientId,
+                siteId: siteId,
+              },
+            };
+          } else {
+            // In the rare, but possible scenario where a client has no sites,
+            // continue with regular flow but log a warning.
+            this.logger.warn(
+              `Attempted to grant client access to global admin, but no site was found for client ${organizationContext.requestedClientId}.`,
+            );
+          }
+        }
+
         /** If the user's email is in the system admin list, grant ephemeral system access. */
-        if (this.userIsSystemAdmin(user)) {
+        if (this.userIsDefaultSystemAdmin(user)) {
           this.logger.log(
             `Granting ephemeral system access to bootstrap admin: ${user.email}`,
           );
@@ -312,7 +316,7 @@ export class AuthService {
     }
 
     /** If the user's email is in the system admin list, grant ephemeral system access. */
-    if (this.userIsSystemAdmin(user)) {
+    if (this.userIsDefaultSystemAdmin(user)) {
       this.logger.log(
         `Granting ephemeral system access to bootstrap admin: ${user.email}`,
       );
@@ -386,7 +390,7 @@ export class AuthService {
     return null;
   }
 
-  private userIsSystemAdmin(user: StatelessUser): boolean {
+  private userIsDefaultSystemAdmin(user: StatelessUser): boolean {
     const systemAdminEmails = this.config.get('SYSTEM_ADMIN_EMAILS');
     return systemAdminEmails.includes(user.email.toLowerCase());
   }

@@ -59,6 +59,7 @@ export class ClientAccessService {
         role: {
           select: {
             id: true,
+            name: true,
             scope: true,
             capabilities: true,
           },
@@ -119,6 +120,7 @@ export class ClientAccessService {
         siteId: first.site.id,
         siteName: first.site.name,
         roleId: first.role.id,
+        roleName: first.role.name,
         scope: merged.scope,
         capabilities: merged.capabilities,
       };

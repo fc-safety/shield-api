@@ -8,7 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CheckCapability } from 'src/auth/policies.guard';
+import { CheckCapability, CheckIsAuthenticated } from 'src/auth/policies.guard';
 import { CreateAssetQuestionDto } from '../asset-questions/dto/create-asset-question.dto';
 import { UpdateAssetQuestionDto } from '../asset-questions/dto/update-asset-question.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -27,11 +27,13 @@ export class ProductsController {
   }
 
   @Get()
+  @CheckIsAuthenticated()
   findAll(@Query() queryProductDto?: QueryProductDto) {
     return this.productsService.findAll(queryProductDto);
   }
 
   @Get(':id')
+  @CheckIsAuthenticated()
   findOne(@Param('id') id: string) {
     return this.productsService.findOne(id);
   }
