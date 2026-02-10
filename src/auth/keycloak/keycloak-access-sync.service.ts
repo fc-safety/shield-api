@@ -4,7 +4,7 @@ import { ApiConfigService } from 'src/config/api-config.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { KeycloakService } from './keycloak.service';
 
-const STARTUP_SYNC_DELAY = 1_000;
+const STARTUP_SYNC_DELAY = 30_000;
 
 @Injectable()
 export class KeycloakAccessSyncService {
