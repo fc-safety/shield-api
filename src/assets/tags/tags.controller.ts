@@ -109,7 +109,7 @@ export class TagsController {
   }
 
   @HttpCode(HttpStatus.OK)
-  @CheckCapability('program-tags')
+  @CheckCapability('register-tags')
   @Post('register-tag')
   registerTag(
     @Headers(INSPECTION_TOKEN_HEADER) inspectionToken: string,

@@ -36,7 +36,7 @@ describe('InvitationsService', () => {
         create: jest.fn(),
         count: jest.fn(),
       },
-      $transaction: jest.fn(),
+      $transaction: jest.fn((fn) => fn(mockPrismaService.bypassRLS())),
     }),
   };
 

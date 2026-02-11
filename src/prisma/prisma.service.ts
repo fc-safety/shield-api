@@ -256,7 +256,7 @@ export class PrismaService
     });
   }
 
-  private async getAllowedSiteIdsForSite(siteId: string): Promise<string[]> {
+  public async getAllowedSiteIdsForSite(siteId: string): Promise<string[]> {
     const cacheKey = `allowed-site-ids:siteId=${siteId}`;
 
     return this.memoryCache.getOrSet<string[]>(

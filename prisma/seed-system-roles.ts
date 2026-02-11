@@ -43,7 +43,7 @@ const DEFAULT_ROLES: Array<{
     clientAssignable: false,
   },
   {
-    name: 'Client Admin',
+    name: 'Program Administrator',
     description:
       'Full access within a single client, including all sites and resources.',
     isSystem: false,
@@ -83,9 +83,9 @@ const DEFAULT_ROLES: Array<{
   {
     name: 'Site Manager',
     description:
-      'Manage assets, inspections, and alerts for assigned sites within a client.',
+      'Manage assets, inspections, and alerts for assigned site within a client.',
     isSystem: false,
-    scope: RoleScope.CLIENT,
+    scope: RoleScope.SITE,
     capabilities: [
       CAPABILITIES.PERFORM_INSPECTIONS,
       CAPABILITIES.SUBMIT_REQUESTS,

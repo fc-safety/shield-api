@@ -3,7 +3,6 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
@@ -14,8 +13,8 @@ import { isScopeAtLeast } from 'src/auth/utils/scope';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { Prisma, RoleScope } from 'src/generated/prisma/client';
-import { IPrismaRLSContext, PrismaService } from 'src/prisma/prisma.service';
+import { RoleScope } from 'src/generated/prisma/client';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { Readable } from 'stream';
 import { BulkGenerateSignedTagUrlDto } from './dto/bulk-generate-signed-tag-url.dto';
 import { CreateTagDto } from './dto/create-tag.dto';
@@ -80,10 +79,6 @@ export class TagsService {
   }
 
   async findOneForInspection(externalId: string) {
-    // Get current user context for validation and error handling
-    const currentUser = (await this.prisma.build()).$rlsContext();
-
-    // Bypass RLS for initial tag lookup - access is validated at app level below
     const tag = await this.prisma
       .bypassRLS()
       .tag.findUniqueOrThrow({
@@ -131,116 +126,173 @@ export class TagsService {
           },
         },
       })
-      .catch(this.findAndThrowReasonForTagError({ externalId }, currentUser))
       .catch(as404OrThrow);
 
-    // Validate user has access to the tag's client (multi-client access)
-    if (tag.client) {
-      await this.validateUserAccessToTagClient(tag.client.externalId);
+    // Unregistered tags (no client) are accessible to anyone
+    if (!tag.clientId) {
+      return { tag, accessContext: null };
     }
 
-    return tag;
+    const accessContext = await this.resolveAccessForClient(
+      tag.clientId,
+      tag.siteId,
+    );
+
+    if (!accessContext) {
+      throw new ForbiddenException(
+        'You do not have access to the organization or site to which this tag is registered.',
+      );
+    }
+
+    return { tag, accessContext };
   }
 
   /**
-   * Validates that the current user has access to the given client.
-   * Checks PersonClientAccess to verify the user has access.
-   * Throws ForbiddenException if user lacks access.
+   * Resolves the access context for a user attempting to access a tag belonging
+   * to a given client/site. Returns the matching access record's context info
+   * (clientId, clientName, siteId, siteName) or null if the user has no access.
    */
-  private async validateUserAccessToTagClient(
-    clientExternalId: string,
-  ): Promise<void> {
-    const user = this.cls.get('user');
-    if (!user) {
-      throw new UnauthorizedException('User not authenticated');
-    }
-
-    // Check PersonClientAccess for client access
-    const access = await this.prisma.bypassRLS().personClientAccess.findFirst({
-      where: {
-        person: { idpId: user.idpId },
-        client: { externalId: clientExternalId },
-      },
-    });
-
-    if (!access) {
-      throw new ForbiddenException({
-        message:
-          'You do not have access to this tag. Please contact your administrator if you believe this is an error.',
-        error: 'client_access_denied',
-        statusCode: 403,
-      });
-    }
-  }
-
-  /**
-   * Checks if the user has access to a client (by internal client ID).
-   * Returns true if it's the user's primary client or if they have PersonClientAccess.
-   */
-  private async checkUserHasClientAccess(
-    userPrimaryClientId: string,
+  private async resolveAccessForClient(
     tagClientId: string,
-  ): Promise<boolean> {
-    // Check if it's the user's primary client
-    if (userPrimaryClientId === tagClientId) {
-      return true;
-    }
-
-    // Check PersonClientAccess for secondary client access
+    tagSiteId: string | null,
+  ): Promise<{
+    clientId: string;
+    clientName: string;
+    siteId: string;
+    siteName: string;
+    roleId: string;
+    roleName: string;
+  } | null> {
     const user = this.cls.get('user');
-    if (!user) {
-      return false;
+    if (!user) return null;
+
+    const accessRecords = await this.prisma
+      .bypassRLS()
+      .personClientAccess.findMany({
+        where: {
+          person: { idpId: user.idpId },
+          clientId: tagClientId,
+        },
+        select: {
+          client: { select: { id: true, name: true } },
+          site: { select: { id: true, name: true } },
+          role: { select: { id: true, name: true, scope: true } },
+        },
+      });
+
+    if (accessRecords.length === 0) return null;
+
+    // If tag has no site, any client access is sufficient
+    if (!tagSiteId) {
+      const firstAccessRecord = accessRecords[0];
+      return {
+        clientId: firstAccessRecord.client.id,
+        clientName: firstAccessRecord.client.name,
+        siteId: firstAccessRecord.site.id,
+        siteName: firstAccessRecord.site.name,
+        roleId: firstAccessRecord.role.id,
+        roleName: firstAccessRecord.role.name,
+      };
     }
 
-    const access = await this.prisma.bypassRLS().personClientAccess.findFirst({
-      where: {
-        person: { idpId: user.idpId },
-        clientId: tagClientId,
-      },
-    });
+    for (const record of accessRecords) {
+      // CLIENT+ scope can see all sites
+      if (isScopeAtLeast(record.role.scope, RoleScope.CLIENT)) {
+        return {
+          clientId: record.client.id,
+          clientName: record.client.name,
+          siteId: record.site.id,
+          siteName: record.site.name,
+          roleId: record.role.id,
+          roleName: record.role.name,
+        };
+      }
 
-    return !!access;
+      // Direct site match
+      if (record.site.id === tagSiteId) {
+        return {
+          clientId: record.client.id,
+          clientName: record.client.name,
+          siteId: record.site.id,
+          siteName: record.site.name,
+          roleId: record.role.id,
+          roleName: record.role.name,
+        };
+      }
+
+      // SITE_GROUP: check if tag's site is in the subsite hierarchy
+      if (isScopeAtLeast(record.role.scope, RoleScope.SITE_GROUP)) {
+        const allowedSites = await this.prisma.getAllowedSiteIdsForSite(
+          record.site.id,
+        );
+        if (allowedSites.includes(tagSiteId)) {
+          return {
+            clientId: record.client.id,
+            clientName: record.client.name,
+            siteId: record.site.id,
+            siteName: record.site.name,
+            roleId: record.role.id,
+            roleName: record.role.name,
+          };
+        }
+      }
+    }
+
+    return null;
   }
 
   async findOneForAssetSetup(externalId: string) {
-    return this.prisma.build().then((prisma) =>
-      prisma.tag
-        .findFirstOrThrow({
-          where: { externalId },
-          include: {
-            asset: {
-              include: {
-                product: {
-                  include: {
-                    productCategory: {
-                      include: {
-                        assetQuestions: {
-                          where: {
-                            active: true,
-                          },
+    const tag = await this.prisma
+      .bypassRLS()
+      .tag.findFirstOrThrow({
+        where: { externalId },
+        include: {
+          client: true,
+          site: true,
+          asset: {
+            include: {
+              product: {
+                include: {
+                  productCategory: {
+                    include: {
+                      assetQuestions: {
+                        where: {
+                          active: true,
                         },
                       },
                     },
-                    manufacturer: true,
-                    assetQuestions: {
-                      where: {
-                        active: true,
-                      },
+                  },
+                  manufacturer: true,
+                  assetQuestions: {
+                    where: {
+                      active: true,
                     },
                   },
                 },
               },
             },
           },
-        })
-        .catch(
-          this.findAndThrowReasonForTagError(
-            { externalId },
-            prisma.$rlsContext(),
-          ),
-        )
-        .catch(as404OrThrow),
+        },
+      })
+      .catch(as404OrThrow);
+
+    // Unregistered tags (no client) are accessible to anyone
+    if (!tag.clientId) {
+      return { tag, accessContext: null };
+    }
+
+    const accessContext = await this.resolveAccessForClient(
+      tag.clientId,
+      tag.siteId,
     );
+
+    if (!accessContext) {
+      throw new ForbiddenException(
+        'You do not have access to the organization or site to which this tag is registered.',
+      );
+    }
+
+    return { tag, accessContext };
   }
 
   async checkRegistration(inspectionToken: string) {
@@ -252,48 +304,29 @@ export class TagsService {
       },
       include: {
         asset: true,
+        client: true,
+        site: true,
       },
     });
 
     // Tag is considered unregistered if not in database or has no client.
     // If unregistered, the tag is available for registration.
     if (!tag || tag.clientId === null) {
-      return tag;
+      return { tag, accessContext: null };
     }
 
-    // If the tag is registered to a client, the user must have access to that client
-    // (either primary or via PersonClientAccess)
-    const rlsContext = (await this.prisma.build()).$rlsContext();
-    if (!rlsContext) {
-      throw new BadRequestException('Unable to determine user context.');
-    }
-
-    // Check if user has access to the tag's client
-    const hasClientAccess = await this.checkUserHasClientAccess(
-      rlsContext.clientId,
+    const accessContext = await this.resolveAccessForClient(
       tag.clientId,
+      tag.siteId,
     );
-    if (!hasClientAccess) {
-      throw new BadRequestException(
-        'You do not have access to the client this tag is registered with.',
+
+    if (!accessContext) {
+      throw new ForbiddenException(
+        'You do not have access to the organization or site to which this tag is registered.',
       );
     }
 
-    if (tag.siteId === null) {
-      return tag;
-    }
-
-    // If the tag is registered to a site, the user must belong to that
-    // site.
-    if (
-      !isScopeAtLeast(rlsContext.scope, RoleScope.SITE_GROUP) &&
-      !rlsContext.allowedSiteIds.includes(tag.siteId) &&
-      tag.siteId !== rlsContext.siteId
-    ) {
-      throw new BadRequestException('Tag is not registered to your site.');
-    }
-
-    return tag;
+    return { tag, accessContext };
   }
 
   async registerTag(
@@ -685,54 +718,5 @@ export class TagsService {
 
       throw error;
     }
-  }
-
-  private findAndThrowReasonForTagError(
-    findInput: Prisma.TagWhereUniqueInput,
-    rlsContext: IPrismaRLSContext | undefined | null,
-  ) {
-    return async (error: unknown) => {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      ) {
-        // For this endpoint in particular, we want to alert users as to why they are
-        // unable to access the tag.
-
-        // If this tag exists, get the client and site IDs.
-        const { clientId, siteId } = await this.prisma
-          .bypassRLS()
-          .tag.findUniqueOrThrow({
-            where: findInput,
-            select: { clientId: true, siteId: true },
-          });
-
-        // Try to check against the current user (if present). If the user is present along
-        // with the client and site IDs, alert the user as to why they are unable to access the tag.
-        if (rlsContext) {
-          // Check if user has access via PersonClientAccess (multi-client)
-          const hasClientAccess = clientId
-            ? await this.checkUserHasClientAccess(rlsContext.clientId, clientId)
-            : true;
-
-          if (clientId && !hasClientAccess) {
-            throw new BadRequestException(
-              'You do not have access to the client this tag is registered with. Please contact your administrator if you think this is a mistake.',
-            );
-          }
-          if (
-            siteId &&
-            !isScopeAtLeast(rlsContext.scope, RoleScope.SITE_GROUP) &&
-            !rlsContext.allowedSiteIds.includes(siteId) &&
-            siteId !== rlsContext.siteId
-          ) {
-            throw new BadRequestException(
-              'Tag is not registered to your site. Please contact your administrator if you think this is a mistake.',
-            );
-          }
-        }
-      }
-      throw error;
-    };
   }
 }
