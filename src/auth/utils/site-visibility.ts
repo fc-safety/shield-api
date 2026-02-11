@@ -168,6 +168,7 @@ export function getVisibleAssetsForMember<
     .map(({ clientId, siteId, role }) => ({
       clientId,
       siteId,
+      roleId: role.id,
       scope: role.scope as TScope,
       capabilities: role.capabilities as TCapability[],
     }));
@@ -205,6 +206,7 @@ export function getVisibleSiteIdsForMember(
     .map(({ clientId, siteId, role }) => ({
       clientId,
       siteId,
+      roleId: role.id,
       scope: role.scope as TScope,
       capabilities: role.capabilities as TCapability[],
     }));
@@ -234,6 +236,7 @@ export function isSingleSiteUser(
     .map(({ clientId, siteId, role }) => ({
       clientId,
       siteId,
+      roleId: role.id,
       scope: role.scope as TScope,
       capabilities: role.capabilities as TCapability[],
     }));

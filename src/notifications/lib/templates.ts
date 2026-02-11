@@ -5,13 +5,13 @@ import InspectionDueSoonAlertLevel2TemplateReact from '../templates/inspection_d
 import InspectionDueSoonAlertLevel3TemplateReact from '../templates/inspection_due_soon_alert_level_3';
 import InspectionDueSoonAlertLevel4TemplateReact from '../templates/inspection_due_soon_alert_level_4';
 import InspectionReminderTemplateReact from '../templates/inspection_reminder';
+import InvitationTemplateReact from '../templates/invitation';
 import ManagerPasswordResetTemplateReact from '../templates/manager_password_reset';
 import MonthlyConsumableReportTemplateReact from '../templates/monthly_consumables_report';
 import MonthlyInspectionReportTemplateReact from '../templates/monthly_inspection_report';
 import NewLandingFormLeadTemplateReact from '../templates/new-landing-form-lead';
 import NewProductRequestTemplateReact from '../templates/new-product-request';
 import TeamInspectionReminderTemplateReact from '../templates/team-inspection-reminder';
-import InvitationTemplateReact from '../templates/invitation';
 import TestTemplateReact from '../templates/test';
 
 export const TEMPLATE_NAME_MAP = {
@@ -37,7 +37,7 @@ export const TEMPLATE_NAME_MAP = {
 } as const satisfies Record<
   string,
   React.FC<any> & {
-    Subject: string;
+    Subject: string | ((props: any) => string);
     Text: (props: any) => string;
     // TODO: Make required once we fully implement SMS notifications.
     Sms?: (props: any) => string;

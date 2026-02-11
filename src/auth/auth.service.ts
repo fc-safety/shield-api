@@ -183,6 +183,7 @@ export class AuthService {
         roleId: true,
         role: {
           select: {
+            id: true,
             scope: true,
             capabilities: true,
           },
@@ -220,6 +221,7 @@ export class AuthService {
               capabilities: [...VALID_CAPABILITIES],
               clientId: organizationContext.requestedClientId,
               siteId: organizationContext.requestedSiteId ?? '',
+              roleId: 'ephemeral-system-admin',
             },
           };
         }
@@ -276,6 +278,7 @@ export class AuthService {
           capabilities: [...VALID_CAPABILITIES],
           clientId: '',
           siteId: '',
+          roleId: 'ephemeral-system-admin',
         },
       };
     }
@@ -383,6 +386,7 @@ export class AuthService {
           capabilities: userSystemRole.capabilities as TCapability[],
           clientId,
           siteId: siteId,
+          roleId: userSystemRole.id,
         };
       } else {
         // In the rare, but possible scenario where a client has no sites,
@@ -427,6 +431,7 @@ export class AuthService {
         };
         role: {
           select: {
+            id: true;
             scope: true;
             capabilities: true;
           };
@@ -444,6 +449,7 @@ export class AuthService {
         capabilities: accessRecord.role.capabilities as TCapability[],
         clientId: accessRecord.client.id,
         siteId: accessRecord.site.id,
+        roleId: accessRecord.role.id,
       })),
     );
 

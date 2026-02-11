@@ -3,6 +3,7 @@ import { TCapability } from './capabilities';
 import { isScopeAtLeast, RoleScope, TScope } from './scope';
 
 interface IAccessGrantData {
+  roleId: string;
   scope: TScope;
   capabilities: TCapability[];
   clientId: string;
@@ -14,12 +15,14 @@ class AccessGrant {
   public readonly capabilities: TCapability[];
   public readonly clientId: string;
   public readonly siteId: string;
+  public readonly roleId: string;
 
   constructor(input: IAccessGrantData) {
     this.scope = input.scope;
     this.capabilities = input.capabilities;
     this.clientId = input.clientId;
     this.siteId = input.siteId;
+    this.roleId = input.roleId;
   }
 
   public get data(): IAccessGrantData {
@@ -28,6 +31,7 @@ class AccessGrant {
       capabilities: this.capabilities,
       clientId: this.clientId,
       siteId: this.siteId,
+      roleId: this.roleId,
     };
   }
 
@@ -122,6 +126,7 @@ const reduceAccessGrants = (
 
   let clientId = accessGrants[0].clientId;
   let siteId = accessGrants[0].siteId;
+  let roleId = accessGrants[0].roleId;
   let mostPermissiveScope: TScope = RoleScope.SELF;
   const combinedCapabilities = new Set<TCapability>();
 
@@ -132,6 +137,7 @@ const reduceAccessGrants = (
       // Use client and site IDs from role with most permissive scope.
       clientId = accessGrant.clientId;
       siteId = accessGrant.siteId;
+      roleId = accessGrant.roleId;
     }
 
     for (const capability of accessGrant.capabilities) {
@@ -144,6 +150,7 @@ const reduceAccessGrants = (
     capabilities: Array.from(combinedCapabilities),
     clientId,
     siteId,
+    roleId,
   });
 };
 

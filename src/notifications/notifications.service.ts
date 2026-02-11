@@ -171,8 +171,16 @@ export class NotificationsService {
 
     const text = Template.Text(props);
 
+    const subjectOrFn = subject ?? Template.Subject;
+    let subjectValue: string;
+    if (typeof subjectOrFn === 'function') {
+      subjectValue = subjectOrFn(props);
+    } else {
+      subjectValue = subjectOrFn;
+    }
+
     await this.sendEmail({
-      subject: subject ?? Template.Subject,
+      subject: subjectValue,
       to,
       cc,
       bcc,

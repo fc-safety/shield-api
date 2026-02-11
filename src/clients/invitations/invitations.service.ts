@@ -103,6 +103,17 @@ export class InvitationsService {
       );
     }
 
+    const role = await prisma.role.findUnique({
+      where: {
+        id: dto.roleId,
+        // Make sure that only SYSTEM admins can assign ANY roles to clients.
+        clientAssignable: accessGrant.scopeAllows('SYSTEM') ? undefined : true,
+      },
+    });
+    if (!role) {
+      throw new NotFoundException(`Role with ID ${dto.roleId} not found`);
+    }
+
     // Calculate expiration date
     const expiresInDays = dto.expiresInDays ?? 7;
     const expiresOn = new Date();
@@ -111,33 +122,41 @@ export class InvitationsService {
     // Generate unique code
     const code = nanoid(12);
 
-    // Create invitation
-    const invitation = await prisma.invitation.create({
-      data: {
-        code,
-        clientId: targetClientId,
-        createdById: person.id,
-        email: dto.email,
-        roleId: dto.roleId,
-        siteId: dto.siteId,
-        expiresOn,
-      },
-      include: this.invitationInclude,
-    });
+    // Bypass RLS to create invitation to prevent issues with
+    // cross-client access grants.
+    const invitation = await this.prisma
+      .bypassRLS()
+      .$transaction(async (tx) => {
+        // Create invitation
+        const invitation = await tx.invitation.create({
+          data: {
+            code,
+            clientId: site.clientId,
+            createdById: person.id,
+            email: dto.email,
+            roleId: role.id,
+            siteId: site.id,
+            expiresOn,
+          },
+          include: this.invitationInclude,
+        });
 
-    await this.notifications.queueEmail({
-      templateName: 'invitation',
-      to: [invitation.email],
-      templateProps: {
-        clientName: invitation.client.name,
-        siteName: invitation.site.name,
-        roleName: invitation.role.name,
-        inviterFirstName: invitation.createdBy.firstName,
-        inviterLastName: invitation.createdBy.lastName,
-        inviteUrl: this.getInviteUrl(invitation.code),
-        expiresOn: invitation.expiresOn.toISOString(),
-      },
-    });
+        await this.notifications.queueEmail({
+          templateName: 'invitation',
+          to: [invitation.email],
+          templateProps: {
+            clientName: invitation.client.name,
+            siteName: invitation.site.name,
+            roleName: invitation.role.name,
+            inviterFirstName: invitation.createdBy.firstName,
+            inviterLastName: invitation.createdBy.lastName,
+            inviteUrl: this.getInviteUrl(invitation.code),
+            expiresOn: invitation.expiresOn.toISOString(),
+          },
+        });
+
+        return invitation;
+      });
 
     return {
       ...invitation,

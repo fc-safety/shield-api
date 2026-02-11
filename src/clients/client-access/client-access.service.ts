@@ -111,6 +111,7 @@ export class ClientAccessService {
           capabilities: a.role.capabilities as TCapability[],
           clientId: a.client.id,
           siteId: a.site.id,
+          roleId: a.role.id,
         })),
       );
 

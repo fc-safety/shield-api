@@ -40,7 +40,7 @@ export default function InvitationTemplateReact({
         <Paragraph>Hi there,</Paragraph>
         <Paragraph>
           {inviterFirstName} {inviterLastName} has invited you to join{' '}
-          <strong>{clientName}</strong> on FC Safety Shield. Here are your
+          <strong>{clientName}</strong> on the FC Safety Shield. Here are your
           access details:
         </Paragraph>
         <Paragraph>
@@ -86,8 +86,8 @@ InvitationTemplateReact.PreviewProps = {
   expiresOn: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
 };
 
-InvitationTemplateReact.Subject =
-  "You're invited to join {clientName} on FC Safety Shield";
+InvitationTemplateReact.Subject = ({ clientName }: InvitationTemplateProps) =>
+  `You're invited to join ${clientName} on FC Safety Shield`;
 
 InvitationTemplateReact.Text = ({
   clientName,
@@ -109,7 +109,7 @@ InvitationTemplateReact.Text = ({
 
   Hi there,
 
-  ${inviterFirstName} ${inviterLastName} has invited you to join ${clientName} on FC Safety Shield. Here are your access details:
+  ${inviterFirstName} ${inviterLastName} has invited you to join ${clientName} on the FC Safety Shield. Here are your access details:
 
   Organization: ${clientName}
   Site: ${siteName}
