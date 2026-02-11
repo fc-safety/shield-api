@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   GoneException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { nanoid } from 'nanoid';
@@ -19,6 +20,8 @@ import { QueryInvitationDto } from './dto/query-invitation.dto';
 
 @Injectable()
 export class InvitationsService {
+  private readonly logger = new Logger(InvitationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cls: ApiClsService,
@@ -352,7 +355,12 @@ export class InvitationsService {
       clientId: clientAccess.clientId,
       siteId: clientAccess.siteId,
       deleteFn: (keys) => this.memoryCache.mdel(keys),
-    });
+    }).catch((e) =>
+      this.logger.error(
+        'Error invalidating access grant cache while accepting invitation',
+        e,
+      ),
+    );
 
     return {
       success: true,

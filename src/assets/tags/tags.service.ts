@@ -303,7 +303,7 @@ export class TagsService {
     // Determine if the user can and intends to act as a global admin.
     const accessGrant = this.cls.requireAccessGrant();
     const actingAsSystemAdmin =
-      accessGrant.isSystemAdmin() && this.cls.viewContext === 'admin';
+      accessGrant.isSystemAdmin() && this.cls.accessIntent === 'system';
 
     // Get tag data from inspection token.
     const { tagExternalId, serialNumber } =

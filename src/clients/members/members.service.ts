@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ApiClsService } from 'src/auth/api-cls.service';
@@ -19,6 +20,8 @@ import { RemoveRoleDto } from './dto/remove-role.dto';
 
 @Injectable()
 export class MembersService {
+  private readonly logger = new Logger(MembersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cls: ApiClsService,
@@ -212,7 +215,12 @@ export class MembersService {
         clientId: clientAccess.clientId,
         siteId: clientAccess.siteId,
         deleteFn: (keys) => this.memoryCache.mdel(keys),
-      });
+      }).catch((e) =>
+        this.logger.error(
+          'Error invalidating access grant cache while adding role',
+          e,
+        ),
+      );
     }
 
     return clientAccess;
@@ -235,38 +243,68 @@ export class MembersService {
       .catch(as404OrThrow);
 
     // Find the specific PersonClientAccess to remove
-    const clientAccess = await prisma.personClientAccess.findFirst({
-      where: {
-        personId: id,
-        clientId: accessGrant.clientId,
-        roleId: dto.roleId,
-        siteId: dto.siteId,
-      },
-    });
+    const clientAccess = await prisma.$transaction(async (tx) => {
+      const clientAccess = await tx.personClientAccess.findFirst({
+        where: {
+          personId: id,
+          clientId: accessGrant.clientId,
+          roleId: dto.roleId,
+          siteId: dto.siteId,
+        },
+      });
 
-    if (!clientAccess) {
-      throw new NotFoundException(
-        'Member does not have this role/site combination',
-      );
-    }
+      if (!clientAccess) {
+        throw new NotFoundException(
+          'Member does not have this role/site combination',
+        );
+      }
 
-    // Count how many access rows this person has for this client
-    const accessCount = await prisma.personClientAccess.count({
-      where: {
-        personId: id,
-        clientId: accessGrant.clientId,
-      },
-    });
+      // Count how many access rows this person has for this client
+      const accessCount = await tx.personClientAccess.count({
+        where: {
+          personId: id,
+          clientId: accessGrant.clientId,
+        },
+      });
 
-    if (accessCount <= 1) {
-      throw new BadRequestException(
-        'Cannot remove the last role. A member must have at least one role to remain a member of the organization.',
-      );
-    }
+      if (accessCount <= 1) {
+        throw new BadRequestException(
+          'Cannot remove the last role. A member must have at least one role to remain a member of the organization.',
+        );
+      }
 
-    // Delete the PersonClientAccess
-    await prisma.personClientAccess.delete({
-      where: { id: clientAccess.id },
+      // Delete the PersonClientAccess
+      await tx.personClientAccess.delete({
+        where: { id: clientAccess.id },
+      });
+
+      // If the deleted row was primary, ensure another row gets promoted
+      if (clientAccess.isPrimary) {
+        const remainingPrimary = await tx.personClientAccess.findFirst({
+          where: { personId: id, isPrimary: true },
+        });
+
+        if (!remainingPrimary) {
+          const oldestRemaining = await tx.personClientAccess.findFirst({
+            where: { personId: id },
+            orderBy: { createdOn: 'asc' },
+            select: { id: true, clientId: true, siteId: true },
+          });
+
+          if (oldestRemaining) {
+            await tx.personClientAccess.updateMany({
+              where: {
+                personId: id,
+                clientId: oldestRemaining.clientId,
+                siteId: oldestRemaining.siteId,
+              },
+              data: { isPrimary: true },
+            });
+          }
+        }
+      }
+
+      return clientAccess;
     });
 
     // Invalidate cache for the user's new client access.
@@ -276,7 +314,12 @@ export class MembersService {
         clientId: clientAccess.clientId,
         siteId: clientAccess.siteId,
         deleteFn: (keys) => this.memoryCache.mdel(keys),
-      });
+      }).catch((e) =>
+        this.logger.error(
+          'Error invalidating access grant cache while removing role',
+          e,
+        ),
+      );
     }
 
     return {
@@ -355,7 +398,12 @@ export class MembersService {
         clientId: accessGrant.clientId,
         siteIds: accessRowsToDelete.map((a) => a.siteId),
         deleteFn: (keys) => this.memoryCache.mdel(keys),
-      });
+      }).catch((e) =>
+        this.logger.error(
+          'Error invalidating access grant cache while removing member from organization',
+          e,
+        ),
+      );
     }
 
     return {

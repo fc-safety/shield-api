@@ -175,7 +175,7 @@ export class PrismaService
       // Build base extension that all subsequent extensions will build upon.
       const extendedPrisma = prisma.$extends({
         client: {
-          $viewContext: 'admin' as const,
+          $accessIntent: 'system' as const,
           $rlsContext: () => options.rlsContext,
           $mode: mode ?? 'request',
         },
@@ -301,7 +301,7 @@ export class PrismaService
   }
 
   private async buildPrimaryExtension(options: PrimaryExtensionOptions) {
-    const viewContext = this.cls.viewContext;
+    const accessIntent = this.cls.accessIntent;
     const person = this.cls.get('person');
     const accessGrant = this.cls.get('accessGrant');
 
@@ -312,7 +312,7 @@ export class PrismaService
     const shouldBypassRLS =
       mode === 'cron' ||
       !!options.shouldBypassRLSAsSystemAdmin ||
-      viewContext === 'admin';
+      accessIntent === 'system';
     const canBypassRLS = mode === 'cron' || isSystemAdmin;
     const bypassRLS = shouldBypassRLS && canBypassRLS;
 
@@ -340,7 +340,7 @@ export class PrismaService
       const extendedPrisma = prisma.$extends({
         client: {
           $rlsContext: () => rlsContext,
-          $viewContext: viewContext,
+          $accessIntent: accessIntent,
           $mode: mode ?? 'request',
         },
         model: {

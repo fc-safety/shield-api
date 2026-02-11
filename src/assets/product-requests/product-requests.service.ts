@@ -58,7 +58,7 @@ export class ProductRequestsService {
               },
             },
             requestor: true,
-            client: prisma.$viewContext === 'admin',
+            client: prisma.$accessIntent === 'system',
             site: true,
           },
         }),

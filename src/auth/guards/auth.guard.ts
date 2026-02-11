@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   Logger,
   SetMetadata,
@@ -9,7 +11,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { isIPv4, isIPv6 } from 'net';
-import { getViewContext } from 'src/common/utils';
+import { getAccessIntent } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { ApiClsService } from '../api-cls.service';
 import { AccessGrantException } from '../auth.exception';
@@ -17,6 +19,7 @@ import { AuthService } from '../auth.service';
 import { StatelessUser } from '../user.schema';
 import { AccessGrant } from '../utils/access-grants';
 import { getPolicyHandlers } from '../utils/policies';
+import { RoleScope } from '../utils/scope';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 /**
@@ -66,6 +69,9 @@ export class AuthGuard implements CanActivate {
     // Check if the endpoint should skip access grant validation.
     const skipAccessGrantValidation = this.skipAccessGrantValidation(context);
 
+    // Get access intent from the request header.
+    const accessIntent = getAccessIntent(request);
+
     // Get access grant for user if it exists.
     let accessGrant: AccessGrant | null | undefined = undefined;
     if (user) {
@@ -84,6 +90,21 @@ export class AuthGuard implements CanActivate {
 
       accessGrant =
         accessGrantResult.grant && new AccessGrant(accessGrantResult.grant);
+
+      // Validate access intent against the user's scope.
+      if (accessGrant && accessIntent !== 'user') {
+        if (accessGrant.scope !== RoleScope.SYSTEM) {
+          throw new ForbiddenException(
+            `The '${accessIntent}' access intent requires SYSTEM scope.`,
+          );
+        }
+
+        if (accessIntent === 'elevated' && !request.headers['x-client-id']) {
+          throw new BadRequestException(
+            "The 'elevated' access intent requires the x-client-id header.",
+          );
+        }
+      }
     }
 
     // Set the CLS context from the request.
@@ -151,7 +172,7 @@ export class AuthGuard implements CanActivate {
     this.cls.set('isPublic', isPublic);
     this.cls.set('skipAccessGrantValidation', skipAccessGrantValidation);
 
-    this.cls.set('viewContext', getViewContext(request));
+    this.cls.set('accessIntent', getAccessIntent(request));
     this.cls.set('useragent', request.headers['user-agent']);
     if (request.ip && isIPv4(request.ip)) {
       this.cls.set('ipv4', request.ip);

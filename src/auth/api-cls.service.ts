@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { type ClsStore, ClsService } from 'nestjs-cls';
 import { TAccessGrant } from 'src/auth/auth.types';
 import { StatelessUser } from 'src/auth/user.schema';
-import { ViewContext } from 'src/common/utils';
+import { AccessIntent } from 'src/common/utils';
 import { Prisma } from 'src/generated/prisma/client';
 
 export interface CommonClsStore extends ClsStore {
@@ -11,7 +11,7 @@ export interface CommonClsStore extends ClsStore {
   user?: StatelessUser;
   person?: Prisma.PersonGetPayload<object>;
   accessGrant?: TAccessGrant;
-  viewContext?: ViewContext;
+  accessIntent?: AccessIntent;
   useragent?: string;
   ipv4?: string;
   ipv6?: string;
@@ -58,7 +58,7 @@ export class ApiClsService {
     return person;
   }
 
-  public get viewContext() {
-    return this.get('viewContext') ?? 'user';
+  public get accessIntent() {
+    return this.get('accessIntent') ?? 'user';
   }
 }

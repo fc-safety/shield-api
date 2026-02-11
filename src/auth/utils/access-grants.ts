@@ -1,3 +1,4 @@
+import { AccessIntent } from 'src/common/utils';
 import { TCapability } from './capabilities';
 import { isScopeAtLeast, RoleScope, TScope } from './scope';
 
@@ -146,16 +147,19 @@ const reduceAccessGrants = (
   });
 };
 
-interface IOrganizationContext {
+interface IAccessContext {
   requestedClientId?: string;
   requestedSiteId?: string;
+  accessIntent?: AccessIntent;
 }
 
 const buildAccessGrantResponseCacheKey = (
   idpId: string,
-  { requestedClientId, requestedSiteId }: IOrganizationContext = {},
+  { requestedClientId, requestedSiteId, accessIntent }: IAccessContext = {},
 ) =>
-  `access-grant:idpId:${idpId}|client:${requestedClientId ?? 'default'}|site:${requestedSiteId ?? 'default'}`;
+  `access-grant:idpId:${idpId}|client:${requestedClientId ?? 'default'}|site:${requestedSiteId ?? 'default'}|intent:${accessIntent ?? 'user'}`;
+
+const INTENT_VARIANTS: AccessIntent[] = ['system', 'elevated', 'user'];
 
 const clearAccessGrantResponseCache = async ({
   idpId,
@@ -170,11 +174,10 @@ const clearAccessGrantResponseCache = async ({
   siteIds?: string[];
   deleteFn: (keys: string[]) => Promise<void>;
 }) => {
-  // Add keys for no (default) client ID and client ID with no (default) site ID.
-  const keys: string[] = [
-    buildAccessGrantResponseCacheKey(idpId),
-    buildAccessGrantResponseCacheKey(idpId, { requestedClientId: clientId }),
-  ];
+  const keys: string[] = [];
+
+  // For each organization context combination, generate keys for all intent variants.
+  const contexts: IAccessContext[] = [{}, { requestedClientId: clientId }];
 
   // Add keys for all additional site IDs.
   const allSiteIds: string[] = [];
@@ -186,13 +189,22 @@ const clearAccessGrantResponseCache = async ({
   }
 
   allSiteIds.forEach((siteId) => {
-    keys.push(
-      buildAccessGrantResponseCacheKey(idpId, {
-        requestedClientId: clientId,
-        requestedSiteId: siteId,
-      }),
-    );
+    contexts.push({
+      requestedClientId: clientId,
+      requestedSiteId: siteId,
+    });
   });
+
+  for (const context of contexts) {
+    for (const intent of INTENT_VARIANTS) {
+      keys.push(
+        buildAccessGrantResponseCacheKey(idpId, {
+          ...context,
+          accessIntent: intent,
+        }),
+      );
+    }
+  }
 
   await deleteFn(keys);
 };
@@ -204,8 +216,8 @@ export {
   reduceAccessGrants,
 };
 export type {
+  IAccessContext,
   IAccessGrantData,
   IAccessGrantResultDetails,
-  IOrganizationContext,
   TAccessGrantResult,
 };

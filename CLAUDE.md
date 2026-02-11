@@ -269,6 +269,14 @@ These are set via database defaults in Prisma models and enforced through RLS po
 
 Users can access multiple clients via the `x-client-id` header. Each client access has its own site and role (permissions).
 
+The `x-access-intent` header controls how the request is processed:
+
+| Intent | RLS | Capabilities | Requires `x-client-id` | Who can use |
+|--------|-----|-------------|----------------------|------------|
+| `system` | Bypassed | All | No | SYSTEM scope only |
+| `elevated` | Enforced | All (bypass checks) | Yes | SYSTEM scope only |
+| `user` (default) | Enforced | From assigned role | Yes (for client access) | Anyone |
+
 **Key models:**
 
 - `PersonClientAccess` - Maps a person to a client with a specific site and role
@@ -277,18 +285,21 @@ Users can access multiple clients via the `x-client-id` header. Each client acce
 
 **Request flow:**
 
-1. `AuthGuard` extracts `x-client-id` header → stores in CLS as `activeClientId`
-2. `ActiveClientGuard` validates access via `PersonClientAccess` table
-3. `PeopleService.getPersonRepresentation()` builds context with switched client/site/permissions
+1. `AuthGuard` extracts `x-client-id` and `x-access-intent` headers
+2. `AuthService` resolves access grant based on intent (ephemeral grants skipped in `user` mode)
+3. `AuthGuard` validates intent against user scope (403 if non-SYSTEM, 400 if `elevated` without client)
+4. `PrismaService` uses intent to determine RLS bypass (`system` only)
 
 **Key files:**
 
-- `src/auth/auth.guard.ts` - Extracts header
+- `src/common/utils.ts` - `AccessIntent` type and `getAccessIntent()` helper
+- `src/auth/guards/auth.guard.ts` - Intent extraction and validation
+- `src/auth/auth.service.ts` - Access grant resolution with intent-aware logic
+- `src/prisma/prisma.service.ts` - RLS bypass based on `$accessIntent`
 - `src/clients/guards/active-client.guard.ts` - Validates access
 - `src/clients/clients/clients.service.ts` - `validateClientAccess()` with caching
-- `src/clients/people/people.service.ts` - Builds PersonRepresentation
 
-See [docs/multi-client-access.md](docs/multi-client-access.md) for full documentation.
+See [docs/access-intent.md](docs/access-intent.md) and [docs/multi-client-access.md](docs/multi-client-access.md) for full documentation.
 
 ### RLS Authentication Pattern
 

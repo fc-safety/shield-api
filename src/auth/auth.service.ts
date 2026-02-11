@@ -7,7 +7,7 @@ import { IncomingMessage } from 'http';
 import { Jwt, TokenExpiredError } from 'jsonwebtoken';
 import { expressJwtSecret } from 'jwks-rsa';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
-import { firstOf } from 'src/common/utils';
+import { firstOf, getAccessIntent } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { ClientStatus, Prisma, RoleScope } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -19,7 +19,8 @@ import {
 } from './user.schema';
 import {
   buildAccessGrantResponseCacheKey,
-  IOrganizationContext,
+  type IAccessContext,
+  type IAccessGrantData,
   reduceAccessGrants,
 } from './utils/access-grants';
 import { TCapability, VALID_CAPABILITIES } from './utils/capabilities';
@@ -114,60 +115,56 @@ export class AuthService {
 
   public async getAccessGrantForUser(
     user: StatelessUser,
-    organizationContext: IOrganizationContext = {},
+    accessContext: IAccessContext = {},
   ): Promise<TAccessGrantResult> {
     const cacheKey = buildAccessGrantResponseCacheKey(
       user.idpId,
-      organizationContext,
+      accessContext,
     );
 
     return this.memoryCache.getOrSet(
       cacheKey,
-      () => this.getAccessGrantForUserFromDatabase(user, organizationContext),
+      () => this.getAccessGrantForUserFromDatabase(user, accessContext),
       5 * 60 * 1000, // 5 minutes
     );
   }
 
   private async getAccessGrantForUserFromDatabase(
     user: StatelessUser,
-    organizationContext: {
-      requestedClientId?: string;
-      requestedSiteId?: string;
-    } = {},
+    organizationContext: IAccessContext = {},
   ): Promise<TAccessGrantResult> {
+    const accessIntent = organizationContext.accessIntent ?? 'user';
     const prismaBypassRLS = this.prisma.bypassRLS();
 
-    // If a specific client is requested and the user is a global admin, grant the user
-    // access to the client and site.
-    if (organizationContext.requestedClientId) {
-    }
+    // If a specific client is requested, access intent is `elevated` or `system`, and the user is a
+    // system admin, grant the user access to the client and site via an ephemeral grant.
+    if (organizationContext.requestedClientId && accessIntent !== 'user') {
+      // In 'user' mode, skip ephemeral grants — system admins must have real access records.
+      const systemAdminAccessGrant = await this.getSystemAdminAccessGrant({
+        user,
+        clientId: organizationContext.requestedClientId,
+        siteId: organizationContext.requestedSiteId,
+      });
 
-    const whereIsUsersPrimaryAccessRecord: Prisma.PersonClientAccessWhereInput =
-      {
-        person: { idpId: user.idpId },
-        isPrimary: true,
-      };
-
-    // Default to querying for the user's primary access record.
-    let whereClause: Prisma.PersonClientAccessWhereInput =
-      whereIsUsersPrimaryAccessRecord;
-
-    // If the user is requesting a specific client (and site), we need to include that in the query.
-    if (organizationContext.requestedClientId) {
-      whereClause = {
-        OR: [
-          whereIsUsersPrimaryAccessRecord,
-          {
-            person: { idpId: user.idpId },
-            clientId: organizationContext.requestedClientId,
-            siteId: organizationContext.requestedSiteId || undefined,
-          },
-        ],
-      };
+      if (systemAdminAccessGrant) {
+        return {
+          grant: systemAdminAccessGrant,
+        };
+      }
     }
 
     const accessRecordQueryArgs = {
-      where: whereClause,
+      where: {
+        person: { idpId: user.idpId },
+      },
+      orderBy: [
+        {
+          isPrimary: 'desc',
+        },
+        {
+          createdOn: 'asc',
+        },
+      ],
       select: {
         id: true,
         isPrimary: true,
@@ -211,53 +208,6 @@ export class AuthService {
         const primaryAccessRecord = accessRecords.find(
           (accessRecord) => accessRecord.isPrimary,
         );
-
-        // Get user's most permissive GLOBAL role to grant access to the requested client
-        // if role is present.
-        const userGlobalRole = await this.getMostPermissiveRole(
-          user,
-          RoleScope.GLOBAL,
-        );
-
-        // If the user has a GLOBAL role, grant access to the requested client.
-        if (userGlobalRole) {
-          // If no site is specified, use the primary site (or first site) for the client.
-          let siteId = organizationContext.requestedSiteId;
-          if (!siteId) {
-            const site = await prismaBypassRLS.site.findFirst({
-              where: {
-                clientId: organizationContext.requestedClientId,
-              },
-              orderBy: [
-                {
-                  primary: 'desc',
-                },
-                {
-                  createdOn: 'asc',
-                },
-              ],
-            });
-
-            siteId = site?.id;
-          }
-
-          if (siteId) {
-            return {
-              grant: {
-                scope: userGlobalRole.scope,
-                capabilities: userGlobalRole.capabilities as TCapability[],
-                clientId: organizationContext.requestedClientId,
-                siteId: siteId,
-              },
-            };
-          } else {
-            // In the rare, but possible scenario where a client has no sites,
-            // continue with regular flow but log a warning.
-            this.logger.warn(
-              `Attempted to grant client access to global admin, but no site was found for client ${organizationContext.requestedClientId}.`,
-            );
-          }
-        }
 
         /** If the user's email is in the system admin list, grant ephemeral system access. */
         if (this.userIsDefaultSystemAdmin(user)) {
@@ -316,7 +266,7 @@ export class AuthService {
     }
 
     /** If the user's email is in the system admin list, grant ephemeral system access. */
-    if (this.userIsDefaultSystemAdmin(user)) {
+    if (accessIntent !== 'user' && this.userIsDefaultSystemAdmin(user)) {
       this.logger.log(
         `Granting ephemeral system access to bootstrap admin: ${user.email}`,
       );
@@ -385,6 +335,62 @@ export class AuthService {
 
         return mostPermissive;
       }, userAllowedRoles[0]);
+    }
+
+    return null;
+  }
+
+  private async getSystemAdminAccessGrant({
+    user,
+    clientId,
+    siteId,
+  }: {
+    user: StatelessUser;
+    clientId: string;
+    siteId?: string;
+  }): Promise<IAccessGrantData | null> {
+    // Get user's most permissive SYSTEM role to grant access to the requested client
+    // if role is present.
+    const userSystemRole = await this.getMostPermissiveRole(
+      user,
+      RoleScope.SYSTEM,
+    );
+
+    // If the user has a SYSTEM role, grant access to the requested client.
+    if (userSystemRole) {
+      // If no site is specified, use the primary site (or first site) for the client.
+      if (!siteId) {
+        const site = await this.prisma.bypassRLS().site.findFirst({
+          where: {
+            clientId,
+          },
+          orderBy: [
+            {
+              primary: 'desc',
+            },
+            {
+              createdOn: 'asc',
+            },
+          ],
+        });
+
+        siteId = site?.id;
+      }
+
+      if (siteId) {
+        return {
+          scope: userSystemRole.scope,
+          capabilities: userSystemRole.capabilities as TCapability[],
+          clientId,
+          siteId: siteId,
+        };
+      } else {
+        // In the rare, but possible scenario where a client has no sites,
+        // continue with regular flow but log a warning.
+        this.logger.warn(
+          `Attempted to grant client access to system admin, but no site was found for client ${clientId}.`,
+        );
+      }
     }
 
     return null;
@@ -513,13 +519,13 @@ export class AuthService {
     return type === 'Bearer' ? token : undefined;
   }
 
-  public extractOrganizationContextFromRequest(request: IncomingMessage): {
-    requestedClientId?: string;
-    requestedSiteId?: string;
-  } {
+  public extractOrganizationContextFromRequest(
+    request: IncomingMessage,
+  ): IAccessContext {
     return {
       requestedClientId: firstOf(request.headers['x-client-id']),
       requestedSiteId: firstOf(request.headers['x-site-id']),
+      accessIntent: getAccessIntent(request as any),
     };
   }
 
