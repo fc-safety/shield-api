@@ -1,6 +1,4 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable } from '@nestjs/common';
-import { type Cache } from 'cache-manager';
+import { Injectable } from '@nestjs/common';
 import { ApiClsService } from 'src/auth/api-cls.service';
 import { reduceAccessGrants } from 'src/auth/utils/access-grants';
 import { TCapability, VALID_CAPABILITIES } from 'src/auth/utils/capabilities';
@@ -25,7 +23,6 @@ export class ClientAccessService {
     private readonly prisma: PrismaService,
     private readonly cls: ApiClsService,
     private readonly config: ApiConfigService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   /**
