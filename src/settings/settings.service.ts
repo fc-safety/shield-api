@@ -1,6 +1,5 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable } from '@nestjs/common';
-import type { Cache } from 'cache-manager';
+import { Injectable } from '@nestjs/common';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import {
   Prisma,
   SettingsBlock as PrismaSettingsBlock,
@@ -14,8 +13,9 @@ import {
   GlobalSettingsSchema,
 } from './dto/global-settings.dto';
 
-export interface SettingsBlock<T extends PrismaSettingsBlock['data']>
-  extends PrismaSettingsBlock {
+export interface SettingsBlock<
+  T extends PrismaSettingsBlock['data'],
+> extends PrismaSettingsBlock {
   data: T;
 }
 
@@ -23,7 +23,7 @@ export interface SettingsBlock<T extends PrismaSettingsBlock['data']>
 export class SettingsService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly memoryCache: MemoryCacheService,
   ) {}
 
   async getGlobalSettings() {
@@ -62,7 +62,8 @@ export class SettingsService {
 
     let settings: SettingsBlock<T> | null = null;
     if (cache) {
-      settings = (await this.cache.get<SettingsBlock<T>>(cacheKey)) ?? null;
+      settings =
+        (await this.memoryCache.get<SettingsBlock<T>>(cacheKey)) ?? null;
     }
 
     if (settings) {
@@ -113,7 +114,7 @@ export class SettingsService {
       })
       .then(async (settings) => {
         if (cache) {
-          await this.cache.set(cacheKey, settings);
+          await this.memoryCache.set(cacheKey, settings);
         }
         return settings as SettingsBlock<T>;
       });
@@ -140,7 +141,7 @@ export class SettingsService {
       })
       .then(async (settings) => {
         if (cache) {
-          await this.cache.set(cacheKey, settings);
+          await this.memoryCache.set(cacheKey, settings);
         }
         return settings;
       });

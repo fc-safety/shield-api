@@ -1,4 +1,3 @@
-import { CacheModule } from '@nestjs/cache-manager';
 import { forwardRef, Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
@@ -16,7 +15,6 @@ import { PoliciesGuard } from './policies.guard';
 @Global()
 @Module({
   imports: [
-    CacheModule.register(),
     JwtModule.register({}),
     ClsModule.forRoot({
       middleware: {

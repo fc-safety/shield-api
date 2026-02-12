@@ -61,7 +61,6 @@ export class UserConfigurationError extends Error {
 @Injectable()
 export class PeopleService implements OnModuleDestroy {
   private prisma: PrismaService | undefined;
-  private readonly cacheCheckMap = new Map<string, Promise<unknown>>();
   private readonly invalidatePersonCache: ({ id }: { id: string }) => void;
 
   constructor(

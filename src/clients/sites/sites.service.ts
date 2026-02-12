@@ -1,6 +1,5 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable } from '@nestjs/common';
-import type { Cache } from 'cache-manager';
+import { Injectable } from '@nestjs/common';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { as404OrThrow, isNil } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -19,12 +18,12 @@ export class SitesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly memoryCache: MemoryCacheService,
   ) {}
 
   private invalidateSiteStatusCache(siteId: string) {
     const cacheKey = buildSiteStatusCacheKey(siteId);
-    this.cache.del(cacheKey);
+    this.memoryCache.del(cacheKey);
   }
 
   /**
@@ -33,7 +32,7 @@ export class SitesService {
    */
   public async getSiteStatus(siteId: string): Promise<boolean | null> {
     const cacheKey = buildSiteStatusCacheKey(siteId);
-    const cachedValue = await this.cache.get<boolean>(cacheKey);
+    const cachedValue = await this.memoryCache.get<boolean>(cacheKey);
 
     if (!isNil(cachedValue)) {
       return cachedValue;
@@ -46,7 +45,7 @@ export class SitesService {
 
     if (siteResult) {
       // Cache the result for 1 hour.
-      this.cache.set(
+      this.memoryCache.set(
         cacheKey,
         siteResult.active,
         this.SITE_STATUS_CACHE_TTL_MS,

@@ -1,4 +1,3 @@
-import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { AssetsModule } from 'src/assets/assets/assets.module';
 import { KeycloakModule } from 'src/auth/keycloak/keycloak.module';
@@ -8,12 +7,7 @@ import { ClientsScheduler } from './clients.scheduler';
 import { ClientsService } from './clients.service';
 
 @Module({
-  imports: [
-    KeycloakModule,
-    AssetQuestionsModule,
-    AssetsModule,
-    CacheModule.register(),
-  ],
+  imports: [KeycloakModule, AssetQuestionsModule, AssetsModule],
   controllers: [ClientsController],
   providers: [ClientsService, ClientsScheduler],
   exports: [ClientsService],

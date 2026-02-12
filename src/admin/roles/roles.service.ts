@@ -1,7 +1,5 @@
-import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
-  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,6 +12,7 @@ import {
   VALID_CAPABILITIES,
 } from 'src/auth/utils/capabilities';
 import { isScopeAtLeast, RoleScope, TScope } from 'src/auth/utils/scope';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import {
   NotificationGroupId,
   NotificationGroups,
@@ -24,14 +23,14 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { databaseRoleToRole, Role } from './model/role';
 
 // Cache TTL for database role capabilities (5 minutes)
-const ROLE_CACHE_TTL = 300_000;
+const ROLE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 @Injectable()
 export class RolesService {
   constructor(
     private readonly cls: ApiClsService,
     private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly memoryCache: MemoryCacheService,
   ) {}
 
   // ============================================================================
@@ -430,7 +429,7 @@ export class RolesService {
    */
   private async invalidateRoleCache(roleId: string): Promise<void> {
     const cacheKey = `role-capabilities:${roleId}`;
-    await this.cache.del(cacheKey);
+    await this.memoryCache.del(cacheKey);
   }
 
   /**
@@ -440,29 +439,26 @@ export class RolesService {
   async getRoleCapabilities(roleId: string): Promise<TCapability[]> {
     const cacheKey = `role-capabilities:${roleId}`;
 
-    // Check cache first
-    const cachedValue = await this.cache.get<TCapability[]>(cacheKey);
-    if (cachedValue) {
-      return cachedValue;
-    }
+    return this.memoryCache.getOrSet(
+      cacheKey,
+      async () => {
+        // Fetch from database
+        const prisma = this.prisma.bypassRLS();
+        const role = await prisma.role.findUnique({
+          where: { id: roleId },
+          select: { capabilities: true },
+        });
 
-    // Fetch from database
-    const prisma = this.prisma.bypassRLS();
-    const role = await prisma.role.findUnique({
-      where: { id: roleId },
-      select: { capabilities: true },
-    });
+        if (!role) {
+          return [];
+        }
 
-    if (!role) {
-      return [];
-    }
+        const result = role.capabilities.filter(isValidCapability);
 
-    const result = role.capabilities.filter(isValidCapability);
-
-    // Cache the result
-    await this.cache.set(cacheKey, result, ROLE_CACHE_TTL);
-
-    return result;
+        return result;
+      },
+      ROLE_CACHE_TTL,
+    );
   }
 
   /**
@@ -471,26 +467,23 @@ export class RolesService {
   async getRoleScope(roleId: string): Promise<TScope | null> {
     const cacheKey = `role-scope:${roleId}`;
 
-    // Check cache first
-    const cachedValue = await this.cache.get<TScope>(cacheKey);
-    if (cachedValue) {
-      return cachedValue;
-    }
+    return this.memoryCache.getOrSet(
+      cacheKey,
+      async () => {
+        // Fetch from database
+        const prisma = this.prisma.bypassRLS();
+        const role = await prisma.role.findUnique({
+          where: { id: roleId },
+          select: { scope: true },
+        });
 
-    // Fetch from database
-    const prisma = this.prisma.bypassRLS();
-    const role = await prisma.role.findUnique({
-      where: { id: roleId },
-      select: { scope: true },
-    });
+        if (!role) {
+          return null;
+        }
 
-    if (!role) {
-      return null;
-    }
-
-    // Cache the result
-    await this.cache.set(cacheKey, role.scope, ROLE_CACHE_TTL);
-
-    return role.scope;
+        return role.scope;
+      },
+      ROLE_CACHE_TTL,
+    );
   }
 }
