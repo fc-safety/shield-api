@@ -13,13 +13,13 @@ import { Request } from 'express';
 import { isIPv4, isIPv6 } from 'net';
 import { getAccessIntent } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { ApiClsService } from '../api-cls.service';
-import { AccessGrantException } from '../auth.exception';
-import { AuthService } from '../auth.service';
-import { StatelessUser } from '../user.schema';
-import { AccessGrant } from '../utils/access-grants';
-import { getPolicyHandlers } from '../utils/policies';
-import { RoleScope } from '../utils/scope';
+import { ApiClsService } from './api-cls.service';
+import { AccessGrantException } from './auth.exception';
+import { AuthService } from './auth.service';
+import { StatelessUser } from './user.schema';
+import { AccessGrant } from './utils/access-grants';
+import { getPolicyHandlers } from './utils/policies';
+import { RoleScope } from './utils/scope';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 /**

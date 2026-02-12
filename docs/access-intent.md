@@ -101,7 +101,7 @@ Authorization: Bearer <token>
 - `src/auth/api-cls.service.ts` - CLS store with `accessIntent` field
 - `src/auth/utils/access-grants.ts` - `IAccessContext` with `accessIntent`, cache key includes intent
 - `src/auth/auth.service.ts` - Access grant resolution with intent-aware logic
-- `src/auth/guards/auth.guard.ts` - Intent extraction, validation (403/400)
+- `src/auth/auth.guard.ts` - Intent extraction, validation (403/400)
 - `src/prisma/prisma.service.ts` - `$accessIntent` on extended client, RLS bypass for `system`
 
 ## Migration from `x-view-context`

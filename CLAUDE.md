@@ -271,11 +271,11 @@ Users can access multiple clients via the `x-client-id` header. Each client acce
 
 The `x-access-intent` header controls how the request is processed:
 
-| Intent | RLS | Capabilities | Requires `x-client-id` | Who can use |
-|--------|-----|-------------|----------------------|------------|
-| `system` | Bypassed | All | No | SYSTEM scope only |
-| `elevated` | Enforced | All (bypass checks) | Yes | SYSTEM scope only |
-| `user` (default) | Enforced | From assigned role | Yes (for client access) | Anyone |
+| Intent           | RLS      | Capabilities        | Requires `x-client-id`  | Who can use       |
+| ---------------- | -------- | ------------------- | ----------------------- | ----------------- |
+| `system`         | Bypassed | All                 | No                      | SYSTEM scope only |
+| `elevated`       | Enforced | All (bypass checks) | Yes                     | SYSTEM scope only |
+| `user` (default) | Enforced | From assigned role  | Yes (for client access) | Anyone            |
 
 **Key models:**
 
@@ -293,10 +293,9 @@ The `x-access-intent` header controls how the request is processed:
 **Key files:**
 
 - `src/common/utils.ts` - `AccessIntent` type and `getAccessIntent()` helper
-- `src/auth/guards/auth.guard.ts` - Intent extraction and validation
+- `src/auth/auth.guard.ts` - Intent extraction and validation
 - `src/auth/auth.service.ts` - Access grant resolution with intent-aware logic
 - `src/prisma/prisma.service.ts` - RLS bypass based on `$accessIntent`
-- `src/clients/guards/active-client.guard.ts` - Validates access
 - `src/clients/clients/clients.service.ts` - `validateClientAccess()` with caching
 
 See [docs/access-intent.md](docs/access-intent.md) and [docs/multi-client-access.md](docs/multi-client-access.md) for full documentation.

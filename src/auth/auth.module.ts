@@ -8,8 +8,8 @@ import { PeopleModule } from 'src/clients/people/people.module';
 import { SitesModule } from 'src/clients/sites/sites.module';
 import { ApiClsService } from './api-cls.service';
 import { AuthController } from './auth.controller';
+import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
-import { AuthGuard } from './guards/auth.guard';
 import { KeycloakModule } from './keycloak/keycloak.module';
 import { PoliciesGuard } from './policies.guard';
 

@@ -10,10 +10,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CheckCapability, CheckIsAuthenticated } from 'src/auth/utils/policies';
-import {
-  Public,
-  SkipAccessGrantValidation,
-} from '../../auth/guards/auth.guard';
+import { Public, SkipAccessGrantValidation } from '../../auth/auth.guard';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { QueryInvitationDto } from './dto/query-invitation.dto';
 import { InvitationsService } from './invitations.service';

@@ -4,8 +4,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { RoleScope } from 'src/generated/prisma/client';
 import { ApiClsService } from './api-cls.service';
+import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
-import { AuthGuard } from './guards/auth.guard';
 
 describe('AuthGuard', () => {
   let guard: AuthGuard;

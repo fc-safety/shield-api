@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiClsService } from './api-cls.service';
+import { SkipAccessGrantValidation } from './auth.guard';
 import { TAccessGrant } from './auth.types';
-import { SkipAccessGrantValidation } from './guards/auth.guard';
 import { CheckIsAuthenticated } from './policies.guard';
 
 /**

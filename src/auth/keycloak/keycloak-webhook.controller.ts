@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Public } from '../guards/auth.guard';
+import { Public } from '../auth.guard';
 import type {
   KeycloakEvent,
   KeycloakUserRepresentation,
