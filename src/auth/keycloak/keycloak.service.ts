@@ -270,10 +270,10 @@ export class KeycloakService {
   verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {
     const secret = this.config.get('KEYCLOAK_WEBHOOK_SECRET');
     if (!secret) {
-      logger.warn(
-        'KEYCLOAK_WEBHOOK_SECRET not configured, skipping validation',
+      logger.error(
+        'KEYCLOAK_WEBHOOK_SECRET not configured, unable to verify webhook signature',
       );
-      return true;
+      return false;
     }
     const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
     try {
