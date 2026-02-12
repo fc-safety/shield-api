@@ -8,6 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CheckCapability, CheckIsAuthenticated } from 'src/auth/utils/policies';
 import {
   Public,
@@ -46,6 +47,13 @@ export class InvitationsController {
    */
   @Get('validate/:code')
   @Public()
+  @Throttle({
+    default: {
+      // 10 requests per minute to prevent brute-force code guessing.
+      limit: 10,
+      ttl: 60 * 1000,
+    },
+  })
   async validateCode(@Param('code') code: string) {
     return this.invitationsService.validateCode(code);
   }

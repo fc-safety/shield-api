@@ -216,17 +216,8 @@ export class InvitationsService {
         },
       });
 
-      if (!invitation) {
-        throw new NotFoundException('Invitation not found');
-      }
-
-      // Check if expired or revoked
-      if (invitation.status === 'EXPIRED' || invitation.status === 'REVOKED') {
-        throw new GoneException('This invitation has expired or been revoked');
-      }
-
-      if (invitation.status === 'ACCEPTED') {
-        throw new GoneException('This invitation has already been used');
+      if (!invitation || invitation.status !== 'PENDING') {
+        throw new GoneException('This invitation is no longer valid.');
       }
 
       // Check if expired by date
@@ -236,7 +227,7 @@ export class InvitationsService {
           where: { id: invitation.id },
           data: { status: 'EXPIRED' },
         });
-        throw new GoneException('This invitation has expired');
+        throw new GoneException('This invitation is no longer valid.');
       }
 
       return invitation;
