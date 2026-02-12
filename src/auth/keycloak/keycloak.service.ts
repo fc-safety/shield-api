@@ -9,7 +9,6 @@ import EventEmitter from 'node:events';
 import pRetry from 'p-retry';
 import { isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { describePermission, VALID_PERMISSIONS } from '../permissions';
 import {
   FindUsersByAttributeParams,
   InternalFindUsersByAttributeParams,
@@ -53,36 +52,6 @@ export const getShieldClient = async (
   return (await adminClient.clients.find({ clientId })).at(0);
 };
 
-const syncShieldClientPermissions = async (
-  adminClient: KeycloakAdminClient,
-  clientId: string,
-) => {
-  const client = await getShieldClient(adminClient, clientId);
-  if (!client?.id) return;
-  const roles = await adminClient.clients.listRoles({ id: client.id });
-  const rolesByName = Object.fromEntries(roles.map((r) => [r.name, r]));
-
-  const permissionsToCreate = VALID_PERMISSIONS.filter(
-    (p) => !(p in rolesByName),
-  );
-  // Create any missing permissions (called roles in Keycloak).
-  await Promise.allSettled(
-    permissionsToCreate.map((p) =>
-      adminClient.clients
-        .createRole({
-          id: client.id,
-          name: p,
-          description: describePermission(p),
-          composite: false,
-          clientRole: true,
-        })
-        .catch((e) => {
-          logger.error(`Failed to create role: ${p}`, e);
-        }),
-    ),
-  );
-};
-
 export const keycloakAdminClientFactory = async (config: ApiConfigService) => {
   const keycloakClient = new KeycloakAdminClient({
     realmName: config.get('KEYCLOAK_ADMIN_CLIENT_ADMIN_REALM'),
@@ -112,8 +81,6 @@ export const keycloakAdminClientFactory = async (config: ApiConfigService) => {
     () => doRefreshAuth(),
     config.get('KEYCLOAK_ADMIN_CLIENT_REFRESH_INTERVAL_SECONDS') * 1000,
   );
-
-  syncShieldClientPermissions(keycloakClient, config.get('AUTH_AUDIENCE'));
 
   return keycloakClient;
 };
