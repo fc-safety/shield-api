@@ -39,7 +39,7 @@ class AccessGrant {
    * Check if this grant has SYSTEM scope (system admin access).
    */
   public isSystemAdmin(): boolean {
-    return this.scope === RoleScope.SYSTEM || this.scope === RoleScope.GLOBAL;
+    return this.scope === RoleScope.SYSTEM;
   }
 
   /**
