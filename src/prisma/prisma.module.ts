@@ -1,12 +1,11 @@
-import { forwardRef, Global, Module } from '@nestjs/common';
-import { PeopleModule } from 'src/clients/people/people.module';
+import { Global, Module } from '@nestjs/common';
 import { RedisModule } from 'src/redis/redis.module';
 import { PrismaAdapter } from './prisma.adapter';
 import { PrismaService } from './prisma.service';
 
 @Global()
 @Module({
-  imports: [RedisModule, forwardRef(() => PeopleModule)],
+  imports: [RedisModule],
   providers: [PrismaService, PrismaAdapter],
   exports: [PrismaService],
 })
