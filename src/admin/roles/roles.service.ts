@@ -187,8 +187,21 @@ export class RolesService {
       throw new NotFoundException(`Role ${roleId} not found`);
     }
 
+    let canModify = true;
+    let reason = 'Cannot modify a system role';
     if (existingRole.isSystem) {
-      throw new BadRequestException('Cannot modify a system role');
+      // System roles can only be modified if the scope is not changing
+      if (
+        updateRoleDto.scope !== undefined &&
+        updateRoleDto.scope !== existingRole.scope
+      ) {
+        canModify = false;
+        reason = 'Cannot change the scope of a system role';
+      }
+    }
+
+    if (!canModify) {
+      throw new BadRequestException(reason);
     }
 
     // Determine final scope
@@ -305,9 +318,10 @@ export class RolesService {
       throw new NotFoundException(`Role ${roleId} not found`);
     }
 
-    if (role.isSystem) {
-      throw new BadRequestException('Cannot modify a system role');
-    }
+    // NOTE: Allow modifying system roles, as these endpoints are only accessible to system admins.
+    // if (role.isSystem) {
+    //   throw new BadRequestException('Cannot modify a system role');
+    // }
 
     // Validate capabilities
     const invalidCapabilities = capabilities.filter(
@@ -352,9 +366,10 @@ export class RolesService {
       throw new NotFoundException(`Role ${roleId} not found`);
     }
 
-    if (role.isSystem) {
-      throw new BadRequestException('Cannot modify a system role');
-    }
+    // NOTE: Allow modifying system roles, as these endpoints are only accessible to system admins.
+    // if (role.isSystem) {
+    //   throw new BadRequestException('Cannot modify a system role');
+    // }
 
     // Remove capabilities
     const existingCapabilities = role.capabilities as TCapability[];
@@ -387,7 +402,7 @@ export class RolesService {
     }
 
     if (role.isSystem) {
-      throw new BadRequestException('Cannot modify a system role');
+      throw new BadRequestException('Cannot change the scope of a system role');
     }
 
     // Validate scope restrictions for client-assignable roles

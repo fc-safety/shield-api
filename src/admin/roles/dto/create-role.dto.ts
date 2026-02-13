@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const CreateRoleSchema = z.object({
   name: z.string().nonempty(),
   description: z.string().optional(),
-  scope: z.nativeEnum(RoleScope).default(RoleScope.SITE),
+  scope: z.enum(RoleScope).default(RoleScope.SITE),
   capabilities: z
     .array(z.enum(VALID_CAPABILITIES as [string, ...string[]]))
     .default([]),

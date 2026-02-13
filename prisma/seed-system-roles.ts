@@ -46,7 +46,7 @@ const DEFAULT_ROLES: Array<{
     name: 'Program Administrator',
     description:
       'Full access within a single client, including all sites and resources.',
-    isSystem: false,
+    isSystem: true,
     scope: RoleScope.CLIENT,
     capabilities: [
       CAPABILITIES.PERFORM_INSPECTIONS,
@@ -65,7 +65,7 @@ const DEFAULT_ROLES: Array<{
     name: 'Site Group Manager',
     description:
       'Manage assets, inspections, and alerts for assigned site group and site subgroups within a client.',
-    isSystem: false,
+    isSystem: true,
     scope: RoleScope.SITE_GROUP,
     capabilities: [
       CAPABILITIES.PERFORM_INSPECTIONS,
@@ -84,7 +84,7 @@ const DEFAULT_ROLES: Array<{
     name: 'Site Manager',
     description:
       'Manage assets, inspections, and alerts for assigned site within a client.',
-    isSystem: false,
+    isSystem: true,
     scope: RoleScope.SITE,
     capabilities: [
       CAPABILITIES.PERFORM_INSPECTIONS,
@@ -100,7 +100,7 @@ const DEFAULT_ROLES: Array<{
   {
     name: 'Inspector',
     description: 'Can perform inspections and view assets at assigned site(s).',
-    isSystem: false,
+    isSystem: true,
     scope: RoleScope.SITE,
     capabilities: [
       CAPABILITIES.PERFORM_INSPECTIONS,
@@ -111,7 +111,7 @@ const DEFAULT_ROLES: Array<{
   {
     name: 'Viewer',
     description: 'Read-only access to assets and inspections at assigned site.',
-    isSystem: false,
+    isSystem: true,
     scope: RoleScope.SITE,
     capabilities: [CAPABILITIES.VIEW_REPORTS],
     clientAssignable: true,
@@ -120,7 +120,7 @@ const DEFAULT_ROLES: Array<{
     name: 'Product Manager',
     description:
       'Can configure products, categories, and manufacturers globally.',
-    isSystem: false,
+    isSystem: true,
     scope: RoleScope.GLOBAL,
     capabilities: [CAPABILITIES.CONFIGURE_PRODUCTS],
     clientAssignable: false,
@@ -128,7 +128,7 @@ const DEFAULT_ROLES: Array<{
   {
     name: 'Tag Programmer',
     description: 'Can program and register NFC tags.',
-    isSystem: false,
+    isSystem: true,
     scope: RoleScope.GLOBAL,
     capabilities: [CAPABILITIES.PROGRAM_TAGS],
     clientAssignable: false,
