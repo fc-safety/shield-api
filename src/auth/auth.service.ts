@@ -230,7 +230,7 @@ export class AuthService {
         return {
           reason: 'access_grant_request_denied',
           message:
-            'You do not have access to the requested organization or site. If you have recieved an invitation, please accept it to gain access.',
+            'You do not have access to the requested organization or site. If you have received an invitation, please accept it to gain access.',
           details: {
             requestedClientId: organizationContext.requestedClientId,
             requestedSiteId: organizationContext.requestedSiteId,
