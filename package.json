@@ -131,6 +131,7 @@
       "^@keycloak/keycloak-admin-client/(.*)$": "<rootDir>/../test/__mocks__/@keycloak/keycloak-admin-client.ts",
       "^@paralleldrive/cuid2$": "<rootDir>/../test/__mocks__/@paralleldrive/cuid2.ts",
       "^p-retry$": "<rootDir>/../test/__mocks__/p-retry.ts",
+      "^nanoid$": "<rootDir>/../test/__mocks__/nanoid.ts",
       "^(\\.{1,2}/.*)\\.js$": "$1"
     }
   }
