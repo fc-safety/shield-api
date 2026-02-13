@@ -477,7 +477,7 @@ export class AuthService {
       );
 
       throw new Error(
-        'An error occured while authenticating your request. Please contact support.',
+        'An error occurred while authenticating your request. Please contact support.',
       );
     }
 
