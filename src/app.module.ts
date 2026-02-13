@@ -56,7 +56,7 @@ import { SupportModule } from './support/support.module';
     ThrottlerModule.forRoot([
       {
         ttl: 1 * 60 * 1000, // 1 minute
-        limit: 300000000,
+        limit: 10_000,
       },
     ]),
     CacheModule,

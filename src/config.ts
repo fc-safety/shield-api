@@ -69,14 +69,6 @@ export const configSchema = z.object({
   LEGACY_DB_NAME: z.string().optional(),
   LEGACY_DB_PORT: z.coerce.number().default(3306),
 
-  // Feature Flags
-  USE_DATABASE_PERMISSIONS: z
-    .stringbool({
-      truthy: ['true', '1'],
-      falsy: ['false', '0'],
-    })
-    .optional(),
-
   SYNC_KEYCLOAK_ACCESS_ON_STARTUP: z
     .stringbool({
       truthy: ['true', '1'],
