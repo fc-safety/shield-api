@@ -1,6 +1,6 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ApiClsService } from 'src/auth/api-cls.service';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RolesService } from './roles.service';
 
@@ -36,10 +36,14 @@ describe('RolesService', () => {
     }),
   };
 
-  const mockCacheManager = {
+  const mockMemoryCacheService = {
     get: jest.fn(),
     set: jest.fn(),
     del: jest.fn(),
+    mdel: jest.fn(),
+    getOrSet: jest.fn(),
+    wrap: jest.fn(),
+    clear: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -48,7 +52,7 @@ describe('RolesService', () => {
         RolesService,
         { provide: ApiClsService, useValue: mockApiClsService },
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: CACHE_MANAGER, useValue: mockCacheManager },
+        { provide: MemoryCacheService, useValue: mockMemoryCacheService },
       ],
     }).compile();
 
