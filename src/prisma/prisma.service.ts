@@ -351,15 +351,6 @@ export class PrismaService
         query: {
           $allModels: {
             async $allOperations({ args, query, operation, model }) {
-              if (!bypassRLS && accessGrant) {
-                setModelClientOwnershipForAccessGrant(
-                  args,
-                  model,
-                  operation,
-                  accessGrant,
-                );
-              }
-
               const result = await query(args);
 
               // Emit event to Redis.
@@ -513,37 +504,6 @@ function buildRLSContextStatements(
     prismaClient.$executeRaw`SELECT set_config('app.current_person_id', ${rlsContext.personId}, TRUE)`,
     prismaClient.$executeRaw`SELECT set_config('app.current_user_scope', ${rlsContext.scope}, TRUE)`,
   ];
-}
-
-/**
- * For certain models that are conditionally owned by a particular client,
- * set the client ID on the model input to the person's client ID.
- *
- * @param args - The arguments for the query.
- * @param model - The model being queried.
- * @param operation - The operation being performed.
- * @param person - The person for whom the query is being executed.
- */
-function setModelClientOwnershipForAccessGrant<T>(
-  args: Prisma.Args<T, 'create' | 'update'>,
-  model: string,
-  operation: string,
-  accessGrant: Pick<TAccessGrant, 'clientId'>,
-) {
-  if (
-    ['create', 'update'].includes(operation) &&
-    'data' in args &&
-    ['Manufacturer', 'ProductCategory', 'Product', 'AssetQuestion'].includes(
-      model,
-    ) &&
-    !args.data?.clientId &&
-    !args.data?.client
-  ) {
-    args.data = {
-      ...args.data,
-      client: { connect: { id: accessGrant.clientId } },
-    };
-  }
 }
 
 async function findManyForPageExtensionFn<T>(
