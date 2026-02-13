@@ -16,14 +16,14 @@ export class InspectionRoutesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createInspectionRouteDto: CreateInspectionRouteDto) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoute.create({
       data: createInspectionRouteDto,
     });
   }
 
   async findAll(query?: QueryInspectionRouteDto) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoute.findManyForPage(
       buildPrismaFindArgs(query, {
         include: {
@@ -39,7 +39,7 @@ export class InspectionRoutesService {
   }
 
   async findOne(id: string) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoute
       .findUniqueOrThrow({
         where: { id },
@@ -76,7 +76,7 @@ export class InspectionRoutesService {
   }
 
   async update(id: string, updateInspectionRouteDto: UpdateInspectionRouteDto) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoute.update({
       where: { id },
       data: updateInspectionRouteDto,
@@ -84,14 +84,14 @@ export class InspectionRoutesService {
   }
 
   async remove(id: string) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoute.delete({
       where: { id },
     });
   }
 
   async findAllForAssetId(assetId: string) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.inspectionRoute.findMany({
         where: {
           inspectionRoutePoints: {
@@ -111,7 +111,7 @@ export class InspectionRoutesService {
     inspectionRouteId: string,
     createInspectionRoutePointDto: CreateInspectionRoutePointDto,
   ) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoute.update({
       where: { id: inspectionRouteId },
       data: {
@@ -128,7 +128,7 @@ export class InspectionRoutesService {
     inspectionRouteId: string,
     query?: QueryInspectionRoutePointDto,
   ) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoutePoint.findManyForPage(
       buildPrismaFindArgs(query, {
         where: {
@@ -139,7 +139,7 @@ export class InspectionRoutesService {
   }
 
   async findOnePoint(inspectionRouteId: string, id: string) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoutePoint.findUnique({
       where: { id, inspectionRouteId },
     });
@@ -150,7 +150,7 @@ export class InspectionRoutesService {
     id: string,
     updateInspectionRoutePointDto: UpdateInspectionRoutePointDto,
   ) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoute.update({
       where: { id: inspectionRouteId },
       data: {
@@ -165,7 +165,7 @@ export class InspectionRoutesService {
   }
 
   async removePoint(inspectionRouteId: string, id: string) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     return prisma.inspectionRoute.update({
       where: { id: inspectionRouteId },
       data: {
@@ -182,7 +182,7 @@ export class InspectionRoutesService {
     inspectionRouteId: string,
     reorderInspectionRoutePointsDto: ReorderInspectionRoutePointsDto,
   ) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
     const allPoints = await prisma.inspectionRoutePoint.findMany({
       where: { inspectionRouteId },
       orderBy: { order: 'asc' },

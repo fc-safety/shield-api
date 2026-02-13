@@ -1,11 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClsService } from 'nestjs-cls';
+import { AssetsService } from 'src/assets/assets/assets.service';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import { RolesService } from 'src/admin/roles/roles.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
-import { AssetsService } from 'src/assets/assets/assets.service';
-import { UsersService } from '../users/users.service';
 import { ClientsService } from './clients.service';
 import { GenerateDemoInspectionsDto } from './dto/generate-demo-inspections.dto';
 
@@ -19,6 +17,7 @@ describe('ClientsService', () => {
     mockPrismaService = {
       txForAdminOrUser: jest.fn(),
       build: jest.fn(),
+      bypassRLS: jest.fn(),
     };
 
     mockAssetQuestionsService = {
@@ -41,23 +40,17 @@ describe('ClientsService', () => {
       handleAlertTriggers: jest.fn().mockResolvedValue(undefined),
     };
 
-    const mockCacheManager = {
-      get: jest.fn(),
-      set: jest.fn(),
-      del: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ClientsService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: UsersService, useValue: {} },
-        { provide: RolesService, useValue: {} },
-        { provide: ClsService, useValue: { get: jest.fn() } },
+        {
+          provide: ApiClsService,
+          useValue: { get: jest.fn(), requireAccessGrant: jest.fn() },
+        },
         { provide: KeycloakService, useValue: mockKeycloakService },
         { provide: AssetQuestionsService, useValue: mockAssetQuestionsService },
         { provide: AssetsService, useValue: mockAssetsService },
-        { provide: 'CACHE_MANAGER', useValue: mockCacheManager },
       ],
     }).compile();
 
@@ -77,9 +70,7 @@ describe('ClientsService', () => {
             demoMode: false,
           }),
         },
-        $currentUser: jest
-          .fn()
-          .mockReturnValue({ hasMultiSiteVisibility: true }),
+        $rlsContext: jest.fn().mockReturnValue({ hasMultiSiteScope: true }),
         $mode: 'user',
       };
 
@@ -158,11 +149,19 @@ describe('ClientsService', () => {
         },
         person: {
           findUnique: jest.fn().mockResolvedValue(null),
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'person-1', firstName: 'John', lastName: 'Doe' },
+          ]),
           create: jest.fn().mockResolvedValue({
             id: 'person-1',
             firstName: 'John',
             lastName: 'Doe',
           }),
+        },
+        role: {
+          findFirstOrThrow: jest
+            .fn()
+            .mockResolvedValue({ id: 'inspector-role-id' }),
         },
         asset: {
           update: jest.fn(),
@@ -180,8 +179,8 @@ describe('ClientsService', () => {
 
       const mockTx = {
         ...mockInnerTx,
-        $currentUser: jest.fn().mockReturnValue({
-          hasMultiSiteVisibility: true,
+        $rlsContext: jest.fn().mockReturnValue({
+          hasMultiSiteScope: true,
           allowedSiteIdsStr: '',
         }),
         $mode: 'user',

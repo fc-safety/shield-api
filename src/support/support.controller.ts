@@ -1,5 +1,5 @@
 import { BadRequestException, Controller, Get } from '@nestjs/common';
-import { CheckIsAuthenticated } from 'src/auth/policies.guard';
+import { CheckIsAuthenticated } from 'src/auth/utils/policies';
 import { SupportService } from './support.service';
 
 @Controller('support')

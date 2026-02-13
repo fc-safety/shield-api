@@ -6,7 +6,7 @@ export default {
   schema: 'prisma/schema.prisma',
   migrations: {
     path: 'prisma/migrations',
-    seed: 'swc prisma/seed.ts',
+    seed: 'npx tsx prisma/seed-system-roles.ts',
   },
   datasource: {
     url: env('DATABASE_URL'),

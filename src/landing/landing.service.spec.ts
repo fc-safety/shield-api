@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { LandingService } from './landing.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { HttpService } from '@nestjs/axios';
 import { SettingsService } from 'src/settings/settings.service';
 
@@ -17,7 +17,7 @@ describe('LandingService', () => {
     get: jest.fn().mockReturnValue('test-value'),
   };
 
-  const mockClsService = {
+  const mockApiClsService = {
     get: jest.fn(),
     set: jest.fn(),
   };
@@ -39,7 +39,7 @@ describe('LandingService', () => {
         LandingService,
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: ApiConfigService, useValue: mockApiConfigService },
-        { provide: ClsService, useValue: mockClsService },
+        { provide: ApiClsService, useValue: mockApiClsService },
         { provide: HttpService, useValue: mockHttpService },
         { provide: SettingsService, useValue: mockSettingsService },
       ],

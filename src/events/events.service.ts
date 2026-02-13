@@ -5,7 +5,6 @@ import {
   MessageEvent,
 } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
-import { ClsService } from 'nestjs-cls';
 import {
   endWith,
   from,
@@ -18,12 +17,9 @@ import {
   switchMap,
   takeUntil,
 } from 'rxjs';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { AuthService } from 'src/auth/auth.service';
-import {
-  PeopleService,
-  PersonRepresentation,
-} from 'src/clients/people/people.service';
-import { CommonClsStore } from 'src/common/types';
+import { IAccessGrantData } from 'src/auth/auth.types';
 import { RedisService } from 'src/redis/redis.service';
 import { ListenDbEventsDto } from './dto/listen-db-events.dto';
 
@@ -35,9 +31,8 @@ export class EventsService {
   private readonly logger = new Logger(EventsService.name);
 
   constructor(
-    protected readonly cls: ClsService<CommonClsStore>,
     private readonly redis: RedisService,
-    private readonly peopleService: PeopleService,
+    private readonly cls: ApiClsService,
     private readonly authService: AuthService,
   ) {}
 
@@ -45,9 +40,9 @@ export class EventsService {
     const listenerId = createId();
 
     return from(this.validateToken(options.token)).pipe(
-      switchMap((person) => {
+      switchMap((accessGrant) => {
         // Build the channel pattern to listen to.
-        const clientId = person.clientId;
+        const clientId = accessGrant.clientId;
         const model = options.models.length > 1 ? '*' : options.models[0];
         const operation =
           options.operations && options.operations.length === 1
@@ -174,15 +169,18 @@ export class EventsService {
   }
 
   public async generateToken() {
-    const person = await this.peopleService.getPersonRepresentation();
+    const accessGrant = this.cls.requireAccessGrant();
     return encodeURIComponent(
-      await this.authService.generateCustomToken(person, EXPIRES_IN_SECONDS),
+      await this.authService.generateCustomToken(
+        accessGrant.data,
+        EXPIRES_IN_SECONDS,
+      ),
     );
   }
 
   public async validateToken(token: string) {
     const { isValid, error, payload } =
-      await this.authService.validateCustomToken<PersonRepresentation>(token);
+      await this.authService.validateCustomToken<IAccessGrantData>(token);
 
     if (!isValid) {
       throw new ForbiddenException(error);

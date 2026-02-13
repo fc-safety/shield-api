@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 describe('AuthService', () => {
@@ -22,10 +22,11 @@ describe('AuthService', () => {
     }),
   };
 
-  const mockCacheManager = {
+  const mockMemoryCacheService = {
     get: jest.fn(),
     set: jest.fn(),
     del: jest.fn(),
+    getOrSet: jest.fn(),
   };
 
   const mockPrismaService = {
@@ -43,7 +44,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: JwtService, useValue: mockJwtService },
         { provide: ApiConfigService, useValue: mockApiConfigService },
-        { provide: CACHE_MANAGER, useValue: mockCacheManager },
+        { provide: MemoryCacheService, useValue: mockMemoryCacheService },
         { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();

@@ -36,15 +36,23 @@ export class M2mService {
         .person.findFirst({
           where: { legacyUsername },
           select: {
-            client: {
+            clientAccess: {
               select: {
-                id: true,
-                status: true,
+                client: {
+                  select: {
+                    id: true,
+                    status: true,
+                  },
+                },
               },
+              orderBy: {
+                isPrimary: 'desc',
+              },
+              take: 1,
             },
           },
         })
-        .then((person) => person?.client ?? null);
+        .then((person) => person?.clientAccess[0]?.client ?? null);
     }
 
     if (!client) {

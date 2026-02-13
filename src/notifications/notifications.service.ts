@@ -7,7 +7,11 @@ import { ApiConfigService } from 'src/config/api-config.service';
 import { SettingsService } from 'src/settings/settings.service';
 import Telnyx from 'telnyx';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
-import { NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
+import {
+  CLIENT_NOTIFICATIONS_JOB_NAMES,
+  NOTIFICATIONS_JOB_NAMES,
+  QUEUE_NAMES,
+} from './lib/constants';
 import {
   NotificationTemplateId,
   SendEmailJobData,
@@ -167,8 +171,16 @@ export class NotificationsService {
 
     const text = Template.Text(props);
 
+    const subjectOrFn = subject ?? Template.Subject;
+    let subjectValue: string;
+    if (typeof subjectOrFn === 'function') {
+      subjectValue = subjectOrFn(props);
+    } else {
+      subjectValue = subjectOrFn;
+    }
+
     await this.sendEmail({
-      subject: subject ?? Template.Subject,
+      subject: subjectValue,
       to,
       cc,
       bcc,
@@ -195,7 +207,7 @@ export class NotificationsService {
 
   async queueInspectionAlertTriggeredEmail(alertId: string) {
     await this.clientNotificationsQueue.add(
-      NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL,
+      CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL,
       {
         alertId,
       },

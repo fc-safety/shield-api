@@ -564,7 +564,7 @@ model Client {
   defaultInspectionCycle            Int                                @default(30)
   demoMode                          Boolean                            @default(false)
   sites                             Site[]
-  people                            Person[]
+  personClientAccess                PersonClientAccess[]
   assets                            Asset[]
   consumables                       Consumable[]
   inspections                       Inspection[]
@@ -583,6 +583,7 @@ model Client {
   vaultOwnerships                   VaultOwnership[]
   assetQuestionConditions           AssetQuestionCondition[]
   clientAssetQuestionCustomizations ClientAssetQuestionCustomization[]
+  invitations                       Invitation[]
 
   @@index([legacyClientId])
 }
@@ -620,7 +621,7 @@ model Site {
   consumables                       Consumable[]
   productRequests                   ProductRequest[]
   tags                              Tag[]
-  people                            Person[]
+  personClientAccess                PersonClientAccess[]
   inspections                       Inspection[]
   inspectionRoutes                  InspectionRoute[]
   inspectionSessions                InspectionSession[]
@@ -632,6 +633,7 @@ model Site {
   productRequestItems               ProductRequestItem[]
   vaultOwnerships                   VaultOwnership[]
   clientAssetQuestionCustomizations ClientAssetQuestionCustomization[]
+  invitations                       Invitation[]
 
   @@index([legacySiteId])
   @@index([legacyGroupId])
@@ -647,6 +649,9 @@ model Person {
   email                   String
   username                String?
   idpId                   String?                  @unique
+  phoneNumber             String?
+  position                String?
+  active                  Boolean                  @default(true)
   /**
    * The legacy username of the person (maps to `users.u_name` in the legacy database).
    */
@@ -659,14 +664,93 @@ model Person {
   assetQuestionResponses  AssetQuestionResponse[]
   vaultOwnerships         VaultOwnership[]
   alertsResolved          Alert[]
-  site                    Site                     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  siteId                  String
-  client                  Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId                String
+  clientAccess            PersonClientAccess[]
+  createdInvitations      Invitation[]             @relation("CreatedInvitations")
+  acceptedInvitations     Invitation[]             @relation("AcceptedInvitations")
 
   @@index([legacyUsername])
+}
+
+// Multi-Client Access & Database-Managed Permissions
+
+enum RoleScope {
+  SYSTEM // FC Safety internal operations (cron, M2M)
+  GLOBAL // Super admin - all clients
+  CLIENT // Client-wide visibility
+  SITE_GROUP // Multiple sites
+  SITE // Single site only
+  SELF // Own records only
+}
+
+model Role {
+  id                 String               @id @default(cuid(2))
+  createdOn          DateTime             @default(now()) @db.Timestamptz()
+  modifiedOn         DateTime             @updatedAt @db.Timestamptz()
+  name               String
+  description        String?
+  isSystem           Boolean              @default(false)
+  clientAssignable   Boolean              @default(false)
+  notificationGroups String[]             @default([])
+  scope              RoleScope            @default(SITE)
+  capabilities       String[]             @default([])
+  personClientAccess PersonClientAccess[]
+  invitations        Invitation[]
+
+  @@unique([name])
+}
+
+model PersonClientAccess {
+  id         String   @id @default(cuid(2))
+  createdOn  DateTime @default(now()) @db.Timestamptz()
+  modifiedOn DateTime @updatedAt @db.Timestamptz()
+  isPrimary  Boolean  @default(false)
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId   String
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId     String
+  role       Role     @relation(fields: [roleId], references: [id])
+  roleId     String
+
+  @@unique([personId, clientId, siteId, roleId])
+  @@index([personId])
   @@index([clientId])
+  @@index([siteId])
   @@index([clientId, siteId])
+}
+
+model Invitation {
+  id           String           @id @default(cuid(2))
+  code         String           @unique
+  clientId     String
+  createdById  String
+  email        String
+  roleId       String
+  siteId       String
+  status       InvitationStatus @default(PENDING)
+  expiresOn    DateTime         @db.Timestamptz()
+  acceptedById String?
+  acceptedOn   DateTime?        @db.Timestamptz()
+  createdOn    DateTime         @default(now()) @db.Timestamptz()
+  modifiedOn   DateTime         @updatedAt @db.Timestamptz()
+
+  client     Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy  Person  @relation("CreatedInvitations", fields: [createdById], references: [id])
+  acceptedBy Person? @relation("AcceptedInvitations", fields: [acceptedById], references: [id])
+  role       Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  site       Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([code])
+  @@index([status])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
 }
 
 // Products

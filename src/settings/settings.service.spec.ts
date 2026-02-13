@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SettingsService } from './settings.service';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 
 describe('SettingsService', () => {
   let service: SettingsService;
@@ -16,10 +16,14 @@ describe('SettingsService', () => {
     }),
   };
 
-  const mockCacheManager = {
+  const mockMemoryCacheService = {
     get: jest.fn(),
     set: jest.fn(),
     del: jest.fn(),
+    mdel: jest.fn(),
+    getOrSet: jest.fn(),
+    wrap: jest.fn(),
+    clear: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -27,7 +31,7 @@ describe('SettingsService', () => {
       providers: [
         SettingsService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: CACHE_MANAGER, useValue: mockCacheManager },
+        { provide: MemoryCacheService, useValue: mockMemoryCacheService },
       ],
     }).compile();
 

@@ -10,11 +10,11 @@ export const CLIENT_NOTIFICATIONS_JOB_NAMES = {
   PROCESS_CLIENT_INSPECTION_REMINDERS: 'process-client-inspection-reminders',
   PROCESS_CLIENT_MONTHLY_INSPECTION_REPORTS:
     'process-client-monthly-inspection-reports',
+  SEND_INSPECTION_ALERT_TRIGGERED_EMAIL:
+    'send-inspection-alert-triggered-email',
 };
 
 export const NOTIFICATIONS_JOB_NAMES = {
   SEND_NEW_PRODUCT_REQUEST_EMAIL: 'send-new-product-request-email',
-  SEND_INSPECTION_ALERT_TRIGGERED_EMAIL:
-    'send-inspection-alert-triggered-email',
   SEND_EMAIL: 'send-email',
 };

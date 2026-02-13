@@ -83,6 +83,7 @@ npx nest g decorator auth/roles --flat
 ```
 
 **Testing requirements:**
+
 - **Never use `--no-spec`** - Always generate test files with new modules/services/controllers
 - After generating new files, run `npm test` to verify the default tests pass
 - If a generated spec file fails, fix it immediately before continuing
@@ -134,6 +135,7 @@ Most endpoints accepting a JSON request body should use DTO validation. Modules 
 **Structure:** `src/<module>/dto/<name>.dto.ts`
 
 **Pattern:**
+
 ```typescript
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
@@ -147,6 +149,7 @@ export class CreatePlanDto extends createZodDto(createPlanSchema) {}
 ```
 
 **Naming conventions:**
+
 - File: `<name>.dto.ts` (e.g., `create-plan.dto.ts`, `update-plan.dto.ts`)
 - Schema: `<name>Schema` (e.g., `createPlanSchema`, `updatePlanSchema`)
 - Class: `<Name>Dto` (e.g., `CreatePlanDto`, `UpdatePlanDto`)
@@ -154,6 +157,7 @@ export class CreatePlanDto extends createZodDto(createPlanSchema) {}
 **Discriminated unions:** `createZodDto()` does not support `z.discriminatedUnion()` due to a TypeScript limitation (TS2509 - cannot extend a union type). See [nestjs-zod#41](https://github.com/BenLorantfy/nestjs-zod/issues/41).
 
 Workaround - use a type alias and apply validation directly in the controller:
+
 ```typescript
 // In DTO file
 export const createEntrySchema = z.discriminatedUnion('category', [
@@ -170,6 +174,7 @@ create(@Body(new ZodValidationPipe(createEntrySchema)) dto: CreateEntryDto) {
 ```
 
 **Query Parameter DTOs:** Use the same pattern for validating query parameters. Create a DTO with a Zod schema and use it with the `@Query()` decorator:
+
 ```typescript
 // In DTO file (e.g., list-entries-query.dto.ts)
 import { createZodDto } from 'nestjs-zod';
@@ -193,10 +198,11 @@ findAll(@Query() query: ListEntriesQueryDto) {
 Note: Use `z.coerce.number()` for numeric query params since they arrive as strings.
 
 **Passing query DTOs to services:** Pass the query DTO to the service's `findAll` method. The query parameter should be optional so the method can be called without filters:
+
 ```typescript
 // In service
 async findAll(planId: string, query?: FindEntriesQueryDto) {
-  const prisma = await this.prisma.forUser();
+  const prisma = await this.prisma.build();
   const where: Prisma.EntryWhereInput = { planId };
 
   if (query?.taskKey) {
@@ -217,21 +223,22 @@ findAll(
 ```
 
 **Passing DTOs to Prisma:** Pass validated DTOs directly to `create` and `update` methods. The Zod schema ensures the data shape matches the database schema, so manual attribute mapping is unnecessary:
+
 ```typescript
 // Good - pass DTO directly
 async create(dto: CreatePlanDto) {
-  const prisma = await this.prisma.forUser();
+  const prisma = await this.prisma.build();
   return prisma.plan.create({ data: dto });
 }
 
 async update(id: string, dto: UpdatePlanDto) {
-  const prisma = await this.prisma.forUser();
+  const prisma = await this.prisma.build();
   return prisma.plan.update({ where: { id }, data: dto });
 }
 
 // Bad - manual mapping is superfluous
 async create(dto: CreatePlanDto) {
-  const prisma = await this.prisma.forUser();
+  const prisma = await this.prisma.build();
   return prisma.plan.create({
     data: {
       name: dto.name,
@@ -258,13 +265,48 @@ The system implements Row Level Security (RLS) using PostgreSQL session variable
 
 These are set via database defaults in Prisma models and enforced through RLS policies.
 
+### Multi-Client Access
+
+Users can access multiple clients via the `x-client-id` header. Each client access has its own site and role (permissions).
+
+The `x-access-intent` header controls how the request is processed:
+
+| Intent           | RLS      | Capabilities        | Requires `x-client-id`  | Who can use       |
+| ---------------- | -------- | ------------------- | ----------------------- | ----------------- |
+| `system`         | Bypassed | All                 | No                      | SYSTEM scope only |
+| `elevated`       | Enforced | All (bypass checks) | Yes                     | SYSTEM scope only |
+| `user` (default) | Enforced | From assigned role  | Yes (for client access) | Anyone            |
+
+**Key models:**
+
+- `PersonClientAccess` - Maps a person to a client with a specific site and role
+- `Role` - Collection of permissions (can be global or client-specific)
+- `RolePermission` - Individual permission strings
+
+**Request flow:**
+
+1. `AuthGuard` extracts `x-client-id` and `x-access-intent` headers
+2. `AuthService` resolves access grant based on intent (ephemeral grants skipped in `user` mode)
+3. `AuthGuard` validates intent against user scope (403 if non-SYSTEM, 400 if `elevated` without client)
+4. `PrismaService` uses intent to determine RLS bypass (`system` only)
+
+**Key files:**
+
+- `src/common/utils.ts` - `AccessIntent` type and `getAccessIntent()` helper
+- `src/auth/auth.guard.ts` - Intent extraction and validation
+- `src/auth/auth.service.ts` - Access grant resolution with intent-aware logic
+- `src/prisma/prisma.service.ts` - RLS bypass based on `$accessIntent`
+- `src/clients/clients/clients.service.ts` - `validateClientAccess()` with caching
+
+See [docs/access-intent.md](docs/access-intent.md) and [docs/multi-client-access.md](docs/multi-client-access.md) for full documentation.
+
 ### RLS Authentication Pattern
 
 RLS context is managed in `src/prisma/prisma.service.ts`. For authenticated queries, use the extended Prisma client:
 
 ```typescript
 // Standard user context - applies RLS based on current user
-const prisma = await this.prisma.forUser();
+const prisma = await this.prisma.build();
 await prisma.asset.findMany();
 
 // Bypass RLS for admin operations
@@ -276,6 +318,7 @@ const prisma = await this.prisma.forContext('admin');
 ```
 
 The `forUser()` method sets session variables before each query:
+
 ```sql
 SELECT set_config('app.current_client_id', '<client_id>', TRUE);
 SELECT set_config('app.current_site_id', '<site_id>', TRUE);
@@ -306,6 +349,32 @@ Database schema is defined in `prisma/schema.prisma`. Migrations are in `prisma/
 - **Notifications**: Email via Resend, SMS via Telnyx
 - **Media**: File handling with vault ownership system
 
+### Configuration
+
+Use `ApiConfigService` (not the NestJS `ConfigService`) to access environment variables. It provides type-safe access to validated configuration defined in `src/config.ts`.
+
+```typescript
+// Good - use ApiConfigService
+import { ApiConfigService } from '../../config/api-config.service';
+
+constructor(private readonly config: ApiConfigService) {}
+
+someMethod() {
+  const frontendUrl = this.config.get('FRONTEND_URL'); // Type-safe, validated
+}
+
+// Bad - don't use ConfigService directly
+import { ConfigService } from '@nestjs/config';
+
+constructor(private readonly configService: ConfigService) {}
+
+someMethod() {
+  const frontendUrl = this.configService.get<string>('FRONTEND_URL'); // Not type-safe
+}
+```
+
+`ApiConfigModule` is global, so no module import is needed. Configuration is validated at startup via Zod schema in `src/config.ts`.
+
 ### Module Structure
 
 ```
@@ -326,6 +395,23 @@ src/
 - E2E tests: `*.e2e-spec.ts` files in `/test/` directory
 - Uses `@nestjs/testing` with standard NestJS dependency injection patterns
 - Tests should mock external dependencies (Redis, Keycloak, database)
+
+### Documentation
+
+When adding new features or making architectural changes:
+
+1. **Update `CLAUDE.md`** if the change affects how developers work with the codebase (new patterns, conventions, or key services)
+2. **Create/update `docs/*.md`** for significant features that need detailed explanation (design decisions, request flows, API usage)
+3. **Keep documentation concise** - focus on the "why" and "how", not obvious implementation details
+
+Feature documentation in `docs/` should include:
+
+- Overview and motivation
+- Key models/services involved
+- Request flow or architecture diagrams (as text)
+- Design decisions with rationale
+- API usage examples
+- Related files for quick reference
 
 ### Legacy System Integration
 

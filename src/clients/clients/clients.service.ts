@@ -1,34 +1,25 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { Cache } from 'cache-manager';
 import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
-import { ClsService } from 'nestjs-cls';
-import pRetry from 'p-retry';
 import { AssetsService } from 'src/assets/assets/assets.service';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import { CustomQueryFilter } from 'src/auth/keycloak/types';
-import { CommonClsStore } from 'src/common/types';
-import { as404OrThrow, isNil } from 'src/common/utils';
+import { CAPABILITIES } from 'src/auth/utils/capabilities';
+import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import {
   AssetQuestionResponseType,
   AssetQuestionType,
-  ClientStatus,
   InspectionStatus,
   Prisma,
 } from 'src/generated/prisma/client';
 import { getAssetsToRenewForDemoClient } from 'src/generated/prisma/sql';
 import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
 import { AssetQuestionsService } from 'src/products/asset-questions/asset-questions.service';
-import { CreateUserDto } from '../users/dto/create-user.dto';
-import { QueryUserDto } from '../users/dto/query-user.dto';
-import { UsersService } from '../users/users.service';
 import { ClearDemoInspectionsQueryDto } from './dto/clear-demo-inspections-query.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { DuplicateDemoClientDto } from './dto/duplicate-demo-client.dto';
@@ -44,12 +35,10 @@ export class ClientsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly usersService: UsersService,
-    private readonly cls: ClsService<CommonClsStore>,
+    private readonly cls: ApiClsService,
     private readonly keycloakService: KeycloakService,
     private readonly assetQuestionsService: AssetQuestionsService,
     private readonly assetsService: AssetsService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   /**
@@ -104,35 +93,10 @@ export class ClientsService {
     }
   }
 
-  private invalidateClientStatusCache(clientExternalId: string) {
-    const cacheKey = buildClientStatusCacheKey(clientExternalId);
-    this.cache.del(cacheKey);
-  }
-
-  public async getClientStatus(clientExternalId: string) {
-    const cacheKey = buildClientStatusCacheKey(clientExternalId);
-    const cachedValue = await this.cache.get<ClientStatus>(cacheKey);
-
-    if (!isNil(cachedValue)) {
-      return cachedValue;
-    }
-
-    const clientResult = await this.prisma.bypassRLS().client.findUnique({
-      where: { externalId: clientExternalId },
-      select: { status: true },
-    });
-
-    if (clientResult) {
-      // Cache the result for 1 hour.
-      this.cache.set(cacheKey, clientResult.status, 60 * 60 * 1000);
-      return clientResult.status;
-    }
-
-    return null;
-  }
-
   async create(createClientDto: CreateClientDto) {
-    const prisma = await this.prisma.build();
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
+    });
 
     return prisma.$transaction(async (tx) => {
       // Create the client
@@ -160,7 +124,9 @@ export class ClientsService {
   }
 
   async findAll(queryClientDto: QueryClientDto) {
-    const prisma = await this.prisma.build();
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
+    });
     return prisma.client.findManyForPage(
       buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
         include: {
@@ -171,38 +137,42 @@ export class ClientsService {
   }
 
   async findOne(id: string) {
-    return this.prisma.build().then((prisma) =>
-      prisma.client
-        .findUniqueOrThrow({
-          where: { id },
-          include: {
-            address: true,
-            sites: {
-              include: {
-                address: true,
-                _count: { select: { subsites: true, assets: true } },
+    return this.prisma
+      .build({
+        shouldBypassRLSAsSystemAdmin: true,
+      })
+      .then((prisma) =>
+        prisma.client
+          .findUniqueOrThrow({
+            where: { id },
+            include: {
+              address: true,
+              sites: {
+                include: {
+                  address: true,
+                  _count: { select: { subsites: true, assets: true } },
+                },
+              },
+              _count: {
+                select: { sites: true, assets: true },
               },
             },
-            _count: {
-              select: { sites: true, assets: true },
-            },
-          },
-        })
-        .catch(as404OrThrow),
-    );
+          })
+          .catch(as404OrThrow),
+      );
   }
 
   async findUserOrganization() {
-    const prisma = await this.prisma.build({ context: 'user' });
-    const currentUser = prisma.$currentUser();
-    if (!currentUser) {
+    const prisma = await this.prisma.build();
+    const rlsContext = prisma.$rlsContext();
+    if (!rlsContext) {
       throw new NotFoundException(
         'Cannot find your organization, because no user information was found.',
       );
     }
 
     const siteResult = await prisma.site.findUnique({
-      where: { id: currentUser.siteId },
+      where: { id: rlsContext.siteId },
       select: {
         id: true,
         name: true,
@@ -218,6 +188,10 @@ export class ClientsService {
             address: true,
             phoneNumber: true,
             demoMode: true,
+            status: true,
+            startedOn: true,
+            createdOn: true,
+            modifiedOn: true,
           },
         },
       },
@@ -236,7 +210,9 @@ export class ClientsService {
   }
 
   async update(id: string, updateClientDto: UpdateClientDto) {
-    const prisma = await this.prisma.build();
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
+    });
     const result = await prisma.$transaction(async (tx) =>
       tx.client
         .update({
@@ -245,40 +221,23 @@ export class ClientsService {
         })
         .catch(as404OrThrow),
     );
-    this.invalidateClientStatusCache(result.externalId);
+    // NOTE: We are not invalidating the access grant caches here because wildcard cache
+    // deletions are not supported by the memory cache service. The TTL is short enough that
+    // stale cache is not a problem.
     return result;
   }
 
   async remove(id: string) {
-    const prisma = await this.prisma.build();
-    return prisma.$transaction(async (tx) => {
-      const client = await tx.client.findUniqueOrThrow({
-        where: { id },
-        include: { sites: true },
-      });
-      const result = await tx.client.delete({ where: { id } });
-
-      const users = await this.usersService
-        .findAll(
-          QueryUserDto.create({
-            limit: 5000,
-          }),
-          client,
-        )
-        .then((users) => users.results);
-
-      await Promise.all(
-        users.map((user) => this.usersService.remove(user.id, client)),
-      );
-
-      this.invalidateClientStatusCache(client.externalId);
-
-      return result;
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
     });
+    return prisma.client.delete({ where: { id } }).catch(as404OrThrow);
   }
 
   async duplicateDemo(id: string, options: DuplicateDemoClientDto) {
-    const prisma = await this.prisma.build();
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
+    });
     return prisma.$transaction(async (tx) => {
       const existingClient = await tx.client
         .findUniqueOrThrow({
@@ -335,7 +294,6 @@ export class ClientsService {
       });
 
       const siteIdsMap = new Map<string, string>();
-      const siteExternalIdsMap = new Map<string, string>();
       await Promise.all(
         sites.map(async (site) => {
           const {
@@ -361,7 +319,6 @@ export class ClientsService {
             },
           });
           siteIdsMap.set(site.id, duplicateSite.id);
-          siteExternalIdsMap.set(site.externalId, duplicateSite.externalId);
         }),
       );
 
@@ -441,63 +398,36 @@ export class ClientsService {
         }),
       );
 
-      const query = QueryUserDto.create({
-        limit: 1000,
+      // Duplicate members: create new Person records with access to the duplicate client
+      const sourceMembers = await tx.person.findMany({
+        where: {
+          clientAccess: { some: { clientId: existingClient.id } },
+        },
+        include: {
+          clientAccess: { where: { clientId: existingClient.id } },
+        },
       });
-      const users = await this.usersService
-        .findAll(query, existingClient)
-        .then((users) => users.results);
 
-      const newUserIds: string[] = [];
+      for (const member of sourceMembers) {
+        const newEmail = member.email.split('@')[0] + '@' + options.emailDomain;
 
-      try {
-        await Promise.all(
-          users.map(async (user) => {
-            const newEmail =
-              user.email.split('@')[0] + '@' + options.emailDomain;
-
-            const newUser = await this.usersService.create(
-              CreateUserDto.create({
-                email: newEmail,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                siteExternalId: siteExternalIdsMap.get(user.siteExternalId),
-                phoneNumber: user.phoneNumber,
-                position: user.position,
-                password: options.password,
-              }),
-              duplicateClient,
-            );
-            newUserIds.push(newUser.id);
-
-            // Assign all roles from the source user
-            if (user.roles.length === 0) {
-              return;
-            }
-
-            const roleIds = user.roles.map((role) => role.id);
-
-            if (roleIds.length === 0) {
-              return;
-            }
-
-            await this.usersService.setRoles(
-              newUser.id,
-              { roleIds },
-              duplicateClient,
-            );
-          }),
-        );
-      } catch (e) {
-        await Promise.all(
-          newUserIds.map((userId) =>
-            pRetry(() => this.usersService.remove(userId, duplicateClient), {
-              retries: 3,
-            }),
-          ),
-        );
-
-        throw e;
+        await tx.person.create({
+          data: {
+            firstName: member.firstName,
+            lastName: member.lastName,
+            email: newEmail,
+            phoneNumber: member.phoneNumber,
+            position: member.position,
+            clientAccess: {
+              create: member.clientAccess.map((access) => ({
+                clientId: duplicateClient.id,
+                siteId: siteIdsMap.get(access.siteId) || access.siteId,
+                roleId: access.roleId,
+                isPrimary: access.isPrimary,
+              })),
+            },
+          },
+        });
       }
 
       return duplicateClient;
@@ -510,14 +440,13 @@ export class ClientsService {
     if (query.clientId) {
       uniqueWhere = { id: query.clientId };
     } else {
-      const user = this.cls.get('user');
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-      uniqueWhere = { externalId: user.clientId };
+      const accessGrant = this.cls.requireAccessGrant();
+      uniqueWhere = { id: accessGrant.clientId };
     }
 
-    const prisma = await this.prisma.build();
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
+    });
 
     return prisma.$transaction(async (tx) => {
       const client = await tx.client
@@ -556,14 +485,13 @@ export class ClientsService {
     if (options.clientId) {
       uniqueWhere = { id: options.clientId };
     } else {
-      const user = this.cls.get('user');
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-      uniqueWhere = { externalId: user.clientId };
+      const accessGrant = this.cls.requireAccessGrant();
+      uniqueWhere = { id: accessGrant.clientId };
     }
 
-    const prisma = await this.prisma.build();
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
+    });
 
     const client = await prisma.client
       .findUniqueOrThrow({
@@ -779,10 +707,12 @@ export class ClientsService {
   }
 
   async renewNoncompliantDemoAssets(options: { clientId?: string } = {}) {
-    const prisma = await this.prisma.build();
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
+    });
 
-    const currentUser = prisma.$currentUser();
-    const clientId = options.clientId ?? currentUser?.clientId;
+    const rlsContext = prisma.$rlsContext();
+    const clientId = options.clientId ?? rlsContext?.clientId;
 
     if (!clientId) {
       throw new BadRequestException('Client ID is required');
@@ -867,95 +797,27 @@ export class ClientsService {
       };
     }>,
   ) {
-    const prisma = await this.prisma.build();
-    const currentUser = prisma.$currentUser();
-    const hasMultiSiteVisibility =
-      prisma.$mode === 'cron' ||
-      (currentUser && currentUser.hasMultiSiteVisibility);
+    // Multi-level check to ensure we only operate on demo clients.
+    if (!client.demoMode) {
+      return [];
+    }
 
-    const allowedSiteIds = currentUser
-      ? currentUser.allowedSiteIdsStr.split(',')
-      : [];
-    let allowedSiteExternalIds: string[] = [];
-    if (!hasMultiSiteVisibility && allowedSiteIds.length > 0) {
-      const allowedSites = await prisma.site.findMany({
-        where: {
-          id: {
-            in: allowedSiteIds,
+    const prisma = await this.prisma.build();
+
+    return await prisma.person.findMany({
+      where: {
+        clientAccess: {
+          some: {
+            clientId: client.id,
+            role: {
+              capabilities: {
+                has: CAPABILITIES.PERFORM_INSPECTIONS,
+              },
+            },
           },
         },
-        select: {
-          externalId: true,
-        },
-      });
-      allowedSiteExternalIds = allowedSites.map((s) => s.externalId);
-    }
-
-    const queryFilters: CustomQueryFilter[] = [
-      {
-        q: {
-          key: 'client_id',
-          op: 'eq',
-          value: client.externalId,
-        },
       },
-    ];
-
-    if (!hasMultiSiteVisibility) {
-      queryFilters.push({
-        q: {
-          key: 'site_id',
-          op: 'in',
-          value: allowedSiteExternalIds,
-        } as const,
-      });
-    }
-
-    // Get all Keycloak users for this client to select inspectors from
-    const keycloakUsersResponse =
-      await this.keycloakService.findUsersByAttribute({
-        filter: {
-          AND: queryFilters,
-        },
-        limit: 500,
-        offset: 0,
-      });
-
-    // Get or create Person records for Keycloak users first (needed for asset setup)
-    const keycloakUsers = keycloakUsersResponse.results;
-    const inspectors = await Promise.all(
-      keycloakUsers
-        .slice(0, Math.min(8, keycloakUsers.length))
-        .map(async (kcUser) => {
-          const personId = kcUser.id;
-          if (!personId) return null;
-
-          let person = await prisma.person.findUnique({
-            where: { idpId: personId },
-          });
-
-          if (!person) {
-            const theirSiteId = client.sites.find(
-              (site) => site.externalId === kcUser.attributes?.site_id?.[0],
-            )?.id;
-
-            person = await prisma.person.create({
-              data: {
-                idpId: personId,
-                firstName: kcUser.firstName || 'Inspector',
-                lastName: kcUser.lastName || 'User',
-                email: kcUser.email || `inspector${personId}@example.com`,
-                siteId: theirSiteId || '',
-                clientId: client.id,
-              },
-            });
-          }
-
-          return person;
-        }),
-    );
-
-    return inspectors.filter((i): i is NonNullable<typeof i> => i !== null);
+    });
   }
 
   private async generateRandomDemoInspection(options: {
@@ -1132,8 +994,4 @@ class ParentChildIdMap<T extends { id: string }, U extends { id: string }> {
     );
     children.forEach((child) => this.childById.set(child.id, child));
   }
-}
-
-function buildClientStatusCacheKey(clientExternalId: string) {
-  return `clientStatus:externalId=${clientExternalId}`;
 }

@@ -8,18 +8,19 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import { CheckAnyCapability, CheckCapability } from 'src/auth/policies.guard';
 import { ConsumablesService } from './consumables.service';
 import { CreateConsumableDto } from './dto/create-consumable.dto';
 import { QueryConsumableDto } from './dto/query-consumable.dto';
 import { UpdateConsumableDto } from './dto/update-consumable.dto';
 
 @Controller('consumables')
-@CheckResourcePermissions('consumables')
+@CheckAnyCapability('manage-assets', 'perform-inspections', 'view-reports')
 export class ConsumablesController {
   constructor(private readonly consumablesService: ConsumablesService) {}
 
   @Post()
+  @CheckCapability('manage-assets')
   create(@Body() createConsumableDto: CreateConsumableDto) {
     return this.consumablesService.create(createConsumableDto);
   }
@@ -35,6 +36,7 @@ export class ConsumablesController {
   }
 
   @Patch(':id')
+  @CheckCapability('manage-assets')
   update(
     @Param('id') id: string,
     @Body() updateConsumableDto: UpdateConsumableDto,
@@ -43,6 +45,7 @@ export class ConsumablesController {
   }
 
   @Delete(':id')
+  @CheckCapability('manage-assets')
   remove(@Param('id') id: string) {
     return this.consumablesService.remove(id);
   }
