@@ -8,9 +8,7 @@ import { endOfMonth, isBefore, min, subDays, subMonths } from 'date-fns';
 import { AssetsService } from 'src/assets/assets/assets.service';
 import { ApiClsService } from 'src/auth/api-cls.service';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
-import { CustomQueryFilter } from 'src/auth/keycloak/types';
 import { CAPABILITIES } from 'src/auth/utils/capabilities';
-import { isScopeAtLeast } from 'src/auth/utils/scope';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import {
@@ -18,7 +16,6 @@ import {
   AssetQuestionType,
   InspectionStatus,
   Prisma,
-  RoleScope,
 } from 'src/generated/prisma/client';
 import { getAssetsToRenewForDemoClient } from 'src/generated/prisma/sql';
 import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
@@ -800,114 +797,27 @@ export class ClientsService {
       };
     }>,
   ) {
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
-    const currentUser = prisma.$rlsContext();
-    const hasMultiSiteScope =
-      prisma.$mode === 'cron' ||
-      (currentUser && isScopeAtLeast(currentUser.scope, RoleScope.CLIENT));
+    // Multi-level check to ensure we only operate on demo clients.
+    if (!client.demoMode) {
+      return [];
+    }
 
-    const allowedSiteIds = currentUser
-      ? currentUser.allowedSiteIdsStr.split(',')
-      : [];
-    let allowedSiteExternalIds: string[] = [];
-    if (!hasMultiSiteScope && allowedSiteIds.length > 0) {
-      const allowedSites = await prisma.site.findMany({
-        where: {
-          id: {
-            in: allowedSiteIds,
+    const prisma = await this.prisma.build();
+
+    return await prisma.person.findMany({
+      where: {
+        clientAccess: {
+          some: {
+            clientId: client.id,
+            role: {
+              capabilities: {
+                has: CAPABILITIES.PERFORM_INSPECTIONS,
+              },
+            },
           },
         },
-        select: {
-          externalId: true,
-        },
-      });
-      allowedSiteExternalIds = allowedSites.map((s) => s.externalId);
-    }
-
-    const queryFilters: CustomQueryFilter[] = [
-      {
-        q: {
-          key: 'client_id',
-          op: 'eq',
-          value: client.externalId,
-        },
-      },
-    ];
-
-    if (!hasMultiSiteScope) {
-      queryFilters.push({
-        q: {
-          key: 'site_id',
-          op: 'in',
-          value: allowedSiteExternalIds,
-        } as const,
-      });
-    }
-
-    // Get all Keycloak users for this client to select inspectors from
-    const keycloakUsersResponse =
-      await this.keycloakService.findUsersByAttribute({
-        filter: {
-          AND: queryFilters,
-        },
-        limit: 500,
-        offset: 0,
-      });
-
-    // Get or create Person records for Keycloak users first (needed for asset setup)
-    const keycloakUsers = keycloakUsersResponse.results;
-    const { id: inspectorRoleId } = await prisma.role.findFirstOrThrow({
-      select: {
-        id: true,
-      },
-      where: {
-        isSystem: true,
-        scope: RoleScope.SITE,
-        capabilities: {
-          has: CAPABILITIES.PERFORM_INSPECTIONS,
-        },
       },
     });
-    const inspectors = await Promise.all(
-      keycloakUsers
-        .slice(0, Math.min(8, keycloakUsers.length))
-        .map(async (kcUser) => {
-          const personId = kcUser.id;
-          if (!personId) return null;
-
-          let person = await prisma.person.findUnique({
-            where: { idpId: personId },
-          });
-
-          if (!person) {
-            const theirSiteId = client.sites.find(
-              (site) => site.externalId === kcUser.attributes?.site_id?.[0],
-            )?.id;
-
-            person = await prisma.person.create({
-              data: {
-                idpId: personId,
-                firstName: kcUser.firstName || 'Inspector',
-                lastName: kcUser.lastName || 'User',
-                email: kcUser.email || `inspector${personId}@example.com`,
-                clientAccess: {
-                  create: {
-                    clientId: client.id,
-                    siteId: theirSiteId || '',
-                    roleId: inspectorRoleId,
-                  },
-                },
-              },
-            });
-          }
-
-          return person;
-        }),
-    );
-
-    return inspectors.filter((i): i is NonNullable<typeof i> => i !== null);
   }
 
   private async generateRandomDemoInspection(options: {
