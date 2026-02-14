@@ -149,9 +149,11 @@ describe('ClientsService', () => {
         },
         person: {
           findUnique: jest.fn().mockResolvedValue(null),
-          findMany: jest.fn().mockResolvedValue([
-            { id: 'person-1', firstName: 'John', lastName: 'Doe' },
-          ]),
+          findMany: jest
+            .fn()
+            .mockResolvedValue([
+              { id: 'person-1', firstName: 'John', lastName: 'Doe' },
+            ]),
           create: jest.fn().mockResolvedValue({
             id: 'person-1',
             firstName: 'John',

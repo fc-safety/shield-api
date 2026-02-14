@@ -108,7 +108,17 @@ export class MembersService {
    * Invite a new member via the invitations service.
    */
   async invite(dto: InviteMemberDto) {
-    return this.invitations.create(dto);
+    const results = await this.invitations.createBulk({
+      invitations: [
+        {
+          email: dto.email,
+          siteId: dto.siteId,
+          roleId: dto.roleId,
+        },
+      ],
+      expiresInDays: dto.expiresInDays,
+    });
+    return results[0];
   }
 
   /**
