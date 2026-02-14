@@ -13,8 +13,10 @@ export interface PolicyHandlerContext {
   moduleRef: ModuleRef;
 }
 
-export interface PublicPolicyHandlerContext
-  extends Omit<PolicyHandlerContext, 'user' | 'accessGrant'> {
+export interface PublicPolicyHandlerContext extends Omit<
+  PolicyHandlerContext,
+  'user' | 'accessGrant'
+> {
   user?: PolicyHandlerContext['user'];
   accessGrant?: PolicyHandlerContext['accessGrant'];
 }

@@ -11,7 +11,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { CheckCapability, CheckIsAuthenticated } from 'src/auth/utils/policies';
 import { Public, SkipAccessGrantValidation } from '../../auth/auth.guard';
-import { CreateInvitationDto } from './dto/create-invitation.dto';
+import { CreateInvitationsDto } from './dto/create-invitation.dto';
 import { QueryInvitationDto } from './dto/query-invitation.dto';
 import { InvitationsService } from './invitations.service';
 
@@ -21,13 +21,13 @@ export class InvitationsController {
   constructor(private readonly invitationsService: InvitationsService) {}
 
   /**
-   * Create a new invitation.
+   * Create invitations in bulk.
    * Client Admin+: Can create invitations for their client.
    * Super Admin: Can create for any client.
    */
   @Post()
-  async create(@Body() dto: CreateInvitationDto) {
-    return this.invitationsService.create(dto);
+  async create(@Body() dto: CreateInvitationsDto) {
+    return this.invitationsService.createBulk(dto);
   }
 
   /**
@@ -61,6 +61,14 @@ export class InvitationsController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.invitationsService.findOne(id);
+  }
+
+  /**
+   * Resend the invitation email for an existing invitation.
+   */
+  @Post(':id/resend')
+  async resend(@Param('id') id: string) {
+    return this.invitationsService.resend(id);
   }
 
   /**

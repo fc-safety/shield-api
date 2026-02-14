@@ -15,7 +15,7 @@ import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from '../../config/api-config.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateInvitationDto } from './dto/create-invitation.dto';
+import { CreateInvitationsDto } from './dto/create-invitation.dto';
 import { QueryInvitationDto } from './dto/query-invitation.dto';
 
 @Injectable()
@@ -36,6 +36,33 @@ export class InvitationsService {
   private getInviteUrl(code: string): string {
     const frontendUrl = this.config.get('FRONTEND_URL');
     return `${frontendUrl}/accept-invite/${code}`;
+  }
+
+  /**
+   * Build email job data for an invitation.
+   */
+  private buildInvitationEmailData(invitation: {
+    email: string;
+    code: string;
+    expiresOn: Date;
+    client: { name: string };
+    site: { name: string };
+    role: { name: string };
+    createdBy: { firstName: string; lastName: string };
+  }) {
+    return {
+      templateName: 'invitation' as const,
+      to: [invitation.email],
+      templateProps: {
+        clientName: invitation.client.name,
+        siteName: invitation.site.name,
+        roleName: invitation.role.name,
+        inviterFirstName: invitation.createdBy.firstName,
+        inviterLastName: invitation.createdBy.lastName,
+        inviteUrl: this.getInviteUrl(invitation.code),
+        expiresOn: invitation.expiresOn.toISOString(),
+      },
+    };
   }
 
   /**
@@ -80,38 +107,54 @@ export class InvitationsService {
   }
 
   /**
-   * Create a new invitation.
+   * Create invitations in bulk.
    */
-  async create(dto: CreateInvitationDto) {
+  async createBulk(dto: CreateInvitationsDto) {
     const person = this.cls.requirePerson();
     const accessGrant = this.cls.requireAccessGrant();
-    const prisma = await this.prisma.build();
 
     // Determine target clientId
     const targetClientId = dto.clientId || accessGrant.clientId;
 
-    // Validate site exists and belongs to client
-    const site = await prisma.site.findUnique({
-      where: { id: dto.siteId },
-    });
-    if (!site) {
-      throw new NotFoundException(`Site with ID ${dto.siteId} not found`);
-    }
-    if (site.clientId !== targetClientId) {
-      throw new BadRequestException(
-        `Site ${dto.siteId} does not belong to client ${targetClientId}`,
-      );
+    // Collect unique siteIds and roleIds
+    const uniqueSiteIds = [...new Set(dto.invitations.map((i) => i.siteId))];
+    const uniqueRoleIds = [...new Set(dto.invitations.map((i) => i.roleId))];
+
+    // Bulk validate sites and roles
+    const prisma = await this.prisma.build();
+
+    const [sites, roles] = await Promise.all([
+      prisma.site.findMany({ where: { id: { in: uniqueSiteIds } } }),
+      prisma.role.findMany({
+        where: {
+          id: { in: uniqueRoleIds },
+          clientAssignable: accessGrant.scopeAllows('SYSTEM')
+            ? undefined
+            : true,
+        },
+      }),
+    ]);
+
+    // Validate all sites exist and belong to the target client
+    const siteMap = new Map(sites.map((s) => [s.id, s]));
+    for (const siteId of uniqueSiteIds) {
+      const site = siteMap.get(siteId);
+      if (!site) {
+        throw new NotFoundException(`Site with ID ${siteId} not found`);
+      }
+      if (site.clientId !== targetClientId) {
+        throw new BadRequestException(
+          `Site ${siteId} does not belong to client ${targetClientId}`,
+        );
+      }
     }
 
-    const role = await prisma.role.findUnique({
-      where: {
-        id: dto.roleId,
-        // Make sure that only SYSTEM admins can assign ANY roles to clients.
-        clientAssignable: accessGrant.scopeAllows('SYSTEM') ? undefined : true,
-      },
-    });
-    if (!role) {
-      throw new NotFoundException(`Role with ID ${dto.roleId} not found`);
+    // Validate all roles exist
+    const roleMap = new Map(roles.map((r) => [r.id, r]));
+    for (const roleId of uniqueRoleIds) {
+      if (!roleMap.get(roleId)) {
+        throw new NotFoundException(`Role with ID ${roleId} not found`);
+      }
     }
 
     // Calculate expiration date
@@ -119,44 +162,83 @@ export class InvitationsService {
     const expiresOn = new Date();
     expiresOn.setDate(expiresOn.getDate() + expiresInDays);
 
-    // Generate unique code
-    const code = nanoid(12);
+    // Build data for all invitations
+    const createData = dto.invitations.map((inv) => ({
+      code: nanoid(18),
+      clientId: targetClientId,
+      createdById: person.id,
+      email: inv.email,
+      roleId: inv.roleId,
+      siteId: inv.siteId,
+      expiresOn,
+    }));
 
-    // Bypass RLS to create invitation to prevent issues with
-    // cross-client access grants.
-    const invitation = await this.prisma
-      .bypassRLS()
-      .$transaction(async (tx) => {
-        // Create invitation
-        const invitation = await tx.invitation.create({
-          data: {
-            code,
-            clientId: site.clientId,
-            createdById: person.id,
-            email: dto.email,
-            roleId: role.id,
-            siteId: site.id,
-            expiresOn,
-          },
-          include: this.invitationInclude,
-        });
-
-        await this.notifications.queueEmail({
-          templateName: 'invitation',
-          to: [invitation.email],
-          templateProps: {
-            clientName: invitation.client.name,
-            siteName: invitation.site.name,
-            roleName: invitation.role.name,
-            inviterFirstName: invitation.createdBy.firstName,
-            inviterLastName: invitation.createdBy.lastName,
-            inviteUrl: this.getInviteUrl(invitation.code),
-            expiresOn: invitation.expiresOn.toISOString(),
-          },
-        });
-
-        return invitation;
+    // Create all invitations in a single transaction
+    const bypassPrisma = this.prisma.bypassRLS();
+    const rows = await bypassPrisma.$transaction(async (tx) => {
+      // Bulk create and return the new records (select id only; include not supported)
+      const created = await tx.invitation.createManyAndReturn({
+        data: createData,
+        select: { id: true },
       });
+
+      // Fetch full records with relations
+      return tx.invitation.findMany({
+        where: { id: { in: created.map((r) => r.id) } },
+        include: this.invitationInclude,
+        orderBy: { createdOn: 'asc' },
+      });
+    });
+
+    // Queue all invitation emails in bulk
+    await this.notifications
+      .queueEmailBulk(rows.map((inv) => this.buildInvitationEmailData(inv)))
+      .catch((e) =>
+        this.logger.error(
+          'Failed to queue invitation emails after creation',
+          e,
+        ),
+      );
+
+    return rows.map((invitation) => ({
+      ...invitation,
+      inviteUrl: this.getInviteUrl(invitation.code),
+    }));
+  }
+
+  /**
+   * Resend the invitation email for an existing invitation.
+   */
+  async resend(id: string) {
+    const prisma = await this.prisma.build();
+
+    const invitation = await prisma.invitation
+      .findUniqueOrThrow({
+        where: { id },
+        include: this.invitationInclude,
+      })
+      .catch(as404OrThrow);
+
+    // Validate the invitation is still PENDING
+    if (invitation.status !== 'PENDING') {
+      throw new BadRequestException(
+        `Cannot resend invitation with status ${invitation.status}`,
+      );
+    }
+
+    // Check if expired by date
+    if (new Date() > invitation.expiresOn) {
+      await prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { status: 'EXPIRED' },
+      });
+      throw new GoneException('This invitation has expired');
+    }
+
+    // Queue the invitation email again
+    await this.notifications.queueEmail(
+      this.buildInvitationEmailData(invitation),
+    );
 
     return {
       ...invitation,

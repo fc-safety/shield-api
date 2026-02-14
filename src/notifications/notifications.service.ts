@@ -196,6 +196,17 @@ export class NotificationsService {
     await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, data);
   }
 
+  async queueEmailBulk<T extends NotificationTemplateId>(
+    data: SendEmailJobData<T>[],
+  ) {
+    await this.notificationsQueue.addBulk(
+      data.map((d) => ({
+        name: NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
+        data: d,
+      })),
+    );
+  }
+
   async queueNewProductRequestEmail(productRequestId: string) {
     await this.notificationsQueue.add(
       NOTIFICATIONS_JOB_NAMES.SEND_NEW_PRODUCT_REQUEST_EMAIL,
