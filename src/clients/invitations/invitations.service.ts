@@ -164,7 +164,7 @@ export class InvitationsService {
 
     // Build data for all invitations
     const createData = dto.invitations.map((inv) => ({
-      code: nanoid(12),
+      code: nanoid(18),
       clientId: targetClientId,
       createdById: person.id,
       email: inv.email,
