@@ -1,15 +1,12 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import {
-  CheckPolicies,
-  CheckResourcePermissions,
-} from 'src/auth/policies.guard';
+import { CheckAnyCapability, CheckCapability } from 'src/auth/policies.guard';
 import { AlertsService } from './alerts.service';
 import { AttachInspectionImageDto } from './dto/attach-inspection-image.dto';
 import { QueryAlertDto } from './dto/query-alert.dto';
 import { ResolveAlertDto } from './dto/resolve-alert.dto';
 
 @Controller('alerts')
-@CheckResourcePermissions('alerts')
+@CheckAnyCapability('resolve-alerts', 'view-reports')
 export class AlertsController {
   constructor(private readonly alertsService: AlertsService) {}
 
@@ -23,7 +20,7 @@ export class AlertsController {
     return this.alertsService.findOne(id);
   }
 
-  @CheckPolicies((context) => context.user.can('resolve', 'alerts'))
+  @CheckCapability('resolve-alerts')
   @Post(':id/resolve')
   resolveAlert(
     @Param('id') id: string,
@@ -32,7 +29,7 @@ export class AlertsController {
     return this.alertsService.resolveAlert(id, resolveAlertDto);
   }
 
-  @CheckPolicies((context) => context.user.canCreate('inspections'))
+  @CheckCapability('perform-inspections')
   @Post(':id/attach-inspection-image')
   attachInspectionImage(
     @Param('id') id: string,

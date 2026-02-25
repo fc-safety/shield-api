@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { InspectionsService } from './inspections.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssetsService } from '../assets/assets.service';
 import { TagsService } from '../tags/tags.service';
+import { InspectionsService } from './inspections.service';
 
 describe('InspectionsService', () => {
   let service: InspectionsService;
@@ -22,7 +22,7 @@ describe('InspectionsService', () => {
       asset: {
         findUniqueOrThrow: jest.fn(),
       },
-      $currentUser: jest.fn(),
+      $rlsContext: jest.fn(),
     }),
   };
 

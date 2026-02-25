@@ -10,7 +10,7 @@ export class AnsiCategoriesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createAnsiCategoryDto: CreateAnsiCategoryDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.ansiCategory.create({
         data: createAnsiCategoryDto,
       }),
@@ -19,7 +19,7 @@ export class AnsiCategoriesService {
 
   async findAll(queryAnsiCategoryDto?: QueryAnsiCategoryDto) {
     return this.prisma
-      .forUser()
+      .build()
       .then((prisma) =>
         prisma.ansiCategory.findManyForPage(
           buildPrismaFindArgs<typeof prisma.ansiCategory>(queryAnsiCategoryDto),
@@ -28,7 +28,7 @@ export class AnsiCategoriesService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.ansiCategory.findUniqueOrThrow({
         where: { id },
       }),
@@ -36,7 +36,7 @@ export class AnsiCategoriesService {
   }
 
   async update(id: string, updateAnsiCategoryDto: UpdateAnsiCategoryDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.ansiCategory.update({
         where: { id },
         data: updateAnsiCategoryDto,
@@ -45,7 +45,7 @@ export class AnsiCategoriesService {
   }
 
   async remove(id: string) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.ansiCategory.delete({
         where: { id },
       }),

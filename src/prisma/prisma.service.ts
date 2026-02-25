@@ -1,19 +1,10 @@
-import {
-  ForbiddenException,
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
-import { ClsService } from 'nestjs-cls';
-import {
-  PeopleService,
-  PersonRepresentation,
-  UserConfigurationError,
-} from 'src/clients/people/people.service';
-import { isNil, ViewContext } from 'src/common/utils';
-import { Prisma, PrismaClient } from 'src/generated/prisma/client';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ApiClsService } from 'src/auth/api-cls.service';
+import { TAccessGrant, TScope } from 'src/auth/auth.types';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
+import { isNil } from 'src/common/utils';
+import { Prisma, PrismaClient, RoleScope } from 'src/generated/prisma/client';
 import { RedisService } from 'src/redis/redis.service';
-import { CommonClsStore } from '../common/types';
 import { PrismaAdapter } from './prisma.adapter';
 
 const DEFAULT_PRISMA_OPTIONS = {
@@ -51,9 +42,9 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   constructor(
-    protected readonly cls: ClsService<CommonClsStore>,
+    protected readonly cls: ApiClsService,
     private readonly redis: RedisService,
-    private readonly peopleService: PeopleService,
+    private readonly memoryCache: MemoryCacheService,
     private readonly prismaAdapter: PrismaAdapter,
   ) {
     super({
@@ -78,16 +69,8 @@ export class PrismaService
     });
   }
 
-  public async forUser() {
-    return this.build({ context: 'user' });
-  }
-
   public bypassRLS(options?: BypassRLSExtensionOptions) {
     return this.$extends(this.buildBypassRLSExtension(options));
-  }
-
-  public async forContext(_context?: ViewContext) {
-    return this.build({ context: _context });
   }
 
   public async build(options: PrimaryExtensionOptions = {}) {
@@ -98,12 +81,12 @@ export class PrismaService
     model,
     operation,
     result,
-    person,
+    accessGrant,
   }: {
     model: string;
     operation: string;
     result: unknown;
-    person: Pick<PersonRepresentation, 'clientId'>;
+    accessGrant: TAccessGrant;
   }) {
     if (
       ![
@@ -146,10 +129,19 @@ export class PrismaService
       eventBody.id = String(result.id);
     }
 
-    const channel = `db-events:${person.clientId}:${model}:${cleanedOperation}`;
+    const channel = `db-events:${accessGrant.clientId}:${model}:${cleanedOperation}`;
     const payload = JSON.stringify(eventBody);
 
-    this.redis.getPublisher().publish(channel, payload);
+    this.redis
+      .getPublisher()
+      .publish(channel, payload)
+      .catch((error) => {
+        this.logger.error('Error publishing model event to Redis', {
+          error,
+          channel,
+          payload,
+        });
+      });
   }
 
   private parsePrismaQuery(query: string): { model?: string; action?: string } {
@@ -192,8 +184,8 @@ export class PrismaService
       // Build base extension that all subsequent extensions will build upon.
       const extendedPrisma = prisma.$extends({
         client: {
-          $viewContext: 'admin' as const,
-          $currentUser: () => options.person,
+          $accessIntent: 'system' as const,
+          $rlsContext: () => options.rlsContext,
           $mode: mode ?? 'request',
         },
         model: {
@@ -225,10 +217,19 @@ export class PrismaService
       // Extend transactions and query methods to set RLS context before executing the query.
       return extendedPrisma.$extends({
         client: {
-          $transaction: async (
-            ...args: Parameters<typeof extendedPrisma.$transaction>
-          ) => {
-            const [fn, ...rest] = args;
+          $transaction: async <T>(
+            fn: (
+              tx: Parameters<
+                Parameters<typeof extendedPrisma.$transaction>[0]
+              >[0],
+            ) => Promise<T> | T,
+            ...rest: Parameters<typeof extendedPrisma.$transaction> extends [
+              any,
+              ...infer R,
+            ]
+              ? R
+              : never
+          ): Promise<T> => {
             return await extendedPrisma.$transaction(
               async (tx) => {
                 await Promise.all(buildRLSContextStatements(tx, true));
@@ -264,26 +265,80 @@ export class PrismaService
     });
   }
 
-  private async buildPrimaryExtension(options: PrimaryExtensionOptions) {
-    const user = this.cls.get('user');
-    const context = options.context ?? this.cls.get('viewContext');
-    const isSuperAdmin = !!user?.isSuperAdmin();
-    const mode = this.cls.get('mode');
-    const cronMode = mode === 'cron';
-    const shouldBypassRLS = cronMode || (isSuperAdmin && context === 'admin');
+  public async getAllowedSiteIdsForSite(siteId: string): Promise<string[]> {
+    const cacheKey = `allowed-site-ids:siteId=${siteId}`;
 
-    let person: PersonRepresentation | undefined;
-    if (options.person) {
-      person = options.person;
-    } else if (!cronMode) {
-      try {
-        person = await this.peopleService.getPersonRepresentation();
-      } catch (e) {
-        if (e instanceof UserConfigurationError) {
-          throw new ForbiddenException(e.message);
+    return this.memoryCache.getOrSet<string[]>(
+      cacheKey,
+      async () => {
+        const site = await this.bypassRLS().site.findUnique({
+          where: { id: siteId },
+          select: {
+            id: true,
+            subsites: {
+              select: {
+                id: true,
+                subsites: {
+                  select: {
+                    id: true,
+                    subsites: { select: { id: true } },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (!site) {
+          return [siteId];
         }
-        throw e;
-      }
+
+        // Flatten 3 levels deep
+        return [
+          site.id,
+          ...site.subsites.flatMap((s1) => [
+            s1.id,
+            ...s1.subsites.flatMap((s2) => [
+              s2.id,
+              ...s2.subsites.map((s3) => s3.id),
+            ]),
+          ]),
+        ];
+      },
+      60 * 60 * 1000, // 1 hour
+    );
+  }
+
+  private async buildPrimaryExtension(options: PrimaryExtensionOptions) {
+    const accessIntent = this.cls.accessIntent;
+    const person = this.cls.get('person');
+    const accessGrant = this.cls.get('accessGrant');
+
+    const mode = this.cls.get('mode');
+    const isSystemAdmin =
+      !!accessGrant && accessGrant.scope === RoleScope.SYSTEM;
+
+    const shouldBypassRLS =
+      mode === 'cron' ||
+      !!options.shouldBypassRLSAsSystemAdmin ||
+      accessIntent === 'system';
+    const canBypassRLS = mode === 'cron' || isSystemAdmin;
+    const bypassRLS = shouldBypassRLS && canBypassRLS;
+
+    let rlsContext: IPrismaRLSContext | undefined = options.rlsContext;
+    if (accessGrant && person) {
+      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
+        accessGrant.siteId,
+      );
+      const allowedSiteIdsStr = allowedSiteIds.join(',');
+      rlsContext = {
+        personId: person.id,
+        clientId: accessGrant.clientId,
+        siteId: accessGrant.siteId,
+        allowedSiteIds,
+        allowedSiteIdsStr,
+        scope: accessGrant.scope,
+      };
     }
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -293,8 +348,8 @@ export class PrismaService
       // Build base extension that all subsequent extensions will build upon.
       const extendedPrisma = prisma.$extends({
         client: {
-          $currentUser: () => person,
-          $viewContext: context,
+          $rlsContext: () => rlsContext,
+          $accessIntent: accessIntent,
           $mode: mode ?? 'request',
         },
         model: {
@@ -305,24 +360,15 @@ export class PrismaService
         query: {
           $allModels: {
             async $allOperations({ args, query, operation, model }) {
-              if (!shouldBypassRLS && person) {
-                setModelClientOwnershipForPerson(
-                  args,
-                  model,
-                  operation,
-                  person,
-                );
-              }
-
               const result = await query(args);
 
               // Emit event to Redis.
-              if (person) {
+              if (accessGrant) {
                 thisPrismaService.emitModelEvent({
                   model,
                   operation,
                   result,
-                  person,
+                  accessGrant,
                 });
               }
 
@@ -342,8 +388,8 @@ export class PrismaService
       ) => {
         const rlsContextStatements = buildRLSContextStatements(
           extendedPrisma,
-          shouldBypassRLS,
-          person,
+          bypassRLS,
+          rlsContext,
         );
 
         const statementResults = await extendedPrisma.$transaction([
@@ -378,7 +424,7 @@ export class PrismaService
             return extendedPrisma.$transaction(
               async (tx) => {
                 await Promise.all(
-                  buildRLSContextStatements(tx, shouldBypassRLS, person),
+                  buildRLSContextStatements(tx, bypassRLS, rlsContext),
                 );
                 return fn(tx);
               },
@@ -413,13 +459,25 @@ export class PrismaService
   }
 }
 
+export interface IPrismaRLSContext {
+  personId: string;
+  clientId: string;
+  siteId: string;
+  allowedSiteIds: string[];
+  allowedSiteIdsStr: string;
+  scope: TScope;
+}
+
 export interface PrimaryExtensionOptions {
-  context?: ViewContext;
-  person?: PersonRepresentation;
+  /**
+   * If true, RLS will be bypassed for all queries when the context contains system admin scope or cron mode.
+   */
+  shouldBypassRLSAsSystemAdmin?: boolean;
+  rlsContext?: IPrismaRLSContext;
 }
 
 export interface BypassRLSExtensionOptions {
-  person?: PersonRepresentation;
+  rlsContext?: IPrismaRLSContext;
 }
 
 function buildRLSContextStatements(
@@ -429,17 +487,17 @@ function buildRLSContextStatements(
 function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: false,
-  person: PersonRepresentation,
+  rlsContext: IPrismaRLSContext,
 ): Prisma.PrismaPromise<any>[];
 function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: boolean,
-  person?: PersonRepresentation,
+  rlsContext?: IPrismaRLSContext,
 ): Prisma.PrismaPromise<any>[];
 function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: boolean,
-  person?: PersonRepresentation,
+  rlsContext?: IPrismaRLSContext,
 ) {
   if (shouldBypassRLS) {
     return [
@@ -447,48 +505,17 @@ function buildRLSContextStatements(
     ];
   }
 
-  if (!person) {
-    throw new Error('Person is required when RLS is not bypassed');
+  if (!rlsContext) {
+    throw new Error('RLS context is required when RLS is not bypassed');
   }
 
   return [
-    prismaClient.$executeRaw`SELECT set_config('app.current_client_id', ${person.clientId}, TRUE)`,
-    prismaClient.$executeRaw`SELECT set_config('app.current_site_id', ${person.siteId}, TRUE)`,
-    prismaClient.$executeRaw`SELECT set_config('app.allowed_site_ids', ${person.allowedSiteIdsStr}, TRUE)`,
-    prismaClient.$executeRaw`SELECT set_config('app.current_person_id', ${person.id}, TRUE)`,
-    prismaClient.$executeRaw`SELECT set_config('app.current_user_visibility', ${person.visibility}, TRUE)`,
+    prismaClient.$executeRaw`SELECT set_config('app.current_client_id', ${rlsContext.clientId}, TRUE)`,
+    prismaClient.$executeRaw`SELECT set_config('app.current_site_id', ${rlsContext.siteId}, TRUE)`,
+    prismaClient.$executeRaw`SELECT set_config('app.allowed_site_ids', ${rlsContext.allowedSiteIdsStr}, TRUE)`,
+    prismaClient.$executeRaw`SELECT set_config('app.current_person_id', ${rlsContext.personId}, TRUE)`,
+    prismaClient.$executeRaw`SELECT set_config('app.current_user_scope', ${rlsContext.scope}, TRUE)`,
   ];
-}
-
-/**
- * For certain models that are conditionally owned by a particular client,
- * set the client ID on the model input to the person's client ID.
- *
- * @param args - The arguments for the query.
- * @param model - The model being queried.
- * @param operation - The operation being performed.
- * @param person - The person for whom the query is being executed.
- */
-function setModelClientOwnershipForPerson<T>(
-  args: Prisma.Args<T, 'create' | 'update'>,
-  model: string,
-  operation: string,
-  person: Pick<PersonRepresentation, 'clientId'>,
-) {
-  if (
-    ['create', 'update'].includes(operation) &&
-    'data' in args &&
-    ['Manufacturer', 'ProductCategory', 'Product', 'AssetQuestion'].includes(
-      model,
-    ) &&
-    !args.data?.clientId &&
-    !args.data?.client
-  ) {
-    args.data = {
-      ...args.data,
-      client: { connect: { id: person.clientId } },
-    };
-  }
 }
 
 async function findManyForPageExtensionFn<T>(

@@ -11,7 +11,7 @@ export class ManufacturersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createManufacturerDto: CreateManufacturerDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.manufacturer.create({
         data: createManufacturerDto,
       }),
@@ -35,7 +35,7 @@ export class ManufacturersService {
   }
 
   async findAll(queryManufacturerDto?: QueryManufacturerDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.manufacturer.findManyForPage(
         buildPrismaFindArgs<typeof prisma.manufacturer>(queryManufacturerDto, {
           include: {
@@ -50,7 +50,7 @@ export class ManufacturersService {
   }
 
   async findOne(id: string) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.manufacturer
         .findUniqueOrThrow({
           where: { id },
@@ -66,7 +66,7 @@ export class ManufacturersService {
   }
 
   async update(id: string, updateManufacturerDto: UpdateManufacturerDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.manufacturer
         .update({
           where: { id },
@@ -78,7 +78,7 @@ export class ManufacturersService {
 
   async remove(id: string) {
     return this.prisma
-      .forContext()
+      .build()
       .then((prisma) => prisma.manufacturer.delete({ where: { id } }));
   }
 }

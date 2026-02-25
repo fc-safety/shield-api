@@ -10,7 +10,7 @@ export class VaultOwnershipsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createVaultOwnershipDto: CreateVaultOwnershipDto) {
-    return await this.prisma.forUser().then((prisma) =>
+    return await this.prisma.build().then((prisma) =>
       prisma.vaultOwnership.create({
         data: createVaultOwnershipDto,
       }),
@@ -19,7 +19,7 @@ export class VaultOwnershipsService {
 
   async findAll(queryViewOwnershipDto: QueryViewOwnershipDto) {
     return await this.prisma
-      .forContext()
+      .build()
       .then((prisma) =>
         prisma.vaultOwnership.findManyForPage(
           buildPrismaFindArgs<typeof prisma.vaultOwnership>(
@@ -30,7 +30,7 @@ export class VaultOwnershipsService {
   }
 
   async findOne(id: string) {
-    return await this.prisma.forContext().then((prisma) =>
+    return await this.prisma.build().then((prisma) =>
       prisma.vaultOwnership.findUnique({
         where: { id },
       }),
@@ -38,7 +38,7 @@ export class VaultOwnershipsService {
   }
 
   async findOneByKey(key: string) {
-    return await this.prisma.forUser().then((prisma) =>
+    return await this.prisma.build().then((prisma) =>
       prisma.vaultOwnership.findUnique({
         where: { key },
       }),
@@ -46,7 +46,7 @@ export class VaultOwnershipsService {
   }
 
   async update(id: string, updateVaultOwnershipDto: UpdateVaultOwnershipDto) {
-    return await this.prisma.forUser().then((prisma) =>
+    return await this.prisma.build().then((prisma) =>
       prisma.vaultOwnership.update({
         where: { id },
         data: updateVaultOwnershipDto,
@@ -55,7 +55,7 @@ export class VaultOwnershipsService {
   }
 
   async remove(id: string) {
-    return await this.prisma.forUser().then((prisma) =>
+    return await this.prisma.build().then((prisma) =>
       prisma.vaultOwnership.delete({
         where: { id },
       }),

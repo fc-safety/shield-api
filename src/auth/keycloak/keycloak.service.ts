@@ -3,12 +3,12 @@ import GroupRepresentation from '@keycloak/keycloak-admin-client/lib/defs/groupR
 import UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
 import { RequestArgs } from '@keycloak/keycloak-admin-client/lib/resources/agent';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
 import JSON5 from 'json5';
 import EventEmitter from 'node:events';
 import pRetry from 'p-retry';
 import { isNil } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { describePermission, VALID_PERMISSIONS } from '../permissions';
 import {
   FindUsersByAttributeParams,
   InternalFindUsersByAttributeParams,
@@ -52,36 +52,6 @@ export const getShieldClient = async (
   return (await adminClient.clients.find({ clientId })).at(0);
 };
 
-const syncShieldClientPermissions = async (
-  adminClient: KeycloakAdminClient,
-  clientId: string,
-) => {
-  const client = await getShieldClient(adminClient, clientId);
-  if (!client?.id) return;
-  const roles = await adminClient.clients.listRoles({ id: client.id });
-  const rolesByName = Object.fromEntries(roles.map((r) => [r.name, r]));
-
-  const permissionsToCreate = VALID_PERMISSIONS.filter(
-    (p) => !(p in rolesByName),
-  );
-  // Create any missing permissions (called roles in Keycloak).
-  await Promise.allSettled(
-    permissionsToCreate.map((p) =>
-      adminClient.clients
-        .createRole({
-          id: client.id,
-          name: p,
-          description: describePermission(p),
-          composite: false,
-          clientRole: true,
-        })
-        .catch((e) => {
-          logger.error(`Failed to create role: ${p}`, e);
-        }),
-    ),
-  );
-};
-
 export const keycloakAdminClientFactory = async (config: ApiConfigService) => {
   const keycloakClient = new KeycloakAdminClient({
     realmName: config.get('KEYCLOAK_ADMIN_CLIENT_ADMIN_REALM'),
@@ -111,8 +81,6 @@ export const keycloakAdminClientFactory = async (config: ApiConfigService) => {
     () => doRefreshAuth(),
     config.get('KEYCLOAK_ADMIN_CLIENT_REFRESH_INTERVAL_SECONDS') * 1000,
   );
-
-  syncShieldClientPermissions(keycloakClient, config.get('AUTH_AUDIENCE'));
 
   return keycloakClient;
 };
@@ -266,12 +234,28 @@ export class KeycloakService {
     });
   }
 
+  verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {
+    const secret = this.config.get('KEYCLOAK_WEBHOOK_SECRET');
+    if (!secret) {
+      logger.error(
+        'KEYCLOAK_WEBHOOK_SECRET not configured, unable to verify webhook signature',
+      );
+      return false;
+    }
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+    try {
+      return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    } catch {
+      return false;
+    }
+  }
+
   public async getOrCreateManagedRolesGroup<F extends boolean = false>(
     returnFull?: F,
   ): Promise<F extends true ? GroupRepresentation : { id: string }> {
-    let group = (
-      await this.client.groups.find({ q: 'managed_by:shield-api' })
-    ).at(0);
+    let group = await this.client.groups
+      .find({ q: 'managed_by:shield-api' })
+      .then((groups) => groups.at(0));
     if (group) {
       if (!group.id) {
         throw new Error('Failed to create managed roles group');
@@ -526,5 +510,21 @@ export class KeycloakService {
     (error as any).groupIds = groupIds;
 
     throw error;
+  }
+
+  /**
+   * Get the subgroups under the managed "Roles" parent group.
+   * Each subgroup represents a DB role and has a `shield_role_id` attribute.
+   */
+  async getManagedRoleSubgroups(): Promise<GroupRepresentation[]> {
+    const parent = await this.getOrCreateManagedRolesGroup();
+    return this.client.groups.listSubGroups({ parentId: parent.id });
+  }
+
+  /**
+   * List the Keycloak groups a user belongs to.
+   */
+  async listUserGroups(userId: string): Promise<GroupRepresentation[]> {
+    return this.client.users.listGroups({ id: userId });
   }
 }

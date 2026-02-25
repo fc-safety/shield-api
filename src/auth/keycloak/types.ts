@@ -34,13 +34,11 @@ interface BaseFindUsersByAttributeParams {
   offset?: number;
 }
 
-export interface FindUsersByAttributeParams
-  extends BaseFindUsersByAttributeParams {
+export interface FindUsersByAttributeParams extends BaseFindUsersByAttributeParams {
   filter?: CustomQueryFilter;
 }
 
-export interface InternalFindUsersByAttributeParams
-  extends BaseFindUsersByAttributeParams {
+export interface InternalFindUsersByAttributeParams extends BaseFindUsersByAttributeParams {
   filter?: string;
 }
 

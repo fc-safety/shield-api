@@ -1,14 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsService } from './events.service';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import { RedisService } from 'src/redis/redis.service';
-import { PeopleService } from 'src/clients/people/people.service';
 import { AuthService } from 'src/auth/auth.service';
 
 describe('EventsService', () => {
   let service: EventsService;
 
-  const mockClsService = {
+  const mockApiClsService = {
     get: jest.fn(),
     set: jest.fn(),
   };
@@ -22,10 +21,6 @@ describe('EventsService', () => {
     }),
   };
 
-  const mockPeopleService = {
-    findByIdpId: jest.fn(),
-  };
-
   const mockAuthService = {
     validateToken: jest.fn(),
   };
@@ -34,9 +29,8 @@ describe('EventsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventsService,
-        { provide: ClsService, useValue: mockClsService },
         { provide: RedisService, useValue: mockRedisService },
-        { provide: PeopleService, useValue: mockPeopleService },
+        { provide: ApiClsService, useValue: mockApiClsService },
         { provide: AuthService, useValue: mockAuthService },
       ],
     }).compile();

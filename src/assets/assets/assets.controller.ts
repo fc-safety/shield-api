@@ -9,10 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import {
-  CheckPolicies,
-  CheckResourcePermissions,
-} from 'src/auth/policies.guard';
+import { CheckAnyCapability, CheckCapability } from 'src/auth/utils/policies';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
 import { AssetsService } from './assets.service';
 import { ConfigureAssetDto } from './dto/configure-asset.dto';
@@ -23,11 +20,17 @@ import { UpdateAssetDto } from './dto/update-asset.dto';
 import { UpdateSetupAssetDto } from './dto/update-setup-asset.dto';
 
 @Controller('assets')
-@CheckResourcePermissions('assets')
+@CheckAnyCapability(
+  'manage-assets',
+  'perform-inspections',
+  'view-reports',
+  'register-tags',
+)
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
 
   @Post()
+  @CheckCapability('manage-assets')
   create(@Body() createAssetDto: CreateAssetDto) {
     return this.assetsService.create(createAssetDto);
   }
@@ -58,7 +61,7 @@ export class AssetsController {
     long: { limit: 100, ttl: 15 * 60 * 1000 },
   })
   @Post(':id/send-reminder-notifications')
-  @CheckPolicies(({ user }) => user.can('notify', 'users'))
+  @CheckCapability('manage-users')
   sendReminderNotifications(
     @Param('id') id: string,
     @Body() body: SendNotificationsBodyDto,
@@ -72,11 +75,12 @@ export class AssetsController {
   }
 
   @Patch(':id')
+  @CheckCapability('manage-assets')
   update(@Param('id') id: string, @Body() updateAssetDto: UpdateAssetDto) {
     return this.assetsService.update(id, updateAssetDto);
   }
 
-  @CheckPolicies((context) => context.user.canUpdate('assets'))
+  @CheckCapability('manage-assets')
   @Post(':id/add-tag')
   addTag(
     @Param('id') id: string,
@@ -86,7 +90,7 @@ export class AssetsController {
     return this.assetsService.addTag(id, tagExternalId, tagSerialNumber);
   }
 
-  @CheckPolicies((context) => context.user.can('setup', 'assets'))
+  @CheckAnyCapability('manage-assets', 'perform-inspections', 'register-tags')
   @Post(':id/configure')
   configure(
     @Param('id') id: string,
@@ -95,13 +99,13 @@ export class AssetsController {
     return this.assetsService.configure(id, configureAssetDto);
   }
 
-  @CheckPolicies((context) => context.user.can('setup', 'assets'))
+  @CheckAnyCapability('manage-assets', 'perform-inspections', 'register-tags')
   @Post(':id/setup')
   setup(@Param('id') id: string, @Body() setupAssetDto: SetupAssetDto) {
     return this.assetsService.setup(id, setupAssetDto);
   }
 
-  @CheckPolicies((context) => context.user.can('setup', 'assets'))
+  @CheckAnyCapability('manage-assets', 'perform-inspections', 'register-tags')
   @Patch(':id/setup')
   updateSetup(
     @Param('id') id: string,
@@ -111,6 +115,7 @@ export class AssetsController {
   }
 
   @Delete(':id')
+  @CheckCapability('manage-assets')
   remove(@Param('id') id: string) {
     return this.assetsService.remove(id);
   }

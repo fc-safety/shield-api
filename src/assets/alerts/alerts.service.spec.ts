@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AlertsService } from './alerts.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AlertsService } from './alerts.service';
 
 describe('AlertsService', () => {
   let service: AlertsService;
@@ -12,7 +12,7 @@ describe('AlertsService', () => {
         findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
       },
-      $currentUser: jest.fn(),
+      $rlsContext: jest.fn(),
     }),
   };
 

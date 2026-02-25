@@ -24,7 +24,7 @@ export class InspectionsService {
     sessionId?: string,
     routeId?: string,
   ) {
-    const prisma = await this.prisma.forUser();
+    const prisma = await this.prisma.build();
 
     // IMPORTANT: Validate the inspection token before doing anything else.
     const tagValidationResult = await this.tagsService.validateInspectionToken(
@@ -76,11 +76,14 @@ export class InspectionsService {
     // If the route session exists but isn't owned by the current inspector,
     // update ownership.
     if (inspectionSession) {
-      const currentUser = prisma.$currentUser();
-      if (currentUser && currentUser.id !== inspectionSession.lastInspectorId) {
+      const rlsContext = prisma.$rlsContext();
+      if (
+        rlsContext &&
+        rlsContext.personId !== inspectionSession.lastInspectorId
+      ) {
         await prisma.inspectionSession.update({
           where: { id: inspectionSession.id },
-          data: { lastInspectorId: currentUser.id },
+          data: { lastInspectorId: rlsContext.personId },
         });
       }
     }
@@ -193,7 +196,7 @@ export class InspectionsService {
   }
 
   async findAll(queryInspectionDto?: QueryInspectionDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.inspection.findManyForPage(
         buildPrismaFindArgs<typeof prisma.inspection>(queryInspectionDto, {
           include: {
@@ -216,7 +219,7 @@ export class InspectionsService {
 
   async findOne(id: string) {
     return this.prisma
-      .forContext()
+      .build()
       .then((prisma) =>
         prisma.inspection.findUniqueOrThrow({
           where: { id },
@@ -252,7 +255,7 @@ export class InspectionsService {
   }
 
   async update(id: string, updateInspectionDto: UpdateInspectionDto) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.inspection
         .update({
           where: { id },
@@ -264,12 +267,12 @@ export class InspectionsService {
 
   async remove(id: string) {
     return this.prisma
-      .forUser()
+      .build()
       .then((prisma) => prisma.inspection.delete({ where: { id } }));
   }
 
   async findActiveInspectionSessionsForAsset(assetId: string) {
-    return this.prisma.forUser().then(async (prisma) => {
+    return this.prisma.build().then(async (prisma) => {
       const result = await prisma.inspectionSession.findMany({
         where: {
           inspectionRoute: {
@@ -309,7 +312,7 @@ export class InspectionsService {
   }
 
   async findInspectionSession(id: string) {
-    return this.prisma.forUser().then(async (prisma) => {
+    return this.prisma.build().then(async (prisma) => {
       const handleGetSession = async (sessionId: string) =>
         prisma.inspectionSession.findUniqueOrThrow({
           where: { id: sessionId },
@@ -418,7 +421,7 @@ export class InspectionsService {
   }
 
   async cancelInspectionSession(id: string) {
-    return this.prisma.forUser().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.inspectionSession.update({
         where: { id },
         data: { status: InspectionSessionStatus.CANCELLED },

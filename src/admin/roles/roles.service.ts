@@ -1,430 +1,506 @@
-import RoleRepresentation from '@keycloak/keycloak-admin-client/lib/defs/roleRepresentation';
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createId } from '@paralleldrive/cuid2';
-import { ClsService } from 'nestjs-cls';
+import { ApiClsService } from 'src/auth/api-cls.service';
 import {
-  getShieldClient,
-  KeycloakService,
-} from 'src/auth/keycloak/keycloak.service';
+  CAPABILITY_DESCRIPTIONS,
+  CAPABILITY_LABELS,
+  isValidCapability,
+  TCapability,
+  VALID_CAPABILITIES,
+} from 'src/auth/utils/capabilities';
+import { isScopeAtLeast, RoleScope, TScope } from 'src/auth/utils/scope';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import {
-  ACTION_PERMISSIONS,
-  titleize,
-  VISIBILITY,
-  VISIBILITY_PERMISSIONS,
-} from 'src/auth/permissions';
-import { isNil } from 'src/common/utils';
-import { ApiConfigService } from 'src/config/api-config.service';
-import { NotificationGroups } from 'src/notifications/notification-types';
-import { RedisService } from 'src/redis/redis.service';
+  NotificationGroupId,
+  NotificationGroups,
+} from 'src/notifications/notification-types';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
-import { UpdateNotificationGroupMappingDto } from './dto/update-notification-group-mapping.dto';
-import { UpdatePermissionMappingDto } from './dto/update-permission-mapping.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
-import {
-  keycloakRoleAsPermission,
-  PermissionsGroup,
-  validateKeycloakRole,
-} from './model/permission';
-import {
-  keycloakGroupAsRole,
-  Role,
-  ValidatedGroupRepresentation,
-  validateKeycloakGroup,
-} from './model/role';
+import { databaseRoleToRole, Role } from './model/role';
+
+// Cache TTL for database role capabilities (5 minutes)
+const ROLE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 @Injectable()
 export class RolesService {
-  private appClientId: string;
-  private appClientUuid: Promise<string | undefined>;
-  private parentRolesGroupId: Promise<string>;
-  private defaultVisibilityRole: Promise<RoleRepresentation | null>;
-
-  // Cache configuration
-  private readonly ROLE_GROUPS_CACHE_KEY = 'role-groups:all';
-  private readonly ROLE_GROUPS_CACHE_TTL = 300; // 5 minutes in seconds
-
   constructor(
-    private readonly keycloak: KeycloakService,
-    private readonly config: ApiConfigService,
-    private readonly cls: ClsService,
-    private readonly redis: RedisService,
-  ) {
-    this.appClientId = this.config.get('AUTH_AUDIENCE');
-    this.appClientUuid = getShieldClient(
-      this.keycloak.client,
-      this.appClientId,
-    ).then((c) => c?.id);
-    this.parentRolesGroupId = this.keycloak
-      .getOrCreateManagedRolesGroup()
-      .then(({ id }) => id);
-    this.defaultVisibilityRole = this.appClientUuid.then((clientUuid) =>
-      this.keycloak.client.clients.findRole({
-        id: clientUuid ?? '',
-        roleName: VISIBILITY.SELF,
-      }),
-    );
+    private readonly cls: ApiClsService,
+    private readonly prisma: PrismaService,
+    private readonly memoryCache: MemoryCacheService,
+  ) {}
+
+  // ============================================================================
+  // CAPABILITIES METHODS
+  // ============================================================================
+
+  /**
+   * Get all available capabilities with their labels and descriptions.
+   */
+  getCapabilities() {
+    return VALID_CAPABILITIES.map((capability) => ({
+      name: capability,
+      label: CAPABILITY_LABELS[capability],
+      description: CAPABILITY_DESCRIPTIONS[capability],
+    }));
   }
 
-  async getPermissions() {
-    const clientRoles = await this.keycloak.client.clients.listRoles({
-      id: (await this.appClientUuid) ?? '',
-    });
+  /**
+   * Get all available scopes with their hierarchy.
+   */
+  getScopes() {
+    return Object.values(RoleScope).map((scope) => ({
+      name: scope,
+      label: this.getScopeLabel(scope),
+      description: this.getScopeDescription(scope),
+    }));
+  }
 
-    const permissionsByResource = clientRoles
-      .filter((r) => validateKeycloakRole(r, ACTION_PERMISSIONS))
-      .reduce(
-        (acc, r) => {
-          const [, resource] = r.name.split(':');
-
-          if (!acc[resource]) {
-            acc[resource] = {
-              title: titleize(resource),
-              many: true,
-              permissions: [],
-            };
-          }
-
-          acc[resource]!.permissions!.push(keycloakRoleAsPermission(r));
-
-          return acc;
-        },
-        {} as Record<string, PermissionsGroup>,
-      );
-
-    const visibilityPermissions = clientRoles
-      .filter((r) => validateKeycloakRole(r, VISIBILITY_PERMISSIONS))
-      .map((r) => keycloakRoleAsPermission(r));
-
-    return {
-      permissionsFlat: [
-        ...visibilityPermissions,
-        ...Object.values(permissionsByResource)
-          .map((g) => g.permissions)
-          .flat(),
-      ],
-      permissions: {
-        visibility: {
-          title: 'Visibility',
-          many: false,
-          permissions: visibilityPermissions,
-          defaultName: visibilityPermissions.find(
-            (p) => p.name === VISIBILITY.SELF,
-          )?.name,
-        },
-        resources: {
-          title: 'Resources',
-          many: true,
-          children: Object.values(permissionsByResource),
-        },
-      },
+  private getScopeLabel(scope: TScope): string {
+    const labels: Record<TScope, string> = {
+      [RoleScope.SYSTEM]: 'System',
+      [RoleScope.GLOBAL]: 'Global',
+      [RoleScope.CLIENT]: 'Client',
+      [RoleScope.SITE_GROUP]: 'Site Group',
+      [RoleScope.SITE]: 'Site',
+      [RoleScope.SELF]: 'Self',
     };
+    return labels[scope];
+  }
+
+  private getScopeDescription(scope: TScope): string {
+    const descriptions: Record<TScope, string> = {
+      [RoleScope.SYSTEM]: 'Internal system operations (M2M, cron jobs)',
+      [RoleScope.GLOBAL]: 'Super admin access to all clients',
+      [RoleScope.CLIENT]: 'Access to all sites within a client',
+      [RoleScope.SITE_GROUP]: 'Access to a group of sites',
+      [RoleScope.SITE]: 'Access to a single site',
+      [RoleScope.SELF]: 'Access to own records only',
+    };
+    return descriptions[scope];
   }
 
   getNotificationGroups() {
     return Object.values(NotificationGroups);
   }
 
-  async getPermissionByName(name: string) {
-    return this.keycloak.client.clients.findRole({
-      id: (await this.appClientUuid) ?? '',
-      roleName: name,
-    });
-  }
+  // ============================================================================
+  // ROLE CRUD METHODS
+  // ============================================================================
 
-  async createRole(createRoleDto: CreateRoleDto) {
-    const roleId = createId();
-    const { id: groupId } = await this.keycloak.client.groups.createChildGroup(
-      {
-        id: await this.parentRolesGroupId,
-      },
-      {
+  async createRole(createRoleDto: CreateRoleDto): Promise<Role> {
+    const prisma = this.prisma.bypassRLS();
+
+    // Check for duplicate name
+    const existingRole = await prisma.role.findFirst({
+      where: {
         name: createRoleDto.name,
-        attributes: {
-          role_id: [roleId],
-          role_description: !isNil(createRoleDto.description)
-            ? [createRoleDto.description]
-            : undefined,
-          role_created_at: [new Date().toISOString()],
-          role_updated_at: [new Date().toISOString()],
-          role_notification_group: createRoleDto.notificationGroups && [
-            ...createRoleDto.notificationGroups,
-          ],
-          role_client_assignable: [createRoleDto.clientAssignable.toString()],
-        },
       },
-    );
-
-    const defaultVisibilityRole = await this.defaultVisibilityRole;
-    if (defaultVisibilityRole?.id) {
-      await this.keycloak.client.groups.addClientRoleMappings({
-        id: groupId,
-        clientUniqueId: (await this.appClientUuid) ?? '',
-        roles: [
-          {
-            id: defaultVisibilityRole.id,
-            name: VISIBILITY.SELF,
-          },
-        ],
-      });
+    });
+    if (existingRole) {
+      throw new BadRequestException(
+        `Role with name "${createRoleDto.name}" already exists`,
+      );
     }
 
-    // Invalidate cache after creating role
-    await this.invalidateRoleGroupsCache();
+    // Validate scope restrictions for client-assignable roles
+    if (createRoleDto.clientAssignable) {
+      if (isScopeAtLeast(createRoleDto.scope, RoleScope.GLOBAL)) {
+        throw new BadRequestException(
+          'Client-assignable roles cannot have GLOBAL or SYSTEM scope.',
+        );
+      }
+    }
 
-    return this.getRole(roleId);
+    // Validate capabilities are valid
+    const invalidCapabilities = createRoleDto.capabilities.filter(
+      (c) => !isValidCapability(c),
+    );
+    if (invalidCapabilities.length > 0) {
+      throw new BadRequestException(
+        `Invalid capabilities: ${invalidCapabilities.join(', ')}`,
+      );
+    }
+
+    const role = await prisma.role.create({
+      data: {
+        name: createRoleDto.name,
+        description: createRoleDto.description,
+        clientAssignable: createRoleDto.clientAssignable,
+        notificationGroups: createRoleDto.notificationGroups ?? [],
+        scope: createRoleDto.scope,
+        capabilities: createRoleDto.capabilities,
+      },
+    });
+
+    return databaseRoleToRole(role);
   }
 
   async getRoles(): Promise<Role[]> {
-    return this.getRoleGroups().then((groups) =>
-      groups.map((g) => keycloakGroupAsRole(g, this.appClientId)),
-    );
+    const accessGrant = this.cls.requireAccessGrant();
+    const prisma = this.prisma.bypassRLS();
+
+    const roles = await prisma.role.findMany({
+      where: accessGrant.isSystemAdmin()
+        ? {} // Super admin sees all roles
+        : { clientAssignable: true }, // Others see only client-assignable
+      orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
+    });
+
+    return roles.map((role) => databaseRoleToRole(role));
   }
 
   async getRole(id: string): Promise<Role> {
-    const group = await this.getRoleGroup(id);
-    return keycloakGroupAsRole(group, this.appClientId);
-  }
+    const accessGrant = this.cls.requireAccessGrant();
+    const prisma = this.prisma.bypassRLS();
 
-  async updateRole(roleId: string, updateRoleDto: UpdateRoleDto) {
-    const roleGroup = await this.getRoleGroup(roleId);
-    const role = keycloakGroupAsRole(roleGroup, this.appClientId);
-
-    if (
-      updateRoleDto.clientAssignable &&
-      role.permissions.some((p) => p === VISIBILITY.GLOBAL)
-    ) {
-      throw new BadRequestException(
-        'Cannot allow clients to assign global visibility.',
-      );
-    }
-
-    if (
-      updateRoleDto.clientAssignable &&
-      role.permissions.some((p) => p === VISIBILITY.SUPER_ADMIN)
-    ) {
-      throw new BadRequestException(
-        'Cannot allow clients to assign super admin visibility.',
-      );
-    }
-
-    const {
-      description,
-      notificationGroups,
-      clientAssignable,
-      ...roleDefaults
-    } = updateRoleDto;
-
-    const attributes = KeycloakService.mergeAttributes(
-      roleGroup.attributes,
-      ['role_description', description],
-      ['role_updated_at', new Date().toISOString()],
-      ['role_notification_group', notificationGroups],
-      ['role_client_assignable', clientAssignable?.toString()],
-    );
-
-    await this.keycloak.client.groups.update(
-      { id: roleGroup.id },
-      {
-        ...roleGroup,
-        ...roleDefaults,
-        attributes,
-      },
-    );
-
-    // Invalidate cache after updating role
-    await this.invalidateRoleGroupsCache();
-
-    return this.getRole(roleId);
-  }
-
-  async deleteRole(roleId: string) {
-    const roleGroup = await this.getRole(roleId);
-    await this.keycloak.client.groups.del({ id: roleGroup.groupId });
-
-    // Invalidate cache after deleting role
-    await this.invalidateRoleGroupsCache();
-  }
-
-  async updatePermissionToRoleMappings(
-    roleId: string,
-    updatePermissionMappingDto: UpdatePermissionMappingDto,
-  ) {
-    const role = await this.getRole(roleId);
-
-    if (
-      role.clientAssignable &&
-      updatePermissionMappingDto.grant.some((p) => p.name === VISIBILITY.GLOBAL)
-    ) {
-      throw new BadRequestException(
-        'Global visibility cannot be granted to a client-assignable role.',
-      );
-    }
-
-    if (
-      role.clientAssignable &&
-      updatePermissionMappingDto.grant.some(
-        (p) => p.name === VISIBILITY.SUPER_ADMIN,
-      )
-    ) {
-      throw new BadRequestException(
-        'Super admin visibility cannot be granted to a client-assignable role.',
-      );
-    }
-
-    if (updatePermissionMappingDto.grant.length) {
-      await this.keycloak.client.groups.addClientRoleMappings({
-        id: role.groupId,
-        clientUniqueId: (await this.appClientUuid) ?? '',
-        roles: updatePermissionMappingDto.grant.map((p) => ({
-          id: p.id,
-          name: p.name,
-        })),
-      });
-    }
-    if (updatePermissionMappingDto.revoke.length) {
-      await this.keycloak.client.groups.delClientRoleMappings({
-        id: role.groupId,
-        clientUniqueId: (await this.appClientUuid) ?? '',
-        roles: updatePermissionMappingDto.revoke.map((p) => ({
-          id: p.id,
-          name: p.name,
-        })),
-      });
-    }
-
-    // Invalidate cache after updating permissions
-    await this.invalidateRoleGroupsCache();
-  }
-
-  async updateNotificationGroups(
-    roleId: string,
-    updateNotificationGroupMappingDto: UpdateNotificationGroupMappingDto,
-  ) {
-    return await this.updateRole(roleId, {
-      notificationGroups:
-        updateNotificationGroupMappingDto.notificationGroupIds,
+    const role = await prisma.role.findUnique({
+      where: { id },
     });
-  }
 
-  /**
-   * Invalidate the role groups cache.
-   * Call this after creating, updating, or deleting roles.
-   */
-  private async invalidateRoleGroupsCache() {
-    const redis = this.redis.getPublisher();
-    await redis.del(this.ROLE_GROUPS_CACHE_KEY);
-  }
-
-  /**
-   * Fetch role groups from cache or Keycloak if cache miss.
-   * Filters based on user permissions (super admin sees all, others see only client-assignable).
-   */
-  public async getRoleGroups(): Promise<ValidatedGroupRepresentation[]> {
-    const user = this.cls.get('user');
-    const redis = this.redis.getPublisher();
-
-    // Try to get from cache
-    const cached = await redis.get(this.ROLE_GROUPS_CACHE_KEY);
-    let allGroups: ValidatedGroupRepresentation[];
-
-    if (cached) {
-      allGroups = JSON.parse(cached);
-    } else {
-      // Cache miss - fetch from Keycloak
-      const groups = await this.keycloak.client.groups.listSubGroups({
-        parentId: await this.parentRolesGroupId,
-      });
-      allGroups = groups.filter(validateKeycloakGroup);
-
-      // Store in cache
-      await redis.setEx(
-        this.ROLE_GROUPS_CACHE_KEY,
-        this.ROLE_GROUPS_CACHE_TTL,
-        JSON.stringify(allGroups),
-      );
+    if (!role) {
+      throw new NotFoundException(`Role ${id} not found`);
     }
 
-    // Filter based on user permissions
-    return allGroups.filter(
-      (g) =>
-        g.attributes.role_client_assignable?.[0] === 'true' ||
-        !!user?.isSuperAdmin(),
-    );
+    // Check access: super admin sees all, others see only client-assignable
+    if (!role.clientAssignable && !accessGrant.isSystemAdmin()) {
+      throw new NotFoundException(`Role ${id} not found`);
+    }
+
+    return databaseRoleToRole(role);
   }
 
-  /**
-   * Get a single role group by role ID.
-   * Uses cached role groups for better performance.
-   */
-  public async getRoleGroup(
+  async updateRole(
     roleId: string,
-  ): Promise<ValidatedGroupRepresentation> {
-    const user = this.cls.get('user');
-    const groups = await this.getRoleGroups();
+    updateRoleDto: UpdateRoleDto,
+  ): Promise<Role> {
+    const prisma = this.prisma.bypassRLS();
 
-    const group = groups.find((g) => g.attributes.role_id?.[0] === roleId);
+    const existingRole = await prisma.role.findUnique({
+      where: { id: roleId },
+    });
 
-    if (
-      !group ||
-      !(
-        group.attributes.role_client_assignable?.[0] === 'true' ||
-        user?.isSuperAdmin()
-      )
-    ) {
+    if (!existingRole) {
       throw new NotFoundException(`Role ${roleId} not found`);
     }
 
-    return group;
-  }
-
-  /**
-   * Get multiple role groups by role IDs.
-   * Consolidated method that fetches all groups once and maps to requested IDs.
-   * More efficient than multiple getRoleGroup() calls.
-   *
-   * @param roleIds Array of role IDs to fetch
-   * @returns Array of role groups
-   * @throws NotFoundException if any role ID is not found
-   */
-  public async getRoleGroupsByRoleIds(
-    roleIds: string[],
-  ): Promise<ValidatedGroupRepresentation[]> {
-    if (roleIds.length === 0) return [];
-
-    const allGroups = await this.getRoleGroups();
-
-    // Create a map for O(1) lookup
-    const groupMap = new Map(
-      allGroups.map((g) => [g.attributes.role_id?.[0], g]),
-    );
-
-    // Map role IDs to groups and validate all were found
-    const result: ValidatedGroupRepresentation[] = [];
-    for (const roleId of roleIds) {
-      const group = groupMap.get(roleId);
-      if (!group) {
-        throw new NotFoundException(`Role ${roleId} not found`);
+    let canModify = true;
+    let reason = 'Cannot modify a system role';
+    if (existingRole.isSystem) {
+      // System roles can only be modified if the scope is not changing
+      if (
+        updateRoleDto.scope !== undefined &&
+        updateRoleDto.scope !== existingRole.scope
+      ) {
+        canModify = false;
+        reason = 'Cannot change the scope of a system role';
       }
-      result.push(group);
     }
 
-    return result;
+    if (!canModify) {
+      throw new BadRequestException(reason);
+    }
+
+    // Determine final scope
+    const newScope = updateRoleDto.scope ?? existingRole.scope;
+    const newClientAssignable =
+      updateRoleDto.clientAssignable ?? existingRole.clientAssignable;
+
+    // Validate scope restrictions for client-assignable roles
+    if (newClientAssignable && isScopeAtLeast(newScope, RoleScope.GLOBAL)) {
+      throw new BadRequestException(
+        'Client-assignable roles cannot have GLOBAL or SYSTEM scope.',
+      );
+    }
+
+    // Validate capabilities if provided
+    if (updateRoleDto.capabilities) {
+      const invalidCapabilities = updateRoleDto.capabilities.filter(
+        (c) => !isValidCapability(c),
+      );
+      if (invalidCapabilities.length > 0) {
+        throw new BadRequestException(
+          `Invalid capabilities: ${invalidCapabilities.join(', ')}`,
+        );
+      }
+    }
+
+    // Check for duplicate name if name is being changed
+    if (updateRoleDto.name && updateRoleDto.name !== existingRole.name) {
+      const duplicateRole = await prisma.role.findFirst({
+        where: {
+          name: updateRoleDto.name,
+          id: { not: roleId },
+        },
+      });
+      if (duplicateRole) {
+        throw new BadRequestException(
+          `Role with name "${updateRoleDto.name}" already exists`,
+        );
+      }
+    }
+
+    const updatedRole = await prisma.role.update({
+      where: { id: roleId },
+      data: {
+        name: updateRoleDto.name,
+        description: updateRoleDto.description,
+        clientAssignable: updateRoleDto.clientAssignable,
+        notificationGroups: updateRoleDto.notificationGroups,
+        scope: updateRoleDto.scope,
+        capabilities: updateRoleDto.capabilities,
+      },
+    });
+
+    // Invalidate cache
+    await this.invalidateRoleCache(roleId);
+
+    return databaseRoleToRole(updatedRole);
+  }
+
+  async deleteRole(roleId: string): Promise<void> {
+    const prisma = this.prisma.bypassRLS();
+
+    const existingRole = await prisma.role.findUnique({
+      where: { id: roleId },
+      include: {
+        _count: {
+          select: {
+            personClientAccess: true,
+          },
+        },
+      },
+    });
+
+    if (!existingRole) {
+      throw new NotFoundException(`Role ${roleId} not found`);
+    }
+
+    if (existingRole.isSystem) {
+      throw new BadRequestException('Cannot delete a system role');
+    }
+
+    if (existingRole._count.personClientAccess > 0) {
+      throw new BadRequestException(
+        `Cannot delete role that is assigned to ${existingRole._count.personClientAccess} person(s). Remove assignments first.`,
+      );
+    }
+
+    await prisma.role.delete({
+      where: { id: roleId },
+    });
+
+    // Invalidate cache
+    await this.invalidateRoleCache(roleId);
+  }
+
+  // ============================================================================
+  // CAPABILITY MANAGEMENT METHODS
+  // ============================================================================
+
+  /**
+   * Add capabilities to a role.
+   */
+  async addCapabilities(
+    roleId: string,
+    capabilities: TCapability[],
+  ): Promise<Role> {
+    const prisma = this.prisma.bypassRLS();
+
+    const role = await prisma.role.findUnique({
+      where: { id: roleId },
+    });
+
+    if (!role) {
+      throw new NotFoundException(`Role ${roleId} not found`);
+    }
+
+    // NOTE: Allow modifying system roles, as these endpoints are only accessible to system admins.
+    // if (role.isSystem) {
+    //   throw new BadRequestException('Cannot modify a system role');
+    // }
+
+    // Validate capabilities
+    const invalidCapabilities = capabilities.filter(
+      (c) => !isValidCapability(c),
+    );
+    if (invalidCapabilities.length > 0) {
+      throw new BadRequestException(
+        `Invalid capabilities: ${invalidCapabilities.join(', ')}`,
+      );
+    }
+
+    // Merge with existing capabilities (deduplicate)
+    const existingCapabilities = role.capabilities as TCapability[];
+    const newCapabilities = [
+      ...new Set([...existingCapabilities, ...capabilities]),
+    ];
+
+    const updatedRole = await prisma.role.update({
+      where: { id: roleId },
+      data: { capabilities: newCapabilities },
+    });
+
+    await this.invalidateRoleCache(roleId);
+
+    return databaseRoleToRole(updatedRole);
   }
 
   /**
-   * Get a single role group by role ID, optimized for batch operations.
-   * Returns undefined if not found instead of throwing.
-   *
-   * @param roleId Role ID to fetch
-   * @returns Role group or undefined if not found
+   * Remove capabilities from a role.
    */
-  public async getRoleGroupByRoleId(
+  async removeCapabilities(
     roleId: string,
-  ): Promise<ValidatedGroupRepresentation> {
-    return this.getRoleGroupsByRoleIds([roleId]).then((groups) => groups[0]);
+    capabilities: TCapability[],
+  ): Promise<Role> {
+    const prisma = this.prisma.bypassRLS();
+
+    const role = await prisma.role.findUnique({
+      where: { id: roleId },
+    });
+
+    if (!role) {
+      throw new NotFoundException(`Role ${roleId} not found`);
+    }
+
+    // NOTE: Allow modifying system roles, as these endpoints are only accessible to system admins.
+    // if (role.isSystem) {
+    //   throw new BadRequestException('Cannot modify a system role');
+    // }
+
+    // Remove capabilities
+    const existingCapabilities = role.capabilities as TCapability[];
+    const newCapabilities = existingCapabilities.filter(
+      (c) => !capabilities.includes(c),
+    );
+
+    const updatedRole = await prisma.role.update({
+      where: { id: roleId },
+      data: { capabilities: newCapabilities },
+    });
+
+    await this.invalidateRoleCache(roleId);
+
+    return databaseRoleToRole(updatedRole);
+  }
+
+  /**
+   * Set the scope for a role.
+   */
+  async setScope(roleId: string, scope: TScope): Promise<Role> {
+    const prisma = this.prisma.bypassRLS();
+
+    const role = await prisma.role.findUnique({
+      where: { id: roleId },
+    });
+
+    if (!role) {
+      throw new NotFoundException(`Role ${roleId} not found`);
+    }
+
+    if (role.isSystem) {
+      throw new BadRequestException('Cannot change the scope of a system role');
+    }
+
+    // Validate scope restrictions for client-assignable roles
+    if (role.clientAssignable && isScopeAtLeast(scope, RoleScope.GLOBAL)) {
+      throw new BadRequestException(
+        'Client-assignable roles cannot have GLOBAL or SYSTEM scope.',
+      );
+    }
+
+    const updatedRole = await prisma.role.update({
+      where: { id: roleId },
+      data: { scope },
+    });
+
+    await this.invalidateRoleCache(roleId);
+
+    return databaseRoleToRole(updatedRole);
+  }
+
+  // ============================================================================
+  // NOTIFICATION GROUP METHODS
+  // ============================================================================
+
+  async updateNotificationGroups(
+    roleId: string,
+    notificationGroupIds: NotificationGroupId[],
+  ): Promise<Role> {
+    return await this.updateRole(roleId, {
+      notificationGroups: notificationGroupIds,
+    });
+  }
+
+  // ============================================================================
+  // HELPER METHODS
+  // ============================================================================
+
+  /**
+   * Invalidate the cached data for a role.
+   */
+  private async invalidateRoleCache(roleId: string): Promise<void> {
+    await this.memoryCache.mdel([
+      `role-capabilities:${roleId}`,
+      `role-scope:${roleId}`,
+    ]);
+  }
+
+  /**
+   * Get capabilities for a role (cached).
+   * Used by other services for permission lookups.
+   */
+  async getRoleCapabilities(roleId: string): Promise<TCapability[]> {
+    const cacheKey = `role-capabilities:${roleId}`;
+
+    return this.memoryCache.getOrSet(
+      cacheKey,
+      async () => {
+        // Fetch from database
+        const prisma = this.prisma.bypassRLS();
+        const role = await prisma.role.findUnique({
+          where: { id: roleId },
+          select: { capabilities: true },
+        });
+
+        if (!role) {
+          return [];
+        }
+
+        const result = role.capabilities.filter(isValidCapability);
+
+        return result;
+      },
+      ROLE_CACHE_TTL,
+    );
+  }
+
+  /**
+   * Get scope for a role (cached).
+   */
+  async getRoleScope(roleId: string): Promise<TScope | null> {
+    const cacheKey = `role-scope:${roleId}`;
+
+    return this.memoryCache.getOrSet(
+      cacheKey,
+      async () => {
+        // Fetch from database
+        const prisma = this.prisma.bypassRLS();
+        const role = await prisma.role.findUnique({
+          where: { id: roleId },
+          select: { scope: true },
+        });
+
+        if (!role) {
+          return null;
+        }
+
+        return role.scope;
+      },
+      ROLE_CACHE_TTL,
+    );
   }
 }

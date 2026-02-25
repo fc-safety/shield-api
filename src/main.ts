@@ -43,6 +43,7 @@ const getLogLevels = (): LogLevel[] => {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: getLogLevels(),
+    rawBody: true,
   });
 
   // As of Express 5, the default query parser is 'simple'.

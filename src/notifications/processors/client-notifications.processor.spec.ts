@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { ClientNotificationsProcessor } from './client-notifications.processor';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { UsersService } from 'src/clients/users/users.service';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { QUEUE_NAMES } from '../lib/constants';
 
@@ -30,10 +29,6 @@ describe('ClientNotificationsProcessor', () => {
     build: jest.fn(),
   };
 
-  const mockUsersService = {
-    findAll: jest.fn(),
-  };
-
   const mockQueue = {
     add: jest.fn(),
     close: jest.fn(),
@@ -48,7 +43,6 @@ describe('ClientNotificationsProcessor', () => {
       providers: [
         ClientNotificationsProcessor,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: UsersService, useValue: mockUsersService },
         {
           provide: getQueueToken(QUEUE_NAMES.CLIENT_NOTIFICATIONS),
           useValue: mockQueue,

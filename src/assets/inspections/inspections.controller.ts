@@ -9,7 +9,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CheckResourcePermissions } from 'src/auth/policies.guard';
+import { CheckAnyCapability, CheckCapability } from 'src/auth/policies.guard';
 import { INSPECTION_TOKEN_HEADER } from './constants/headers';
 import { CreateInspectionDto } from './dto/create-inspection.dto';
 import { QueryInspectionDto } from './dto/query-inspection.dto';
@@ -17,11 +17,12 @@ import { UpdateInspectionDto } from './dto/update-inspection.dto';
 import { InspectionsService } from './inspections.service';
 
 @Controller('inspections')
-@CheckResourcePermissions('inspections')
+@CheckAnyCapability('perform-inspections', 'view-reports')
 export class InspectionsController {
   constructor(private readonly inspectionsService: InspectionsService) {}
 
   @Post()
+  @CheckCapability('perform-inspections')
   create(
     @Body() createInspectionDto: CreateInspectionDto,
     @Query('sessionId') sessionId?: string,
@@ -54,6 +55,7 @@ export class InspectionsController {
   }
 
   @Post('sessions/:id/cancel')
+  @CheckCapability('perform-inspections')
   cancelSession(@Param('id') id: string) {
     return this.inspectionsService.cancelInspectionSession(id);
   }
@@ -64,6 +66,7 @@ export class InspectionsController {
   }
 
   @Patch(':id')
+  @CheckCapability('perform-inspections')
   update(
     @Param('id') id: string,
     @Body() updateInspectionDto: UpdateInspectionDto,
@@ -72,6 +75,7 @@ export class InspectionsController {
   }
 
   @Delete(':id')
+  @CheckCapability('perform-inspections')
   remove(@Param('id') id: string) {
     return this.inspectionsService.remove(id);
   }

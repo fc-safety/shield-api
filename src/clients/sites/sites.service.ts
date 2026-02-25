@@ -1,6 +1,5 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable } from '@nestjs/common';
-import type { Cache } from 'cache-manager';
+import { Injectable } from '@nestjs/common';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { as404OrThrow, isNil } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -19,34 +18,34 @@ export class SitesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly memoryCache: MemoryCacheService,
   ) {}
 
-  private invalidateSiteStatusCache(siteExternalId: string) {
-    const cacheKey = buildSiteStatusCacheKey(siteExternalId);
-    this.cache.del(cacheKey);
+  private invalidateSiteStatusCache(siteId: string) {
+    const cacheKey = buildSiteStatusCacheKey(siteId);
+    this.memoryCache.del(cacheKey);
   }
 
   /**
    * Gets the active status of a site by its external ID.
    * Results are cached for 1 hour.
    */
-  public async getSiteStatus(siteExternalId: string): Promise<boolean | null> {
-    const cacheKey = buildSiteStatusCacheKey(siteExternalId);
-    const cachedValue = await this.cache.get<boolean>(cacheKey);
+  public async getSiteStatus(siteId: string): Promise<boolean | null> {
+    const cacheKey = buildSiteStatusCacheKey(siteId);
+    const cachedValue = await this.memoryCache.get<boolean>(cacheKey);
 
     if (!isNil(cachedValue)) {
       return cachedValue;
     }
 
     const siteResult = await this.prisma.bypassRLS().site.findUnique({
-      where: { externalId: siteExternalId },
+      where: { id: siteId },
       select: { active: true },
     });
 
     if (siteResult) {
       // Cache the result for 1 hour.
-      this.cache.set(
+      this.memoryCache.set(
         cacheKey,
         siteResult.active,
         this.SITE_STATUS_CACHE_TTL_MS,
@@ -59,12 +58,12 @@ export class SitesService {
 
   async create(createSiteDto: CreateSiteDto) {
     return this.prisma
-      .forContext()
+      .build()
       .then((prisma) => prisma.site.create({ data: createSiteDto }));
   }
 
   async findAll(querySiteDto: QuerySiteDto) {
-    return this.prisma.forContext().then((prisma) =>
+    return this.prisma.build().then((prisma) =>
       prisma.site.findManyForPage(
         buildPrismaFindArgs<typeof prisma.site>(querySiteDto, {
           include: {
@@ -78,7 +77,7 @@ export class SitesService {
 
   async findOne(id: string) {
     return this.prisma
-      .forContext()
+      .build()
       .then((prisma) =>
         prisma.site.findUniqueOrThrow({
           where: { id },
@@ -111,7 +110,7 @@ export class SitesService {
   }
 
   async update(id: string, updateSiteDto: UpdateSiteDto) {
-    const prisma = await this.prisma.forContext();
+    const prisma = await this.prisma.build();
     const result = await prisma.site
       .update({
         where: { id },
@@ -123,7 +122,7 @@ export class SitesService {
   }
 
   async remove(id: string) {
-    const prisma = await this.prisma.forContext();
+    const prisma = await this.prisma.build();
     const result = await prisma.site.delete({ where: { id } });
     // Invalidate cache to ensure deleted site status is not cached
     this.invalidateSiteStatusCache(result.externalId);

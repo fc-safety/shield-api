@@ -21,6 +21,7 @@ export const configSchema = z.object({
   KEYCLOAK_ADMIN_CLIENT_CLIENT_ID: z.string(),
   KEYCLOAK_ADMIN_CLIENT_CLIENT_SECRET: z.string(),
   KEYCLOAK_ADMIN_CLIENT_REFRESH_INTERVAL_SECONDS: z.coerce.number().default(58),
+  KEYCLOAK_WEBHOOK_SECRET: z.string().optional(),
 
   // CORS
   CORS_ALLOWED_ORIGINS: z
@@ -67,6 +68,24 @@ export const configSchema = z.object({
   LEGACY_DB_PASSWORD: z.string().optional(),
   LEGACY_DB_NAME: z.string().optional(),
   LEGACY_DB_PORT: z.coerce.number().default(3306),
+
+  SYNC_KEYCLOAK_ACCESS_ON_STARTUP: z
+    .stringbool({
+      truthy: ['true', '1'],
+      falsy: ['false', '0'],
+    })
+    .default(false),
+
+  // System Admin Emails (for pre-setup bootstrap access)
+  SYSTEM_ADMIN_EMAILS: z
+    .string()
+    .default('')
+    .transform((v) =>
+      v
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
 });
 
 export type Config = z.infer<typeof configSchema>;

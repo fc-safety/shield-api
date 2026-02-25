@@ -9,15 +9,27 @@ export const as404OrThrow = (e: unknown) => {
   throw e; // rethrow
 };
 
-const VIEW_CONTEXTS = ['admin', 'user'] as const;
-export type ViewContext = (typeof VIEW_CONTEXTS)[number];
+const ACCESS_INTENTS = ['system', 'elevated', 'user'] as const;
+export type AccessIntent = (typeof ACCESS_INTENTS)[number];
 
-export const getViewContext = (req: Request): ViewContext => {
-  const view = req.headers['x-view-context'] as ViewContext;
-  if (!VIEW_CONTEXTS.includes(view)) {
-    return 'user';
+export const getAccessIntent = (req: Request): AccessIntent => {
+  const intent = firstOf(req.headers['x-access-intent']) as
+    | AccessIntent
+    | undefined;
+
+  // For backwards compatibility, check for deprecated x-view-context header.
+  if (!intent) {
+    const viewContext = firstOf(req.headers['x-view-context']);
+    if (viewContext === 'admin') {
+      return 'system';
+    }
   }
-  return view;
+
+  if (intent && ACCESS_INTENTS.includes(intent)) {
+    return intent;
+  }
+
+  return 'user';
 };
 
 export const isNil = (value: unknown): value is null | undefined =>

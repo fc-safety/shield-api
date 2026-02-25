@@ -5,6 +5,7 @@ import InspectionDueSoonAlertLevel2TemplateReact from '../templates/inspection_d
 import InspectionDueSoonAlertLevel3TemplateReact from '../templates/inspection_due_soon_alert_level_3';
 import InspectionDueSoonAlertLevel4TemplateReact from '../templates/inspection_due_soon_alert_level_4';
 import InspectionReminderTemplateReact from '../templates/inspection_reminder';
+import InvitationTemplateReact from '../templates/invitation';
 import ManagerPasswordResetTemplateReact from '../templates/manager_password_reset';
 import MonthlyConsumableReportTemplateReact from '../templates/monthly_consumables_report';
 import MonthlyInspectionReportTemplateReact from '../templates/monthly_inspection_report';
@@ -29,13 +30,14 @@ export const TEMPLATE_NAME_MAP = {
   // Other general templates
   new_product_request: NewProductRequestTemplateReact,
   team_inspection_reminder: TeamInspectionReminderTemplateReact,
+  invitation: InvitationTemplateReact,
   manager_password_reset: ManagerPasswordResetTemplateReact,
   new_landing_form_lead: NewLandingFormLeadTemplateReact,
   test: TestTemplateReact,
 } as const satisfies Record<
   string,
   React.FC<any> & {
-    Subject: string;
+    Subject: string | ((props: any) => string);
     Text: (props: any) => string;
     // TODO: Make required once we fully implement SMS notifications.
     Sms?: (props: any) => string;

@@ -7,7 +7,11 @@ import { ApiConfigService } from 'src/config/api-config.service';
 import { SettingsService } from 'src/settings/settings.service';
 import Telnyx from 'telnyx';
 import { SendTestEmailDto } from './dto/send-test-email.dto';
-import { NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
+import {
+  CLIENT_NOTIFICATIONS_JOB_NAMES,
+  NOTIFICATIONS_JOB_NAMES,
+  QUEUE_NAMES,
+} from './lib/constants';
 import {
   NotificationTemplateId,
   SendEmailJobData,
@@ -91,7 +95,7 @@ export class NotificationsService {
       ),
     ).then((results) => ({
       data: results.flatMap((r) => r.data),
-      error: results.at(0)?.error,
+      error: results.find((r) => r.error !== null)?.error,
     }));
 
     if (error) {
@@ -167,8 +171,16 @@ export class NotificationsService {
 
     const text = Template.Text(props);
 
+    const subjectOrFn = subject ?? Template.Subject;
+    let subjectValue: string;
+    if (typeof subjectOrFn === 'function') {
+      subjectValue = subjectOrFn(props);
+    } else {
+      subjectValue = subjectOrFn;
+    }
+
     await this.sendEmail({
-      subject: subject ?? Template.Subject,
+      subject: subjectValue,
       to,
       cc,
       bcc,
@@ -184,6 +196,17 @@ export class NotificationsService {
     await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, data);
   }
 
+  async queueEmailBulk<T extends NotificationTemplateId>(
+    data: SendEmailJobData<T>[],
+  ) {
+    await this.notificationsQueue.addBulk(
+      data.map((d) => ({
+        name: NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
+        data: d,
+      })),
+    );
+  }
+
   async queueNewProductRequestEmail(productRequestId: string) {
     await this.notificationsQueue.add(
       NOTIFICATIONS_JOB_NAMES.SEND_NEW_PRODUCT_REQUEST_EMAIL,
@@ -195,7 +218,7 @@ export class NotificationsService {
 
   async queueInspectionAlertTriggeredEmail(alertId: string) {
     await this.clientNotificationsQueue.add(
-      NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL,
+      CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL,
       {
         alertId,
       },
