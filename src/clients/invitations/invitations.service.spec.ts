@@ -8,6 +8,9 @@ import { CreateInvitationsDto } from './dto/create-invitation.dto';
 import { InvitationsService } from './invitations.service';
 
 jest.mock('nanoid', () => ({ nanoid: () => 'mock-nanoid1' }));
+jest.mock('src/auth/utils/access-grants', () => ({
+  clearAccessGrantResponseCache: jest.fn().mockResolvedValue(undefined),
+}));
 
 describe('InvitationsService', () => {
   let service: InvitationsService;
@@ -182,10 +185,16 @@ describe('InvitationsService', () => {
           expect.objectContaining({
             templateName: 'invitation',
             to: ['user1@example.com'],
+            templateProps: expect.objectContaining({
+              inviteeEmail: 'user1@example.com',
+            }),
           }),
           expect.objectContaining({
             templateName: 'invitation',
             to: ['user2@example.com'],
+            templateProps: expect.objectContaining({
+              inviteeEmail: 'user2@example.com',
+            }),
           }),
         ]),
       );
@@ -366,6 +375,37 @@ describe('InvitationsService', () => {
         where: { id: 'inv-1' },
         data: { status: 'EXPIRED' },
       });
+    });
+  });
+
+  describe('accept', () => {
+    const mockUser = { idpId: 'idp-1' };
+    const mockPerson = { id: 'person-1', email: 'other@example.com' };
+
+    beforeEach(() => {
+      mockApiClsService.requireUser.mockReturnValue(mockUser);
+      mockApiClsService.requirePerson.mockReturnValue(mockPerson);
+    });
+
+    it('should throw ForbiddenException with current email when emails mismatch', async () => {
+      mockBypassTx.invitation.findUnique.mockResolvedValue({
+        id: 'inv-1',
+        code: 'abc123',
+        status: 'PENDING',
+        email: 'invited@example.com',
+        expiresOn: new Date(Date.now() + 86400000),
+        clientId: 'client-1',
+        siteId: 'site-1',
+        roleId: 'role-1',
+        client: { name: 'Test Client', id: 'client-1', externalId: 'ext-1' },
+        site: { name: 'Test Site', id: 'site-1' },
+        role: { name: 'Test Role', id: 'role-1' },
+        createdBy: { firstName: 'Admin', lastName: 'User', id: 'person-1' },
+      });
+
+      await expect(service.accept('abc123')).rejects.toThrow(
+        'You are signed in with other@example.com',
+      );
     });
   });
 
