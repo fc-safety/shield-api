@@ -537,6 +537,8 @@ export class AuthService {
 
   public async generateSignature(options: {
     signatureData: string;
+    /** Epoch timestamp used for HMAC input and signing key expiry check.
+     *  Accepts both seconds and milliseconds (auto-detected: values < 1e12 are treated as seconds). */
     timestamp?: number;
     keyId?: string;
     ignoreExpiredKey?: boolean;
@@ -556,10 +558,13 @@ export class AuthService {
 
     // If the key is not expired, or if the ignoreExpiredKey flag is set,
     // we can use the key to generate the signature.
+    // Callers pass seconds (custom tokens) or milliseconds (tag URLs);
+    // normalize to ms for the Date comparison.
+    const timestampMs = timestamp < 1e12 ? timestamp * 1000 : timestamp;
     if (
       !ignoreExpiredKey &&
       signingKey.expiredOn &&
-      isBefore(signingKey.expiredOn, new Date(timestamp))
+      isBefore(signingKey.expiredOn, new Date(timestampMs))
     ) {
       throw new SigningKeyExpiredError('Signing key has expired.');
     }
@@ -643,9 +648,17 @@ export class AuthService {
       timestamp: decodedHead.iat,
     });
 
-    if (
-      !crypto.timingSafeEqual(Buffer.from(challenge), Buffer.from(signature))
-    ) {
+    let signatureMatches = false;
+    try {
+      signatureMatches = crypto.timingSafeEqual(
+        Buffer.from(challenge),
+        Buffer.from(signature),
+      );
+    } catch {
+      // timingSafeEqual throws if buffer lengths differ; treat as mismatch
+    }
+
+    if (!signatureMatches) {
       return {
         isValid: false,
         error: 'Invalid token',
@@ -702,6 +715,8 @@ export class AuthService {
         where: { id: person.id },
         data: personInput,
       });
+
+      await this.memoryCache.set(cacheKey, person, 60 * 60 * 1000);
     }
 
     return person;

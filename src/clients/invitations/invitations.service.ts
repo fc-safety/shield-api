@@ -109,6 +109,14 @@ export class InvitationsService {
 
   /**
    * Create invitations in bulk.
+   *
+   * Cross-client isolation is enforced by RLS on the site and role queries below.
+   * `prisma.build()` sets `app.current_client_id` from the caller's access grant,
+   * so `site.findMany` and `role.findMany` only return rows within the caller's
+   * client scope (via the `validate_client` RLS policy). The subsequent
+   * application-level check (`site.clientId !== targetClientId`) is a defense-in-depth
+   * safeguard. The `bypassRLS()` call for the actual insert is safe because all
+   * inputs have already been validated through the RLS-enforced queries.
    */
   async createBulk(dto: CreateInvitationsDto) {
     const person = this.cls.requirePerson();
@@ -121,7 +129,7 @@ export class InvitationsService {
     const uniqueSiteIds = [...new Set(dto.invitations.map((i) => i.siteId))];
     const uniqueRoleIds = [...new Set(dto.invitations.map((i) => i.roleId))];
 
-    // Bulk validate sites and roles
+    // Validate sites and roles through RLS-enforced queries (scoped to caller's client).
     const prisma = await this.prisma.build();
 
     const [sites, roles] = await Promise.all([
@@ -264,7 +272,7 @@ export class InvitationsService {
    * Get a single invitation by ID.
    */
   async findOne(id: string) {
-    const prisma = this.prisma.bypassRLS();
+    const prisma = await this.prisma.build();
 
     const invitation = await prisma.invitation
       .findUniqueOrThrow({

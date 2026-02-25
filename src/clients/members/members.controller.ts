@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Headers,
   Param,
   Post,
   Query,
@@ -39,7 +38,7 @@ export class MembersController {
   @Post(':id/reset-password-email')
   sendResetPasswordEmail(
     @Param('id') id: string,
-    @Headers('x-app-client-id') appClientId: string,
+    @Query('appClientId') appClientId: string,
   ) {
     return this.membersService.sendResetPasswordEmail(id, appClientId);
   }

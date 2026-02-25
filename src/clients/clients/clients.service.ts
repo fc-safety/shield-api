@@ -343,7 +343,7 @@ export class ClientsService {
         }),
       );
 
-      Promise.all(
+      await Promise.all(
         existingClient.assets.map(async (asset) => {
           const {
             name,
@@ -802,7 +802,9 @@ export class ClientsService {
       return [];
     }
 
-    const prisma = await this.prisma.build();
+    const prisma = await this.prisma.build({
+      shouldBypassRLSAsSystemAdmin: true,
+    });
 
     return await prisma.person.findMany({
       where: {

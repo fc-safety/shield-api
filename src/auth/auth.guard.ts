@@ -61,7 +61,7 @@ export class AuthGuard implements CanActivate {
     const { isValid, user, reason } =
       await this.authService.validateJwtToken(token);
 
-    // Rejct if token is not valid, unless the endpoint is public.
+    // Reject if token is not valid, unless the endpoint is public.
     if (!isValid && !allowPublic) {
       throw new UnauthorizedException(reason);
     }
@@ -144,11 +144,6 @@ export class AuthGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
     return skipAccessGrantValidation;
-  }
-
-  private userIsSystemAdmin(user: StatelessUser): boolean {
-    const systemAdminEmails = this.config.get('SYSTEM_ADMIN_EMAILS');
-    return systemAdminEmails.includes(user.email.toLowerCase());
   }
 
   /**

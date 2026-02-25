@@ -132,7 +132,16 @@ export class PrismaService
     const channel = `db-events:${accessGrant.clientId}:${model}:${cleanedOperation}`;
     const payload = JSON.stringify(eventBody);
 
-    this.redis.getPublisher().publish(channel, payload);
+    this.redis
+      .getPublisher()
+      .publish(channel, payload)
+      .catch((error) => {
+        this.logger.error('Error publishing model event to Redis', {
+          error,
+          channel,
+          payload,
+        });
+      });
   }
 
   private parsePrismaQuery(query: string): { model?: string; action?: string } {
@@ -460,6 +469,9 @@ export interface IPrismaRLSContext {
 }
 
 export interface PrimaryExtensionOptions {
+  /**
+   * If true, RLS will be bypassed for all queries when the context contains system admin scope or cron mode.
+   */
   shouldBypassRLSAsSystemAdmin?: boolean;
   rlsContext?: IPrismaRLSContext;
 }

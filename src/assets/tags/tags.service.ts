@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { createId } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
@@ -29,6 +30,7 @@ import {
 
 @Injectable()
 export class TagsService {
+  private readonly logger = new Logger(TagsService.name);
   private readonly SIG_LENGTH = 16;
 
   constructor(
@@ -452,7 +454,10 @@ export class TagsService {
         csvStream.write(result);
       }
       csvStream.end();
-    })();
+    })().catch((error) => {
+      this.logger.error('Error generating signed URL bulk CSV', error);
+      csvStream.destroy(new Error('Error generating signed URL bulk CSV.'));
+    });
 
     return csvStream;
   }
