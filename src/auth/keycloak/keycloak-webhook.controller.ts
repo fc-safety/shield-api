@@ -77,9 +77,14 @@ export class KeycloakWebhookController {
       return;
     }
 
-    const userId = representation.attributes?.user_id?.[0];
-    if (!userId) {
-      this.logger.warn('User representation missing user_id attribute');
+    if (
+      !representation.firstName ||
+      !representation.lastName ||
+      !representation.email
+    ) {
+      this.logger.warn(
+        `Keycloak user ${event.resourceId} missing required fields (firstName, lastName, email), skipping sync`,
+      );
       return;
     }
 
@@ -87,39 +92,21 @@ export class KeycloakWebhookController {
 
     const prisma = this.prisma.bypassRLS();
 
-    // Check if person exists
-    const existingPerson = await prisma.person.findUnique({
-      where: { id: userId },
-    });
-
-    if (!existingPerson) {
-      this.logger.warn(`Person ${userId} not found, skipping sync`);
-      return;
-    }
-
     // Build update data from representation
     const updateData: {
-      idpId?: string;
-      firstName?: string;
-      lastName?: string;
-      email?: string;
+      firstName: string;
+      lastName: string;
+      email: string;
       username?: string;
       phoneNumber?: string;
       position?: string;
       active?: boolean;
     } = {
-      idpId: keycloakUserId,
+      firstName: representation.firstName,
+      lastName: representation.lastName,
+      email: representation.email,
     };
 
-    if (representation.firstName) {
-      updateData.firstName = representation.firstName;
-    }
-    if (representation.lastName) {
-      updateData.lastName = representation.lastName;
-    }
-    if (representation.email) {
-      updateData.email = representation.email;
-    }
     if (representation.username) {
       updateData.username = representation.username;
     }
@@ -133,13 +120,17 @@ export class KeycloakWebhookController {
       updateData.active = representation.enabled;
     }
 
-    await prisma.person.update({
-      where: { id: userId },
-      data: updateData,
+    const person = await prisma.person.upsert({
+      where: { idpId: keycloakUserId },
+      update: updateData,
+      create: {
+        idpId: keycloakUserId,
+        ...updateData,
+      },
     });
 
     this.logger.log(
-      `Synced Person ${userId} with Keycloak user ${keycloakUserId}`,
+      `Synced Person ${person.id} with Keycloak user ${keycloakUserId}`,
     );
   }
 }

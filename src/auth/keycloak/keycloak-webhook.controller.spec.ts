@@ -20,8 +20,7 @@ describe('KeycloakWebhookController', () => {
     const mockPrismaService = {
       bypassRLS: jest.fn().mockReturnValue({
         person: {
-          findUnique: jest.fn().mockResolvedValue(null),
-          update: jest.fn().mockResolvedValue({}),
+          upsert: jest.fn().mockResolvedValue({ id: 'mock-id' }),
         },
       }),
     };
@@ -117,19 +116,15 @@ describe('KeycloakWebhookController', () => {
         return { rawBody } as any;
       };
 
-      it('should sync person on USER-CREATE event', async () => {
+      it('should create person on USER-CREATE event if not exists', async () => {
         keycloakService.verifyWebhookSignature.mockReturnValue(true);
-
-        const mockPerson = {
-          id: 'hhpo022y0hjysvzt06c6zjso',
-          firstName: 'Old',
-          lastName: 'Name',
-        };
 
         const mockPrisma = {
           person: {
-            findUnique: jest.fn().mockResolvedValue(mockPerson),
-            update: jest.fn().mockResolvedValue({}),
+            upsert: jest.fn().mockResolvedValue({
+              id: 'new-person-id',
+              idpId: '13ee9dda-f682-4583-a3ac-eb8d7e734ac9',
+            }),
           },
         };
         prismaService.bypassRLS.mockReturnValue(mockPrisma);
@@ -142,7 +137,6 @@ describe('KeycloakWebhookController', () => {
           emailVerified: true,
           enabled: true,
           attributes: {
-            user_id: ['hhpo022y0hjysvzt06c6zjso'],
             client_id: ['z2q1bjupejrlun8zlrhposr6'],
             site_id: ['i13sopxfk11qpwkcbzmoy92y'],
           },
@@ -164,12 +158,16 @@ describe('KeycloakWebhookController', () => {
         );
 
         expect(result).toEqual({ received: true });
-        expect(mockPrisma.person.findUnique).toHaveBeenCalledWith({
-          where: { id: 'hhpo022y0hjysvzt06c6zjso' },
-        });
-        expect(mockPrisma.person.update).toHaveBeenCalledWith({
-          where: { id: 'hhpo022y0hjysvzt06c6zjso' },
-          data: expect.objectContaining({
+        expect(mockPrisma.person.upsert).toHaveBeenCalledWith({
+          where: { idpId: '13ee9dda-f682-4583-a3ac-eb8d7e734ac9' },
+          update: expect.objectContaining({
+            firstName: 'Bob',
+            lastName: 'Marley',
+            email: 'bob.marley@gibsonops.com',
+            username: 'bob.marley@gibsonops.com',
+            active: true,
+          }),
+          create: expect.objectContaining({
             idpId: '13ee9dda-f682-4583-a3ac-eb8d7e734ac9',
             firstName: 'Bob',
             lastName: 'Marley',
@@ -180,20 +178,15 @@ describe('KeycloakWebhookController', () => {
         });
       });
 
-      it('should sync person on USER-UPDATE event', async () => {
+      it('should upsert person on USER-UPDATE event', async () => {
         keycloakService.verifyWebhookSignature.mockReturnValue(true);
-
-        const mockPerson = {
-          id: 'test-user-id',
-          firstName: 'Old',
-          lastName: 'Name',
-          idpId: 'keycloak-id',
-        };
 
         const mockPrisma = {
           person: {
-            findUnique: jest.fn().mockResolvedValue(mockPerson),
-            update: jest.fn().mockResolvedValue({}),
+            upsert: jest.fn().mockResolvedValue({
+              id: 'test-user-id',
+              idpId: 'keycloak-id',
+            }),
           },
         };
         prismaService.bypassRLS.mockReturnValue(mockPrisma);
@@ -205,7 +198,6 @@ describe('KeycloakWebhookController', () => {
           email: 'new.email@example.com',
           enabled: true,
           attributes: {
-            user_id: ['test-user-id'],
             phone_number: ['555-1234'],
             user_position: ['Manager'],
           },
@@ -222,9 +214,16 @@ describe('KeycloakWebhookController', () => {
 
         await controller.handleEvent(req, 'valid-sig', event as any);
 
-        expect(mockPrisma.person.update).toHaveBeenCalledWith({
-          where: { id: 'test-user-id' },
-          data: expect.objectContaining({
+        expect(mockPrisma.person.upsert).toHaveBeenCalledWith({
+          where: { idpId: 'keycloak-id' },
+          update: expect.objectContaining({
+            firstName: 'New',
+            lastName: 'Name',
+            email: 'new.email@example.com',
+            phoneNumber: '555-1234',
+            position: 'Manager',
+          }),
+          create: expect.objectContaining({
             idpId: 'keycloak-id',
             firstName: 'New',
             lastName: 'Name',
@@ -235,22 +234,19 @@ describe('KeycloakWebhookController', () => {
         });
       });
 
-      it('should skip sync if person not found', async () => {
+      it('should skip sync if required fields are missing', async () => {
         keycloakService.verifyWebhookSignature.mockReturnValue(true);
 
         const mockPrisma = {
           person: {
-            findUnique: jest.fn().mockResolvedValue(null),
-            update: jest.fn(),
+            upsert: jest.fn(),
           },
         };
         prismaService.bypassRLS.mockReturnValue(mockPrisma);
 
         const representation = {
           username: 'unknown@example.com',
-          attributes: {
-            user_id: ['non-existent-user'],
-          },
+          // missing firstName, lastName, email
         };
 
         const event = {
@@ -263,38 +259,29 @@ describe('KeycloakWebhookController', () => {
 
         await controller.handleEvent(req, 'valid-sig', event as any);
 
-        expect(mockPrisma.person.findUnique).toHaveBeenCalled();
-        expect(mockPrisma.person.update).not.toHaveBeenCalled();
+        expect(mockPrisma.person.upsert).not.toHaveBeenCalled();
       });
 
-      it('should skip sync if representation missing user_id', async () => {
+      it('should skip sync if representation is missing', async () => {
         keycloakService.verifyWebhookSignature.mockReturnValue(true);
 
         const mockPrisma = {
           person: {
-            findUnique: jest.fn(),
-            update: jest.fn(),
+            upsert: jest.fn(),
           },
         };
         prismaService.bypassRLS.mockReturnValue(mockPrisma);
 
-        const representation = {
-          username: 'user@example.com',
-          attributes: {}, // No user_id
-        };
-
         const event = {
           type: 'admin.USER-CREATE',
           resourceId: 'keycloak-id',
-          representation: JSON.stringify(representation),
           time: Date.now(),
         };
         const req = createMockRequest(event);
 
         await controller.handleEvent(req, 'valid-sig', event as any);
 
-        expect(mockPrisma.person.findUnique).not.toHaveBeenCalled();
-        expect(mockPrisma.person.update).not.toHaveBeenCalled();
+        expect(mockPrisma.person.upsert).not.toHaveBeenCalled();
       });
     });
   });
