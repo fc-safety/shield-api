@@ -643,9 +643,17 @@ export class AuthService {
       timestamp: decodedHead.iat,
     });
 
-    if (
-      !crypto.timingSafeEqual(Buffer.from(challenge), Buffer.from(signature))
-    ) {
+    let signatureMatches = false;
+    try {
+      signatureMatches = crypto.timingSafeEqual(
+        Buffer.from(challenge),
+        Buffer.from(signature),
+      );
+    } catch {
+      // timingSafeEqual throws if buffer lengths differ; treat as mismatch
+    }
+
+    if (!signatureMatches) {
       return {
         isValid: false,
         error: 'Invalid token',
@@ -702,6 +710,8 @@ export class AuthService {
         where: { id: person.id },
         data: personInput,
       });
+
+      await this.memoryCache.set(cacheKey, person, 60 * 60 * 1000);
     }
 
     return person;

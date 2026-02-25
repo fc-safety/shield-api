@@ -95,7 +95,7 @@ export class NotificationsService {
       ),
     ).then((results) => ({
       data: results.flatMap((r) => r.data),
-      error: results.at(0)?.error,
+      error: results.find((r) => r.error !== null)?.error,
     }));
 
     if (error) {

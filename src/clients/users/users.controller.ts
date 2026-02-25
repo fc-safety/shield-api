@@ -27,7 +27,9 @@ export class UsersController {
   }
 
   @Get('generate-password')
-  generatePassword(@Query('length', ParseIntPipe) length?: number) {
+  generatePassword(
+    @Query('length', new ParseIntPipe({ optional: true })) length?: number,
+  ) {
     return this.usersService.generatePassword(length);
   }
 

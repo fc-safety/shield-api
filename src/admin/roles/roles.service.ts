@@ -94,7 +94,7 @@ export class RolesService {
   async createRole(createRoleDto: CreateRoleDto): Promise<Role> {
     const prisma = this.prisma.bypassRLS();
 
-    // Check for duplicate name within same client scope
+    // Check for duplicate name
     const existingRole = await prisma.role.findFirst({
       where: {
         name: createRoleDto.name,
@@ -443,8 +443,10 @@ export class RolesService {
    * Invalidate the cached data for a role.
    */
   private async invalidateRoleCache(roleId: string): Promise<void> {
-    const cacheKey = `role-capabilities:${roleId}`;
-    await this.memoryCache.del(cacheKey);
+    await this.memoryCache.mdel([
+      `role-capabilities:${roleId}`,
+      `role-scope:${roleId}`,
+    ]);
   }
 
   /**

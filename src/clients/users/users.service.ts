@@ -264,11 +264,13 @@ export class UsersService {
       password += allChars.charAt(crypto.randomInt(allChars.length));
     }
 
-    // Shuffle the password to avoid predictable character positions
-    password = password
-      .split('')
-      .sort(() => crypto.randomInt(3) - 1)
-      .join('');
+    // Fisher-Yates shuffle for an unbiased permutation
+    const chars = password.split('');
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = crypto.randomInt(i + 1);
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    password = chars.join('');
 
     return { password };
   }
