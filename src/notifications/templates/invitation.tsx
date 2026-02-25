@@ -57,7 +57,7 @@ export default function InvitationTemplateReact({
       <Block>
         <Paragraph>
           To accept this invitation, click the button below. You will need to
-          create an account or sign in if you already have one.
+          create an account, or sign in if you already have one.
         </Paragraph>
       </Block>
       <Block>
@@ -141,7 +141,7 @@ InvitationTemplateReact.Text = ({
 
   ---
 
-  To accept this invitation, click the link below. You will need to create an account or sign in if you already have one.
+  To accept this invitation, click the link below. You will need to create an account, or sign in if you already have one.
 
   Please use this email address to create your account or sign in:
   ${inviteeEmail}
