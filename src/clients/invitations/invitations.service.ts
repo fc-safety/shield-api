@@ -59,6 +59,7 @@ export class InvitationsService {
         roleName: invitation.role.name,
         inviterFirstName: invitation.createdBy.firstName,
         inviterLastName: invitation.createdBy.lastName,
+        inviteeEmail: invitation.email,
         inviteUrl: this.getInviteUrl(invitation.code),
         expiresOn: invitation.expiresOn.toISOString(),
       },
@@ -368,7 +369,7 @@ export class InvitationsService {
         person.email.toLowerCase() !== invitation.email.toLowerCase()
       ) {
         throw new ForbiddenException(
-          'This invitation is restricted to a different email address',
+          `This invitation is restricted to a different email address. You are signed in with ${person.email}`,
         );
       }
 
