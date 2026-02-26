@@ -106,6 +106,7 @@ describe('UsersService', () => {
         },
         personClientAccess: {
           findFirst: mockPcaFindFirst,
+          upsert: mockPcaUpsert,
           delete: mockPcaDelete,
           updateMany: mockPcaUpdateMany,
         },

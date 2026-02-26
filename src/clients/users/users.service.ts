@@ -278,39 +278,41 @@ export class UsersService {
       throw new NotFoundException(`Role with ID ${dto.roleId} not found`);
     }
 
-    // Determine isPrimary
-    const existingPrimaryAccess = await prisma.personClientAccess.findFirst({
-      where: { personId: person.id, isPrimary: true },
-    });
+    const clientAccess = await prisma.$transaction(async (tx) => {
+      // Determine isPrimary
+      const existingPrimaryAccess = await tx.personClientAccess.findFirst({
+        where: { personId: person.id, isPrimary: true },
+      });
 
-    const isPrimary =
-      !existingPrimaryAccess ||
-      (existingPrimaryAccess.clientId === dto.clientId &&
-        existingPrimaryAccess.siteId === dto.siteId);
+      const isPrimary =
+        !existingPrimaryAccess ||
+        (existingPrimaryAccess.clientId === dto.clientId &&
+          existingPrimaryAccess.siteId === dto.siteId);
 
-    // Upsert PersonClientAccess
-    const clientAccess = await prisma.personClientAccess.upsert({
-      where: {
-        personId_clientId_siteId_roleId: {
+      // Upsert PersonClientAccess
+      return tx.personClientAccess.upsert({
+        where: {
+          personId_clientId_siteId_roleId: {
+            personId: person.id,
+            clientId: dto.clientId,
+            siteId: dto.siteId,
+            roleId: dto.roleId,
+          },
+        },
+        update: { isPrimary },
+        create: {
           personId: person.id,
           clientId: dto.clientId,
           siteId: dto.siteId,
           roleId: dto.roleId,
+          isPrimary,
         },
-      },
-      update: { isPrimary },
-      create: {
-        personId: person.id,
-        clientId: dto.clientId,
-        siteId: dto.siteId,
-        roleId: dto.roleId,
-        isPrimary,
-      },
-      include: {
-        client: { select: { id: true, externalId: true, name: true } },
-        site: { select: { id: true, externalId: true, name: true } },
-        role: { select: { id: true, name: true, scope: true } },
-      },
+        include: {
+          client: { select: { id: true, externalId: true, name: true } },
+          site: { select: { id: true, externalId: true, name: true } },
+          role: { select: { id: true, name: true, scope: true } },
+        },
+      });
     });
 
     // Invalidate cache
@@ -392,7 +394,6 @@ export class UsersService {
           }
         }
       }
-
     });
 
     // Invalidate cache
