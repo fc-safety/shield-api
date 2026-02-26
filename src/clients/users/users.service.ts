@@ -3,16 +3,22 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import crypto from 'crypto';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
+import { clearAccessGrantResponseCache } from 'src/auth/utils/access-grants';
+import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { RoleScope } from 'src/generated/prisma/enums';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AddUserRoleDto } from './dto/add-user-role.dto';
 import { QueryUserDto } from './dto/query-user.dto';
+import { RemoveUserRoleDto } from './dto/remove-user-role.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -62,11 +68,14 @@ const personInclude = {
  */
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly keycloak: KeycloakService,
     private readonly notifications: NotificationsService,
     private readonly config: ApiConfigService,
+    private readonly memoryCache: MemoryCacheService,
   ) {}
 
   /**
@@ -232,6 +241,175 @@ export class UsersService {
       client_id: appClientId,
       redirect_uri: this.config.get('FRONTEND_URL'),
     });
+
+    return { success: true };
+  }
+
+  /**
+   * Add a role (client/site/role combination) to a user.
+   * Works across clients — the clientId is provided in the DTO.
+   */
+  async addRole(id: string, dto: AddUserRoleDto) {
+    const prisma = this.prisma.bypassRLS();
+
+    // Verify user exists
+    const person = await prisma.person
+      .findUniqueOrThrow({
+        where: { id },
+        select: { id: true, idpId: true },
+      })
+      .catch(as404OrThrow);
+
+    // Validate site belongs to the specified client
+    const site = await prisma.site.findFirst({
+      where: { id: dto.siteId, clientId: dto.clientId },
+    });
+    if (!site) {
+      throw new NotFoundException(
+        `Site with ID ${dto.siteId} not found for client ${dto.clientId}`,
+      );
+    }
+
+    // Validate role exists
+    const role = await prisma.role.findUnique({
+      where: { id: dto.roleId },
+    });
+    if (!role) {
+      throw new NotFoundException(`Role with ID ${dto.roleId} not found`);
+    }
+
+    const clientAccess = await prisma.$transaction(async (tx) => {
+      // Determine isPrimary
+      const existingPrimaryAccess = await tx.personClientAccess.findFirst({
+        where: { personId: person.id, isPrimary: true },
+      });
+
+      const isPrimary =
+        !existingPrimaryAccess ||
+        (existingPrimaryAccess.clientId === dto.clientId &&
+          existingPrimaryAccess.siteId === dto.siteId);
+
+      // Upsert PersonClientAccess
+      return tx.personClientAccess.upsert({
+        where: {
+          personId_clientId_siteId_roleId: {
+            personId: person.id,
+            clientId: dto.clientId,
+            siteId: dto.siteId,
+            roleId: dto.roleId,
+          },
+        },
+        update: { isPrimary },
+        create: {
+          personId: person.id,
+          clientId: dto.clientId,
+          siteId: dto.siteId,
+          roleId: dto.roleId,
+          isPrimary,
+        },
+        include: {
+          client: { select: { id: true, externalId: true, name: true } },
+          site: { select: { id: true, externalId: true, name: true } },
+          role: { select: { id: true, name: true, scope: true } },
+        },
+      });
+    });
+
+    // Invalidate cache
+    if (person.idpId) {
+      await clearAccessGrantResponseCache({
+        idpId: person.idpId,
+        clientId: dto.clientId,
+        siteId: dto.siteId,
+        deleteFn: (keys) => this.memoryCache.mdel(keys),
+      }).catch((e) =>
+        this.logger.error(
+          'Error invalidating access grant cache while adding user role',
+          e,
+        ),
+      );
+    }
+
+    return clientAccess;
+  }
+
+  /**
+   * Remove a role (client/site/role combination) from a user.
+   * Works across clients — the clientId is provided in the DTO.
+   */
+  async removeRole(id: string, dto: RemoveUserRoleDto) {
+    const prisma = this.prisma.bypassRLS();
+
+    // Verify user exists
+    const person = await prisma.person
+      .findUniqueOrThrow({
+        where: { id },
+        select: { id: true, idpId: true },
+      })
+      .catch(as404OrThrow);
+
+    await prisma.$transaction(async (tx) => {
+      const clientAccess = await tx.personClientAccess.findFirst({
+        where: {
+          personId: id,
+          clientId: dto.clientId,
+          roleId: dto.roleId,
+          siteId: dto.siteId,
+        },
+      });
+
+      if (!clientAccess) {
+        throw new NotFoundException(
+          'User does not have this client/site/role combination',
+        );
+      }
+
+      // Delete the PersonClientAccess
+      await tx.personClientAccess.delete({
+        where: { id: clientAccess.id },
+      });
+
+      // If the deleted row was primary, promote the oldest remaining
+      if (clientAccess.isPrimary) {
+        const remainingPrimary = await tx.personClientAccess.findFirst({
+          where: { personId: id, isPrimary: true },
+        });
+
+        if (!remainingPrimary) {
+          const oldestRemaining = await tx.personClientAccess.findFirst({
+            where: { personId: id },
+            orderBy: { createdOn: 'asc' },
+            select: { id: true, clientId: true, siteId: true },
+          });
+
+          if (oldestRemaining) {
+            await tx.personClientAccess.updateMany({
+              where: {
+                personId: id,
+                clientId: oldestRemaining.clientId,
+                siteId: oldestRemaining.siteId,
+              },
+              data: { isPrimary: true },
+            });
+          }
+        }
+      }
+    });
+
+    // Invalidate cache
+    if (person.idpId) {
+      await clearAccessGrantResponseCache({
+        idpId: person.idpId,
+        clientId: dto.clientId,
+        siteId: dto.siteId,
+        deleteFn: (keys) => this.memoryCache.mdel(keys),
+      }).catch((e) =>
+        this.logger.error(
+          'Error invalidating access grant cache while removing user role',
+          e,
+        ),
+      );
+    }
 
     return { success: true };
   }

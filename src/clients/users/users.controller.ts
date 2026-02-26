@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -10,7 +11,9 @@ import {
 } from '@nestjs/common';
 import { CheckScope } from 'src/auth/utils/policies';
 import { RoleScope } from 'src/generated/prisma/enums';
+import { AddUserRoleDto } from './dto/add-user-role.dto';
 import { QueryUserDto } from './dto/query-user.dto';
+import { RemoveUserRoleDto } from './dto/remove-user-role.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SendResetPasswordQueryDto } from './dto/send-reset-password-email-query.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -57,5 +60,15 @@ export class UsersController {
     @Query() query: SendResetPasswordQueryDto,
   ) {
     return this.usersService.sendResetPasswordEmail(id, query.appClientId);
+  }
+
+  @Post(':id/roles')
+  addRole(@Param('id') id: string, @Body() dto: AddUserRoleDto) {
+    return this.usersService.addRole(id, dto);
+  }
+
+  @Delete(':id/roles')
+  removeRole(@Param('id') id: string, @Body() dto: RemoveUserRoleDto) {
+    return this.usersService.removeRole(id, dto);
   }
 }
