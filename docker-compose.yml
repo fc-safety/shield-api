@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: shield_api
+      POSTGRES_PASSWORD: asdf
+      POSTGRES_DB: shield_api
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  # Keycloak (optional — most developers connect to staging instead)
+  # Uses a custom image from https://github.com/fc-safety/keycloak (private).
+  # To use staging Keycloak, skip this service and set:
+  #   AUTH_JWKS_URI=https://auth.stg.fc-safety.com/realms/shield/protocol/openid-connect/certs
+  #   AUTH_ISSUER=https://auth.stg.fc-safety.com/realms/shield
+  #   KEYCLOAK_ADMIN_CLIENT_BASE_URL=https://auth.stg.fc-safety.com
+  #
+  # keycloak:
+  #   image: ghcr.io/fc-safety/keycloak:latest
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     KC_DB: postgres
+  #     KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+  #     KC_DB_USERNAME: shield_api
+  #     KC_DB_PASSWORD: asdf
+  #     KEYCLOAK_ADMIN: admin
+  #     KEYCLOAK_ADMIN_PASSWORD: admin
+
+volumes:
+  pgdata:
+  redisdata:
