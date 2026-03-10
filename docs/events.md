@@ -27,25 +27,34 @@ SSE connections use custom tokens (not JWTs) because EventSource doesn't support
 1. Client calls `POST /events/token` to get a short-lived token (24 hours)
 2. Client passes the token as a query parameter when connecting to the SSE endpoint
 
+## Supported Models
+
+The following models can be subscribed to:
+
+`Manufacturer`, `ProductCategory`, `Product`, `Asset`, `Alert`, `Inspection`, `InspectionRoute`, `ProductRequest`
+
 ## Subscribing to Events
 
-Connect to the SSE endpoint with:
+Connect to the SSE endpoint with array-style query parameters:
 
 ```typescript
 // Client-side
-const params = new URLSearchParams({
-  token: '<custom-token>',
-  models: 'Asset,Inspection',      // Required: comma-separated model names
-  operations: 'create,update',      // Optional: filter by operation
-  ids: 'uuid1,uuid2',              // Optional: filter by record ID
-});
+const params = new URLSearchParams();
+params.append('token', '<custom-token>');
+params.append('models', 'Asset');          // Required: one per model
+params.append('models', 'Inspection');     // Repeat for multiple models
+params.append('operations', 'create');     // Optional: filter by operation
+params.append('operations', 'update');
+params.append('ids', 'uuid1');             // Optional: filter by record ID
 
-const source = new EventSource(`/events/db?${params}`);
+const source = new EventSource(`/events/db/listen?${params}`);
 source.onmessage = (event) => {
   const data = JSON.parse(event.data);
   // { model: "Asset", operation: "create", id: "abc-123" }
 };
 ```
+
+Note: Query parameters use array format (`?models=Asset&models=Inspection`), not comma-separated values.
 
 ## Event Payload
 

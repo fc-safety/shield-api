@@ -65,7 +65,7 @@ Parent Site
 └── Subsite B
 ```
 
-This is cached for 1 hour via `getAllowedSiteIdsForSite()`.
+This is cached for 1 hour via `getAllowedSiteIdsForSite()` (`src/prisma/prisma.service.ts:268`).
 
 ## Transactions
 

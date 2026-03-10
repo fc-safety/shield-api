@@ -11,7 +11,7 @@ Client Request
   │
   ├─ Authorization: Bearer <JWT>
   ├─ x-client-id: <client-uuid> (optional)
-  ├─ x-site-id: <site-uuid> (optional)
+  ├─ x-site-id: <site-uuid> (optional, used for organization context override)
   └─ x-access-intent: system|elevated|user (optional, default: user)
         │
         ▼

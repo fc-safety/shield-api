@@ -32,14 +32,16 @@ const cachedFn = this.memoryCache.wrap(
 
 ### What's Cached
 
-| Data | TTL | Key Pattern |
-|------|-----|-------------|
-| Access grants | 5 min | `access-grant:idpId:<id>\|client:<id>\|...` |
-| Person records | 1 hour | `person:idpId=<id>` |
-| Signing keys | Indefinite | `signing-key:<keyId>` |
-| Allowed site IDs | 1 hour | `allowed-site-ids:siteId=<id>` |
-| Settings blocks | Indefinite | `settings-block:<friendlyId>` |
-| Client validation | Varies | `client-access:<clientId>` |
+| Data | TTL | Key Pattern | Source |
+|------|-----|-------------|--------|
+| Access grants | 5 min | `access-grant:idpId:<id>\|client:<id>\|...` | `src/auth/utils/access-grants.ts` |
+| Person records | 1 hour | `person:idpId=<id>` | `src/auth/auth.service.ts` |
+| Signing keys | Indefinite | `signing-key:<keyId>` | `src/auth/auth.service.ts` |
+| Allowed site IDs | 1 hour | `allowed-site-ids:siteId=<id>` | `src/prisma/prisma.service.ts:268` |
+| Settings blocks | Indefinite | `settings-block:<friendlyId>` | `src/settings/settings.service.ts` |
+| Client validation | Varies | `client-access:<clientId>` | `src/clients/clients/clients.service.ts` |
+| Roles | 5 min | `role:<id>`, `roles` | `src/admin/roles/roles.service.ts:26` |
+| Site status | 1 hour | — | `src/clients/sites/sites.service.ts:17` |
 
 ### Cache Invalidation
 

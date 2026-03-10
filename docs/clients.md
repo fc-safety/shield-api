@@ -8,20 +8,20 @@ See also: [multi-client-access.md](./multi-client-access.md) and [multi-client-a
 
 ### Clients (`/clients`)
 
-Top-level tenant organizations.
+Top-level tenant organizations. The entire controller requires SYSTEM scope (`@CheckScope('SYSTEM')`), except where overridden with `@CheckIsAuthenticated()`.
 
 | Method | Path | Scope | Description |
 |--------|------|-------|-------------|
 | POST | `/` | SYSTEM | Create client |
-| GET | `/` | — | List all clients |
-| GET | `/my-organization` | — | Current user's organization |
-| GET | `/:id` | — | Client with sites, members, assets, roles |
-| PATCH | `/:id` | — | Update client |
-| DELETE | `/:id` | — | Delete client |
-| POST | `/:id/duplicate-demo` | — | Clone demo client |
-| POST | `/clear-demo-inspections` | — | Clear demo data |
-| POST | `/generate-demo-inspections` | — | Generate realistic demo data |
-| POST | `/renew-noncompliant-demo-assets` | — | Refresh demo compliance |
+| GET | `/` | SYSTEM | List all clients |
+| GET | `/my-organization` | Authenticated | Current user's organization |
+| GET | `/:id` | SYSTEM | Client with sites, members, assets, roles |
+| PATCH | `/:id` | SYSTEM | Update client |
+| DELETE | `/:id` | SYSTEM | Delete client |
+| POST | `/:id/duplicate-demo` | SYSTEM | Clone demo client |
+| POST | `/clear-demo-inspections` | Authenticated | Clear demo data |
+| POST | `/generate-demo-inspections` | Authenticated | Generate realistic demo data |
+| POST | `/renew-noncompliant-demo-assets` | Authenticated | Refresh demo compliance |
 
 Demo operations use 60-second transaction timeouts and generate realistic question responses.
 

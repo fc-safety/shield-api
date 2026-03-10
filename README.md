@@ -17,7 +17,7 @@ docker compose up -d
 
 This starts **PostgreSQL** and **Redis** with default development credentials. The database `shield_api` is created automatically with user `shield_api` / password `asdf`.
 
-**Keycloak:** Most developers connect to the staging instance at `https://auth.stg.fc-safety.com` rather than running Keycloak locally. A custom Keycloak image is available in the private repo [fc-safety/keycloak](https://github.com/fc-safety/keycloak) — see the commented-out service in `docker-compose.yml` if you need a local instance.
+**Keycloak:** Most developers connect to the staging instance at `https://auth.stg.fc-safety.com` rather than running Keycloak locally. A custom Keycloak image is available in the private repo [fc-safety/keycloak](https://github.com/fc-safety/keycloak) — see the commented-out service in `docker-compose.yml` if you need a local instance. Note: running Keycloak locally requires manually creating the `keycloak` database first (`docker compose exec postgres createdb -U shield_api keycloak`).
 
 ### 2. Configure and start the API
 

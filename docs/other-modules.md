@@ -39,8 +39,22 @@ Returns user identity (name, email, company) with HMAC-SHA256 signature for secu
 
 **Files:** `src/support/`
 
-## Admin / Roles (`/admin/roles`)
+## Admin / Roles (`/roles`)
 
-System-level role management.
+System-level role management. All endpoints require SYSTEM scope (`@CheckSystemAdmin()`).
+
+| Method | Path | Capability | Description |
+|--------|------|-----------|-------------|
+| POST | `/` | — | Create role |
+| GET | `/` | manage-users | List all roles |
+| GET | `/capabilities` | manage-users | List available capabilities |
+| GET | `/scopes` | manage-users | List available scopes |
+| GET | `/notification-groups` | — | List notification groups |
+| GET | `/:id` | manage-users | Get role by ID |
+| PATCH | `/:id` | — | Update role |
+| DELETE | `/:id` | — | Delete role (204) |
+| POST | `/:id/update-notification-groups` | — | Assign notification groups to role (204) |
+
+Roles are cached for 5 minutes (`ROLE_CACHE_TTL` in `src/admin/roles/roles.service.ts:26`).
 
 **Files:** `src/admin/roles/`
