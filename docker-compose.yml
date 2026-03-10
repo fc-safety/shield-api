@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:16
     environment:
       POSTGRES_USER: shield_api
       POSTGRES_PASSWORD: asdf
@@ -11,7 +11,7 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   redis:
-    image: redis:latest
+    image: redis:7
     ports:
       - "6379:6379"
     volumes:
@@ -30,6 +30,8 @@ services:
   #     - "8080:8080"
   #   environment:
   #     KC_DB: postgres
+  #     # Note: You must manually create the 'keycloak' database first:
+  #     #   docker compose exec postgres createdb -U shield_api keycloak
   #     KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
   #     KC_DB_USERNAME: shield_api
   #     KC_DB_PASSWORD: asdf

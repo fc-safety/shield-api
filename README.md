@@ -29,7 +29,8 @@ npm install
 cp .env.example .env
 # Edit .env — the defaults work with docker compose + staging Keycloak
 
-# Generate Prisma client
+# Generate Prisma client (only needed on first setup or after git pull
+# with schema changes — migrate dev below also regenerates the client)
 npm run db:generate
 
 # Run database migrations (creates tables and RLS policies)
