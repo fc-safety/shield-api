@@ -260,7 +260,7 @@ The system implements Row Level Security (RLS) using PostgreSQL session variable
 - `app.current_site_id` - Current site context
 - `app.current_person_id` - Current user context
 - `app.allowed_site_ids` - Comma-separated list of accessible site IDs
-- `app.current_user_visibility` - User visibility level
+- `app.current_user_scope` - User's role scope
 - `app.bypass_rls` - Set to 'on' for admin/cron operations
 
 These are set via database defaults in Prisma models and enforced through RLS policies.
@@ -324,7 +324,7 @@ SELECT set_config('app.current_client_id', '<client_id>', TRUE);
 SELECT set_config('app.current_site_id', '<site_id>', TRUE);
 SELECT set_config('app.allowed_site_ids', '<site_ids>', TRUE);
 SELECT set_config('app.current_person_id', '<person_id>', TRUE);
-SELECT set_config('app.current_user_visibility', '<visibility>', TRUE);
+SELECT set_config('app.current_user_scope', '<scope>', TRUE);
 ```
 
 Database schema is defined in `prisma/schema.prisma`. Migrations are in `prisma/migrations/`.
