@@ -58,7 +58,7 @@ export class ProductRequestsService {
               },
             },
             requestor: true,
-            client: prisma.$accessIntent === 'system',
+            client: prisma.$accessContextKind === 'system',
             site: true,
           },
         }),

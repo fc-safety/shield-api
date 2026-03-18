@@ -61,6 +61,8 @@ describe('TagsService', () => {
     mockApiClsService = {
       get: jest.fn(),
       set: jest.fn(),
+      accessContextKind: 'public',
+      requireAccessGrant: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -434,6 +436,30 @@ describe('TagsService', () => {
           siteName: 'Secondary Site',
         },
       });
+    });
+  });
+
+  describe('registerTag', () => {
+    it('uses bypass upsert only for system access context', async () => {
+      const bypassTagUpsert = jest.fn().mockResolvedValue({ id: 'tag-1' });
+      mockPrismaService.bypassRLS.mockReturnValue({
+        tag: {
+          upsert: bypassTagUpsert,
+        },
+      });
+      mockApiClsService.accessContextKind = 'system';
+
+      jest.spyOn(service as any, 'parseInspectionToken').mockReturnValue({
+        tagExternalId: 'ext-tag-1',
+        serialNumber: 'serial-1',
+      });
+
+      await service.registerTag('token', {
+        client: { connect: { id: 'client-1' } } as any,
+        site: { connect: { id: 'site-1' } } as any,
+      });
+
+      expect(bypassTagUpsert).toHaveBeenCalledTimes(1);
     });
   });
 });
