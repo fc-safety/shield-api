@@ -543,6 +543,15 @@ export class AuthService {
     accessIntent: AccessIntent;
   }): ResolvedAccessContext {
     const { user, person, accessGrant, accessIntent } = params;
+
+    if (!user && !person && !accessGrant) {
+      return { kind: 'public' };
+    }
+
+    // This resolver is expected to run after AuthGuard validation. On public or
+    // skip-access-grant routes, we can have a partially authenticated request
+    // (e.g. user+person without a tenant grant); canonical context remains public
+    // and compatibility fields (`user`, `person`) continue to be set in CLS.
     if (!user || !person || !accessGrant) {
       return { kind: 'public' };
     }

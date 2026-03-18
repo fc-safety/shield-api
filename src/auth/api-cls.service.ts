@@ -38,9 +38,10 @@ export class ApiClsService {
   }
 
   public requireAccessGrant() {
+    const accessContext = this.get('accessContext');
     const accessGrant =
-      this.get('accessContext')?.kind !== 'public'
-        ? this.get('accessContext')?.authorization.accessGrant
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.authorization.accessGrant
         : this.get('accessGrant');
     if (!accessGrant) {
       throw new Error(
@@ -52,7 +53,10 @@ export class ApiClsService {
 
   public requireUser() {
     const accessContext = this.get('accessContext');
-    const user = accessContext?.kind !== 'public' ? accessContext.actor.user : null;
+    const user =
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.actor.user
+        : null;
     if (!user) {
       // TODO: Remove legacy fallback once all callers use accessContext.
       const legacyUser = this.get('user');
@@ -67,7 +71,9 @@ export class ApiClsService {
   public requirePerson() {
     const accessContext = this.get('accessContext');
     const person =
-      accessContext?.kind !== 'public' ? accessContext.actor.person : null;
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.actor.person
+        : null;
     if (!person) {
       // TODO: Remove legacy fallback once all callers use accessContext.
       const legacyPerson = this.get('person');
