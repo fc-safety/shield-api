@@ -13,6 +13,7 @@ import { Request } from 'express';
 import { isIPv4, isIPv6 } from 'net';
 import { getAccessIntent } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
+import { AccessIntent } from 'src/common/utils';
 import { ApiClsService } from './api-cls.service';
 import { AccessGrantException } from './auth.exception';
 import { AuthService } from './auth.service';
@@ -111,6 +112,7 @@ export class AuthGuard implements CanActivate {
     await this.setClsContextFromRequest(request, {
       user,
       accessGrant,
+      accessIntent,
       isPublic: allowPublic,
       skipAccessGrantValidation,
     });
@@ -157,17 +159,18 @@ export class AuthGuard implements CanActivate {
     apiContext: {
       user: StatelessUser | undefined | null;
       accessGrant: AccessGrant | undefined | null;
+      accessIntent: AccessIntent;
       isPublic: boolean;
       skipAccessGrantValidation: boolean;
     },
   ) {
-    const { user, accessGrant, isPublic, skipAccessGrantValidation } =
+    const { user, accessGrant, accessIntent, isPublic, skipAccessGrantValidation } =
       apiContext;
 
     this.cls.set('isPublic', isPublic);
     this.cls.set('skipAccessGrantValidation', skipAccessGrantValidation);
 
-    this.cls.set('accessIntent', getAccessIntent(request));
+    this.cls.set('accessIntent', accessIntent);
     this.cls.set('useragent', request.headers['user-agent']);
     if (request.ip && isIPv4(request.ip)) {
       this.cls.set('ipv4', request.ip);
@@ -180,6 +183,25 @@ export class AuthGuard implements CanActivate {
       this.cls.set('user', user);
       const person = await this.authService.savePersonFromUserData(user);
       this.cls.set('person', person);
+      this.cls.set(
+        'accessContext',
+        this.authService.resolveAccessContext({
+          user,
+          person,
+          accessGrant,
+          accessIntent,
+        }),
+      );
+    } else {
+      this.cls.set(
+        'accessContext',
+        this.authService.resolveAccessContext({
+          user,
+          person: null,
+          accessGrant,
+          accessIntent,
+        }),
+      );
     }
 
     if (accessGrant) {

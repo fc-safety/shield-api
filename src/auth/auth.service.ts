@@ -7,10 +7,11 @@ import { IncomingMessage } from 'http';
 import { Jwt, TokenExpiredError } from 'jsonwebtoken';
 import { expressJwtSecret } from 'jwks-rsa';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
-import { firstOf, getAccessIntent } from 'src/common/utils';
+import { AccessIntent, firstOf, getAccessIntent } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { ClientStatus, Prisma, RoleScope } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { ResolvedAccessContext } from './access-context.types';
 import { TAccessGrantResult } from './auth.types';
 import {
   buildUserFromToken,
@@ -532,6 +533,51 @@ export class AuthService {
       requestedClientId: firstOf(request.headers['x-client-id']),
       requestedSiteId: firstOf(request.headers['x-site-id']),
       accessIntent: getAccessIntent(request as any),
+    };
+  }
+
+  public resolveAccessContext(params: {
+    user?: StatelessUser | null;
+    person?: Prisma.PersonGetPayload<object> | null;
+    accessGrant?: IAccessGrantData | null;
+    accessIntent: AccessIntent;
+  }): ResolvedAccessContext {
+    const { user, person, accessGrant, accessIntent } = params;
+    if (!user || !person || !accessGrant) {
+      return { kind: 'public' };
+    }
+
+    const actor = { user, person };
+    const authorization = { accessGrant, accessIntent };
+
+    if (accessIntent === 'system') {
+      return {
+        kind: 'system',
+        actor,
+        authorization,
+      };
+    }
+
+    if (accessIntent === 'elevated') {
+      return {
+        kind: 'support',
+        actor,
+        tenant: {
+          clientId: accessGrant.clientId,
+          siteId: accessGrant.siteId,
+        },
+        authorization,
+      };
+    }
+
+    return {
+      kind: 'tenant',
+      actor,
+      tenant: {
+        clientId: accessGrant.clientId,
+        siteId: accessGrant.siteId,
+      },
+      authorization,
     };
   }
 

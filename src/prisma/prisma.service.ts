@@ -1,4 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  AccessContextKind,
+  ResolvedAccessContext,
+} from 'src/auth/access-context.types';
 import { ApiClsService } from 'src/auth/api-cls.service';
 import { TAccessGrant, TScope } from 'src/auth/auth.types';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
@@ -185,6 +189,7 @@ export class PrismaService
       const extendedPrisma = prisma.$extends({
         client: {
           $accessIntent: 'system' as const,
+          $accessContextKind: 'system' as const,
           $rlsContext: () => options.rlsContext,
           $mode: mode ?? 'request',
         },
@@ -310,23 +315,37 @@ export class PrismaService
   }
 
   private async buildPrimaryExtension(options: PrimaryExtensionOptions) {
-    const accessIntent = this.cls.accessIntent;
-    const person = this.cls.get('person');
-    const accessGrant = this.cls.get('accessGrant');
-
+    const accessContext = this.cls.get('accessContext');
+    const accessIntent = getAccessIntentFromContext(accessContext, this.cls);
+    const accessContextKind = accessContext?.kind ?? 'public';
+    const person = getPersonFromAccessContext(accessContext, this.cls);
+    const accessGrant = getAccessGrantFromAccessContext(accessContext, this.cls);
     const mode = this.cls.get('mode');
-    const isSystemAdmin =
-      !!accessGrant && accessGrant.scope === RoleScope.SYSTEM;
-
-    const shouldBypassRLS =
-      mode === 'cron' ||
-      !!options.shouldBypassRLSAsSystemAdmin ||
-      accessIntent === 'system';
-    const canBypassRLS = mode === 'cron' || isSystemAdmin;
-    const bypassRLS = shouldBypassRLS && canBypassRLS;
+    const bypassRLS = shouldBypassRLS({
+      mode,
+      accessContextKind,
+    });
 
     let rlsContext: IPrismaRLSContext | undefined = options.rlsContext;
-    if (accessGrant && person) {
+    if (
+      !rlsContext &&
+      accessContext &&
+      accessContext.kind !== 'public' &&
+      accessContext.kind !== 'system'
+    ) {
+      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
+        accessContext.tenant.siteId,
+      );
+      const allowedSiteIdsStr = allowedSiteIds.join(',');
+      rlsContext = {
+        personId: accessContext.actor.person.id,
+        clientId: accessContext.tenant.clientId,
+        siteId: accessContext.tenant.siteId,
+        allowedSiteIds,
+        allowedSiteIdsStr,
+        scope: accessContext.authorization.accessGrant.scope,
+      };
+    } else if (accessGrant && person) {
       const allowedSiteIds = await this.getAllowedSiteIdsForSite(
         accessGrant.siteId,
       );
@@ -350,6 +369,7 @@ export class PrismaService
         client: {
           $rlsContext: () => rlsContext,
           $accessIntent: accessIntent,
+          $accessContextKind: accessContextKind,
           $mode: mode ?? 'request',
         },
         model: {
@@ -469,10 +489,6 @@ export interface IPrismaRLSContext {
 }
 
 export interface PrimaryExtensionOptions {
-  /**
-   * If true, RLS will be bypassed for all queries when the context contains system admin scope or cron mode.
-   */
-  shouldBypassRLSAsSystemAdmin?: boolean;
   rlsContext?: IPrismaRLSContext;
 }
 
@@ -480,21 +496,21 @@ export interface BypassRLSExtensionOptions {
   rlsContext?: IPrismaRLSContext;
 }
 
-function buildRLSContextStatements(
+export function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: true,
 ): Prisma.PrismaPromise<any>[];
-function buildRLSContextStatements(
+export function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: false,
   rlsContext: IPrismaRLSContext,
 ): Prisma.PrismaPromise<any>[];
-function buildRLSContextStatements(
+export function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: boolean,
   rlsContext?: IPrismaRLSContext,
 ): Prisma.PrismaPromise<any>[];
-function buildRLSContextStatements(
+export function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: boolean,
   rlsContext?: IPrismaRLSContext,
@@ -516,6 +532,43 @@ function buildRLSContextStatements(
     prismaClient.$executeRaw`SELECT set_config('app.current_person_id', ${rlsContext.personId}, TRUE)`,
     prismaClient.$executeRaw`SELECT set_config('app.current_user_scope', ${rlsContext.scope}, TRUE)`,
   ];
+}
+
+export function shouldBypassRLS(params: {
+  mode?: 'cron' | 'request';
+  accessContextKind: AccessContextKind;
+}): boolean {
+  return params.mode === 'cron' || params.accessContextKind === 'system';
+}
+
+function getAccessIntentFromContext(
+  accessContext: ResolvedAccessContext | undefined,
+  cls: ApiClsService,
+) {
+  if (!accessContext || accessContext.kind === 'public') {
+    return cls.accessIntent;
+  }
+  return accessContext.authorization.accessIntent;
+}
+
+function getPersonFromAccessContext(
+  accessContext: ResolvedAccessContext | undefined,
+  cls: ApiClsService,
+) {
+  if (accessContext && accessContext.kind !== 'public') {
+    return accessContext.actor.person;
+  }
+  return cls.get('person');
+}
+
+function getAccessGrantFromAccessContext(
+  accessContext: ResolvedAccessContext | undefined,
+  cls: ApiClsService,
+) {
+  if (accessContext && accessContext.kind !== 'public') {
+    return accessContext.authorization.accessGrant;
+  }
+  return cls.get('accessGrant');
 }
 
 async function findManyForPageExtensionFn<T>(

@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { type ClsStore, ClsService } from 'nestjs-cls';
+import {
+  AccessContextKind,
+  ResolvedAccessContext,
+} from 'src/auth/access-context.types';
 import { TAccessGrant } from 'src/auth/auth.types';
 import { StatelessUser } from 'src/auth/user.schema';
 import { AccessIntent } from 'src/common/utils';
@@ -12,6 +16,7 @@ export interface CommonClsStore extends ClsStore {
   person?: Prisma.PersonGetPayload<object>;
   accessGrant?: TAccessGrant;
   accessIntent?: AccessIntent;
+  accessContext?: ResolvedAccessContext;
   useragent?: string;
   ipv4?: string;
   ipv6?: string;
@@ -33,7 +38,10 @@ export class ApiClsService {
   }
 
   public requireAccessGrant() {
-    const accessGrant = this.get('accessGrant');
+    const accessGrant =
+      this.get('accessContext')?.kind !== 'public'
+        ? this.get('accessContext')?.authorization.accessGrant
+        : this.get('accessGrant');
     if (!accessGrant) {
       throw new Error(
         'Access grant was required but not found in CLS context.',
@@ -43,19 +51,42 @@ export class ApiClsService {
   }
 
   public requireUser() {
-    const user = this.get('user');
+    const accessContext = this.get('accessContext');
+    const user = accessContext?.kind !== 'public' ? accessContext.actor.user : null;
     if (!user) {
+      const legacyUser = this.get('user');
+      if (legacyUser) {
+        return legacyUser;
+      }
       throw new Error('User was required but not found in CLS context.');
     }
     return user;
   }
 
   public requirePerson() {
-    const person = this.get('person');
+    const accessContext = this.get('accessContext');
+    const person =
+      accessContext?.kind !== 'public' ? accessContext.actor.person : null;
     if (!person) {
+      const legacyPerson = this.get('person');
+      if (legacyPerson) {
+        return legacyPerson;
+      }
       throw new Error('Person was required but not found in CLS context.');
     }
     return person;
+  }
+
+  public requireAccessContext() {
+    const accessContext = this.get('accessContext');
+    if (!accessContext) {
+      throw new Error('Access context was required but not found in CLS context.');
+    }
+    return accessContext;
+  }
+
+  public get accessContextKind(): AccessContextKind {
+    return this.get('accessContext')?.kind ?? 'public';
   }
 
   public get accessIntent() {
