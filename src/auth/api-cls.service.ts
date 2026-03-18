@@ -54,6 +54,7 @@ export class ApiClsService {
     const accessContext = this.get('accessContext');
     const user = accessContext?.kind !== 'public' ? accessContext.actor.user : null;
     if (!user) {
+      // TODO: Remove legacy fallback once all callers use accessContext.
       const legacyUser = this.get('user');
       if (legacyUser) {
         return legacyUser;
@@ -68,6 +69,7 @@ export class ApiClsService {
     const person =
       accessContext?.kind !== 'public' ? accessContext.actor.person : null;
     if (!person) {
+      // TODO: Remove legacy fallback once all callers use accessContext.
       const legacyPerson = this.get('person');
       if (legacyPerson) {
         return legacyPerson;

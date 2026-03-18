@@ -3,11 +3,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { ApiConfigService } from 'src/config/api-config.service';
 import { RoleScope } from 'src/generated/prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { shouldBypassRLS } from 'src/prisma/prisma.service';
-import { AuthService } from '../src/auth/auth.service';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { AuthService } from './auth.service';
 
-describe('Access Context integration', () => {
+describe('Access context resolver', () => {
   let service: AuthService;
 
   const mockJwtService = {
