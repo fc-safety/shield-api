@@ -1,5 +1,6 @@
 export interface ClientNotificationJobData {
   clientId: string;
+  dateBucket?: string;
 }
 
 export interface SendNewProductRequestEmailJobData {

@@ -13,6 +13,7 @@ import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { as404OrThrow } from 'src/common/utils';
 import { buildPrismaFindArgs } from 'src/common/validation';
 import { ApiConfigService } from '../../config/api-config.service';
+import { buildIdempotencyKey } from '../../notifications/lib/idempotency';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateInvitationsDto } from './dto/create-invitation.dto';
@@ -201,7 +202,12 @@ export class InvitationsService {
 
     // Queue all invitation emails in bulk
     await this.notifications
-      .queueEmailBulk(rows.map((inv) => this.buildInvitationEmailData(inv)))
+      .queueEmailBulk(
+        rows.map((inv) => ({
+          data: this.buildInvitationEmailData(inv),
+          idempotencyKey: buildIdempotencyKey('invitation', inv.id),
+        })),
+      )
       .catch((e) =>
         this.logger.error(
           'Failed to queue invitation emails after creation',
@@ -244,9 +250,11 @@ export class InvitationsService {
       throw new GoneException('This invitation has expired');
     }
 
-    // Queue the invitation email again
     await this.notifications.queueEmail(
       this.buildInvitationEmailData(invitation),
+      {
+        idempotencyKey: buildIdempotencyKey('invitation-resend', id),
+      },
     );
 
     return {
