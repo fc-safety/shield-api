@@ -13,9 +13,12 @@ import { NotificationsService } from '../notifications.service';
 
 @Processor(QUEUE_NAMES.SEND_NOTIFICATIONS, {
   prefix: QUEUE_PREFIX,
+  // Completed jobs are retained so BullMQ can reject duplicate jobIds.
+  // 32 days covers the monthly scheduler period. count caps Redis memory;
+  // at ~2 KB/job, 10 000 jobs ≈ 20 MB. Monitor `USED_MEMORY` if client count grows.
   removeOnComplete: {
-    age: 3600, // keep up to 1 hour
-    count: 1000, // keep up to 1000 jobs
+    age: 32 * 24 * 3600,
+    count: 10000,
   },
   removeOnFail: {
     age: 24 * 3600 * 7, // keep up to 7 days

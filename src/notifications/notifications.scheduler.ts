@@ -4,6 +4,7 @@ import { Cron } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CLIENT_NOTIFICATIONS_JOB_NAMES, QUEUE_NAMES } from './lib/constants';
+import { buildIdempotencyKey, getUtcDateBucket } from './lib/idempotency';
 import { ClientNotificationJobData } from './lib/types';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class NotificationsScheduler {
   @Cron('0 4 * * *')
   async handleDailyInspectionReminders() {
     this.logger.debug('--> Running daily inspection reminders...');
+    const dayBucket = getUtcDateBucket(new Date(), 'day');
     const prisma = this.prisma.bypassRLS();
     const clients = await prisma.client.findMany({
       select: {
@@ -33,7 +35,15 @@ export class NotificationsScheduler {
         CLIENT_NOTIFICATIONS_JOB_NAMES.PROCESS_CLIENT_INSPECTION_REMINDERS,
         {
           clientId: client.id,
+          dateBucket: dayBucket,
         } satisfies ClientNotificationJobData,
+        {
+          jobId: buildIdempotencyKey(
+            'daily-inspection-reminders',
+            client.id,
+            dayBucket,
+          ),
+        },
       );
     }
   }
@@ -41,6 +51,7 @@ export class NotificationsScheduler {
   @Cron('0 5 1 * *')
   async handleMonthlyInspectionReports() {
     this.logger.debug('--> Running monthly inspection reports...');
+    const monthBucket = getUtcDateBucket(new Date(), 'month');
     const prisma = this.prisma.bypassRLS();
     const clients = await prisma.client.findMany({
       select: {
@@ -55,7 +66,15 @@ export class NotificationsScheduler {
         CLIENT_NOTIFICATIONS_JOB_NAMES.PROCESS_CLIENT_MONTHLY_INSPECTION_REPORTS,
         {
           clientId: client.id,
+          dateBucket: monthBucket,
         } satisfies ClientNotificationJobData,
+        {
+          jobId: buildIdempotencyKey(
+            'monthly-inspection-reports',
+            client.id,
+            monthBucket,
+          ),
+        },
       );
     }
   }

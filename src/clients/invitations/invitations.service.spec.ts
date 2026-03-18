@@ -183,18 +183,24 @@ describe('InvitationsService', () => {
       expect(mockNotificationsService.queueEmailBulk).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({
-            templateName: 'invitation',
-            to: ['user1@example.com'],
-            templateProps: expect.objectContaining({
-              inviteeEmail: 'user1@example.com',
+            data: expect.objectContaining({
+              templateName: 'invitation',
+              to: ['user1@example.com'],
+              templateProps: expect.objectContaining({
+                inviteeEmail: 'user1@example.com',
+              }),
             }),
+            idempotencyKey: expect.stringContaining('invitation:'),
           }),
           expect.objectContaining({
-            templateName: 'invitation',
-            to: ['user2@example.com'],
-            templateProps: expect.objectContaining({
-              inviteeEmail: 'user2@example.com',
+            data: expect.objectContaining({
+              templateName: 'invitation',
+              to: ['user2@example.com'],
+              templateProps: expect.objectContaining({
+                inviteeEmail: 'user2@example.com',
+              }),
             }),
+            idempotencyKey: expect.stringContaining('invitation:'),
           }),
         ]),
       );

@@ -27,6 +27,7 @@ export class LandingService {
       data: { landingFormLeadToAddress },
     } = await this.settings.getGlobalSettings();
 
+    // No idempotency key: each form submission is a unique event.
     this.notifications.queueEmail({
       to: [landingFormLeadToAddress],
       bcc: this.config.get('BCC_LEAD_FORM_SUBMISSION_EMAILS'),

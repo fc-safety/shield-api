@@ -12,6 +12,7 @@ import {
   NOTIFICATIONS_JOB_NAMES,
   QUEUE_NAMES,
 } from './lib/constants';
+import { buildIdempotencyKey } from './lib/idempotency';
 import {
   NotificationTemplateId,
   SendEmailJobData,
@@ -34,6 +35,10 @@ export type SendEmailOptions = Omit<CreateEmailOptions, 'from'> &
 export type SendSmsOptions = {
   to: string;
   text: string;
+};
+
+export type QueueNotificationOptions = {
+  idempotencyKey?: string;
 };
 
 @Injectable()
@@ -192,17 +197,26 @@ export class NotificationsService {
 
   async queueEmail<T extends NotificationTemplateId>(
     data: SendEmailJobData<T>,
+    options?: QueueNotificationOptions,
   ) {
-    await this.notificationsQueue.add(NOTIFICATIONS_JOB_NAMES.SEND_EMAIL, data);
+    await this.notificationsQueue.add(
+      NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
+      data,
+      options?.idempotencyKey ? { jobId: options.idempotencyKey } : undefined,
+    );
   }
 
   async queueEmailBulk<T extends NotificationTemplateId>(
-    data: SendEmailJobData<T>[],
+    jobs: {
+      data: SendEmailJobData<T>;
+      idempotencyKey?: string;
+    }[],
   ) {
     await this.notificationsQueue.addBulk(
-      data.map((d) => ({
+      jobs.map((job) => ({
         name: NOTIFICATIONS_JOB_NAMES.SEND_EMAIL,
-        data: d,
+        data: job.data,
+        ...(job.idempotencyKey ? { opts: { jobId: job.idempotencyKey } } : {}),
       })),
     );
   }
@@ -213,6 +227,9 @@ export class NotificationsService {
       {
         productRequestId,
       },
+      {
+        jobId: buildIdempotencyKey('product-request', productRequestId),
+      },
     );
   }
 
@@ -221,6 +238,9 @@ export class NotificationsService {
       CLIENT_NOTIFICATIONS_JOB_NAMES.SEND_INSPECTION_ALERT_TRIGGERED_EMAIL,
       {
         alertId,
+      },
+      {
+        jobId: buildIdempotencyKey('inspection-alert', alertId),
       },
     );
   }
@@ -241,7 +261,9 @@ export class NotificationsService {
       templateName: 'new_product_request',
       to: [productRequestToAddress],
       templateProps: props,
-    } satisfies SendEmailJobData<'new_product_request'>);
+    } satisfies SendEmailJobData<'new_product_request'>, {
+      jobId: buildIdempotencyKey('new-product-request-email', productRequest.id),
+    });
   }
 
   async getJobQueues() {

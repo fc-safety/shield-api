@@ -33,6 +33,7 @@ import {
   QUEUE_NAMES,
   QUEUE_PREFIX,
 } from '../lib/constants';
+import { buildIdempotencyKey, getUtcDateBucket } from '../lib/idempotency';
 import { SendEmailJobData } from '../lib/templates';
 import {
   ClientNotificationJobData,
@@ -53,9 +54,12 @@ import MonthlyInspectionReportTemplateReact from '../templates/monthly_inspectio
 
 @Processor(QUEUE_NAMES.CLIENT_NOTIFICATIONS, {
   prefix: QUEUE_PREFIX,
+  // Completed jobs are retained so BullMQ can reject duplicate jobIds.
+  // 32 days covers the monthly scheduler period. count caps Redis memory;
+  // at ~2 KB/job, 10 000 jobs ≈ 20 MB. Monitor `USED_MEMORY` if client count grows.
   removeOnComplete: {
-    age: 3600, // keep up to 1 hour
-    count: 1000, // keep up to 1000 jobs
+    age: 32 * 24 * 3600,
+    count: 10000,
   },
   removeOnFail: {
     age: 24 * 3600 * 7, // keep up to 7 days
@@ -217,6 +221,9 @@ export class ClientNotificationsProcessor
     const emailJobs: {
       name: string;
       data: SendEmailJobData<NotificationGroupId>;
+      opts: {
+        jobId: string;
+      };
     }[] = [];
 
     // For each bucket, prepare notifications for users that should receive them.
@@ -286,6 +293,14 @@ export class ClientNotificationsProcessor
             to: [member.email],
             templateProps: props,
           },
+          opts: {
+            jobId: buildIdempotencyKey(
+              notificationGroupId,
+              job.data.clientId,
+              member.id,
+              job.data.dateBucket ?? getUtcDateBucket(new Date(), 'day'),
+            ),
+          },
         });
       }
     }
@@ -342,6 +357,9 @@ export class ClientNotificationsProcessor
       data:
         | SendEmailJobData<'monthly_compliance_report'>
         | SendEmailJobData<'monthly_consumables_report'>;
+      opts: {
+        jobId: string;
+      };
     }[] = [];
 
     // Build monthly compliance reports.
@@ -451,6 +469,14 @@ export class ClientNotificationsProcessor
             templateName: 'monthly_compliance_report',
             to: [member.email],
             templateProps: props,
+          },
+          opts: {
+            jobId: buildIdempotencyKey(
+              'monthly-compliance-report',
+              job.data.clientId,
+              member.id,
+              job.data.dateBucket ?? getUtcDateBucket(new Date(), 'month'),
+            ),
           },
         });
       }
@@ -563,6 +589,14 @@ export class ClientNotificationsProcessor
             to: [member.email],
             templateProps: props,
           },
+          opts: {
+            jobId: buildIdempotencyKey(
+              'monthly-consumables-report',
+              job.data.clientId,
+              member.id,
+              job.data.dateBucket ?? getUtcDateBucket(new Date(), 'month'),
+            ),
+          },
         });
       }
     }
@@ -652,6 +686,9 @@ export class ClientNotificationsProcessor
     const emailJobs: {
       name: string;
       data: SendEmailJobData<'inspection_alert_triggered'>;
+      opts: {
+        jobId: string;
+      };
     }[] = [];
 
     for (const member of membersGroupedByNotificationId[
@@ -679,6 +716,9 @@ export class ClientNotificationsProcessor
             ...genericProps,
             recipientFirstName: member.firstName,
           },
+        },
+        opts: {
+          jobId: buildIdempotencyKey('inspection-alert', alert.id, member.id),
         },
       });
     }

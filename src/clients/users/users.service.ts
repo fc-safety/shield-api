@@ -208,6 +208,7 @@ export class UsersService {
     });
 
     if (resetPasswordDto.sendEmail) {
+      // No idempotency key: each password reset may carry a different credential.
       await this.notifications.queueEmail({
         to: [person.email],
         templateName: 'manager_password_reset',
