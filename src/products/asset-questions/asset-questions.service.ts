@@ -64,7 +64,7 @@ export class AssetQuestionsService {
               assetAlertCriteria: true,
               consumableConfig: true,
               clientAssetQuestionCustomizations:
-                prisma.$accessIntent !== 'system',
+                prisma.$accessContextKind !== 'system',
               setAssetMetadataConfig: true,
               files: true,
               regulatoryCodes: true,
@@ -301,7 +301,7 @@ export class AssetQuestionsService {
   ) {
     const prisma = await this.prisma.build();
 
-    const isClientUserRequest = prisma.$accessIntent !== 'system';
+    const isClientUserRequest = prisma.$accessContextKind !== 'system';
 
     // TODO: This is beginning of support for variants.
     // const andFilters: Prisma.AssetQuestionConditionWhereInput[] = [

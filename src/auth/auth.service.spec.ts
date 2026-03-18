@@ -4,6 +4,7 @@ import { ApiConfigService } from 'src/config/api-config.service';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { RoleScope } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AccessGrantException } from './auth.exception';
 import { buildAccessGrantResponseCacheKey } from './utils/access-grants';
 import { AuthService } from './auth.service';
 
@@ -237,6 +238,107 @@ describe('AuthService', () => {
         }),
       ).toThrow(
         "Invalid access context: 'elevated' access requires non-empty client and site IDs.",
+      );
+    });
+  });
+
+  describe('resolveRequestAccess', () => {
+    const request = {
+      headers: {
+        authorization: 'Bearer valid-token',
+        'x-client-id': 'client-1',
+      },
+    } as any;
+    const user = {
+      idpId: 'idp-user-1',
+      email: 'user@example.com',
+      username: 'user',
+      givenName: 'Test',
+      familyName: 'User',
+    } as any;
+    const person = { id: 'person-1' } as any;
+    const grant = {
+      scope: RoleScope.SYSTEM,
+      capabilities: [],
+      clientId: 'client-1',
+      siteId: 'site-1',
+      roleId: 'role-system',
+    };
+
+    it('returns unauthorized error for invalid token on non-public routes', async () => {
+      jest.spyOn(service, 'validateJwtToken').mockResolvedValue({
+        isValid: false,
+        reason: 'invalid token',
+      });
+
+      const result = await service.resolveRequestAccess({
+        request,
+        allowPublic: false,
+        skipAccessGrantValidation: false,
+      });
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.name).toBe('UnauthorizedException');
+    });
+
+    it('returns access grant error when grant is missing and validation is required', async () => {
+      jest.spyOn(service, 'validateJwtToken').mockResolvedValue({
+        isValid: true,
+        user,
+      });
+      jest.spyOn(service, 'getAccessGrantForUser').mockResolvedValue({
+        reason: 'no_access_grant',
+        message: 'none',
+        details: {},
+      } as any);
+
+      const result = await service.resolveRequestAccess({
+        request,
+        allowPublic: false,
+        skipAccessGrantValidation: false,
+      });
+
+      expect(result.error).toBeInstanceOf(AccessGrantException);
+    });
+
+    it('returns resolved access payload on success', async () => {
+      jest.spyOn(service, 'validateJwtToken').mockResolvedValue({
+        isValid: true,
+        user,
+      });
+      jest.spyOn(service, 'getAccessGrantForUser').mockResolvedValue({
+        grant,
+      } as any);
+      jest.spyOn(service, 'savePersonFromUserData').mockResolvedValue(person);
+      jest.spyOn(service, 'resolveAccessContext').mockReturnValue({
+        kind: 'system',
+        actor: {
+          user,
+          person,
+        },
+        authorization: {
+          accessGrant: grant,
+          accessIntent: 'system',
+        },
+      } as any);
+
+      const result = await service.resolveRequestAccess({
+        request: {
+          ...request,
+          headers: {
+            ...request.headers,
+            'x-access-intent': 'system',
+          },
+        },
+        allowPublic: false,
+        skipAccessGrantValidation: false,
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.user).toEqual(user);
+      expect(result.person).toEqual(person);
+      expect(result.accessContext).toEqual(
+        expect.objectContaining({ kind: 'system' }),
       );
     });
   });

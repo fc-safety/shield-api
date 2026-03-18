@@ -94,9 +94,9 @@ export class ClientsService {
   }
 
   async create(createClientDto: CreateClientDto) {
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    // RLS bypass semantics are now centralized in PrismaService access-context handling.
+    // See `shouldBypassRLS` coverage in `src/prisma/prisma.service.spec.ts`.
+    const prisma = await this.prisma.build();
 
     return prisma.$transaction(async (tx) => {
       // Create the client
@@ -124,11 +124,9 @@ export class ClientsService {
   }
 
   async findAll(queryClientDto: QueryClientDto) {
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    const prisma = await this.prisma.build();
     return prisma.client.findManyForPage(
-      buildPrismaFindArgs<typeof this.prisma.client>(queryClientDto, {
+      buildPrismaFindArgs<typeof prisma.client>(queryClientDto, {
         include: {
           address: true,
         },
@@ -137,29 +135,25 @@ export class ClientsService {
   }
 
   async findOne(id: string) {
-    return this.prisma
-      .build({
-        shouldBypassRLSAsSystemAdmin: true,
-      })
-      .then((prisma) =>
-        prisma.client
-          .findUniqueOrThrow({
-            where: { id },
-            include: {
-              address: true,
-              sites: {
-                include: {
-                  address: true,
-                  _count: { select: { subsites: true, assets: true } },
-                },
-              },
-              _count: {
-                select: { sites: true, assets: true },
+    return this.prisma.build().then((prisma) =>
+      prisma.client
+        .findUniqueOrThrow({
+          where: { id },
+          include: {
+            address: true,
+            sites: {
+              include: {
+                address: true,
+                _count: { select: { subsites: true, assets: true } },
               },
             },
-          })
-          .catch(as404OrThrow),
-      );
+            _count: {
+              select: { sites: true, assets: true },
+            },
+          },
+        })
+        .catch(as404OrThrow),
+    );
   }
 
   async findUserOrganization() {
@@ -210,9 +204,7 @@ export class ClientsService {
   }
 
   async update(id: string, updateClientDto: UpdateClientDto) {
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    const prisma = await this.prisma.build();
     const result = await prisma.$transaction(async (tx) =>
       tx.client
         .update({
@@ -228,16 +220,12 @@ export class ClientsService {
   }
 
   async remove(id: string) {
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    const prisma = await this.prisma.build();
     return prisma.client.delete({ where: { id } }).catch(as404OrThrow);
   }
 
   async duplicateDemo(id: string, options: DuplicateDemoClientDto) {
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    const prisma = await this.prisma.build();
     return prisma.$transaction(async (tx) => {
       const existingClient = await tx.client
         .findUniqueOrThrow({
@@ -444,9 +432,7 @@ export class ClientsService {
       uniqueWhere = { id: accessGrant.clientId };
     }
 
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    const prisma = await this.prisma.build();
 
     return prisma.$transaction(async (tx) => {
       const client = await tx.client
@@ -489,9 +475,7 @@ export class ClientsService {
       uniqueWhere = { id: accessGrant.clientId };
     }
 
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    const prisma = await this.prisma.build();
 
     const client = await prisma.client
       .findUniqueOrThrow({
@@ -707,9 +691,7 @@ export class ClientsService {
   }
 
   async renewNoncompliantDemoAssets(options: { clientId?: string } = {}) {
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    const prisma = await this.prisma.build();
 
     const rlsContext = prisma.$rlsContext();
     const clientId = options.clientId ?? rlsContext?.clientId;
@@ -802,9 +784,7 @@ export class ClientsService {
       return [];
     }
 
-    const prisma = await this.prisma.build({
-      shouldBypassRLSAsSystemAdmin: true,
-    });
+    const prisma = await this.prisma.build();
 
     return await prisma.person.findMany({
       where: {
@@ -889,18 +869,23 @@ export class ClientsService {
       clientId: string;
     }> = [];
 
-    let inspectionQuestions =
-      options.inspectionQuestionCache?.getChildren(asset);
+    let inspectionQuestions = options.inspectionQuestionCache?.getChildren(asset);
 
+    // An empty array can be a valid cached value ("no questions for this asset").
+    // Only re-fetch when cache is missing.
     if (!inspectionQuestions) {
       inspectionQuestions = await this.assetQuestionsService.findByAsset(
         asset,
         AssetQuestionType.INSPECTION,
       );
-      options.inspectionQuestionCache?.addChildren(asset, inspectionQuestions);
+      if (inspectionQuestions) {
+        options.inspectionQuestionCache?.addChildren(asset, inspectionQuestions);
+      }
     }
 
-    inspectionResponses = inspectionQuestions.map((question) => {
+    const resolvedInspectionQuestions = inspectionQuestions ?? [];
+
+    inspectionResponses = resolvedInspectionQuestions.map((question) => {
       const responseValue = this.generateQuestionResponse(question, {
         assetSerialNumber: asset.serialNumber,
         isSetup: false,

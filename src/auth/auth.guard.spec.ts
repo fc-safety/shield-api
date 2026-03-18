@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ApiConfigService } from 'src/config/api-config.service';
@@ -20,12 +20,7 @@ describe('AuthGuard', () => {
   };
 
   const mockAuthService = {
-    extractTokenFromRequest: jest.fn(),
-    validateJwtToken: jest.fn(),
-    getAccessGrantForUser: jest.fn(),
-    extractOrganizationContextFromRequest: jest.fn(),
-    savePersonFromUserData: jest.fn(),
-    resolveAccessContext: jest.fn(),
+    resolveRequestAccess: jest.fn(),
   };
 
   const mockApiConfigService = {
@@ -78,243 +73,76 @@ describe('AuthGuard', () => {
   });
 
   describe('access intent validation', () => {
+    const baseResolvedAccess = {
+      user: mockUser,
+      person: { id: 'person-1' },
+      accessGrant: {
+        scope: RoleScope.SYSTEM,
+        capabilities: ['perform-inspections'],
+        clientId: 'client-1',
+        siteId: 'site-1',
+      },
+      accessIntent: 'user' as const,
+      accessContext: { kind: 'tenant' as const },
+    };
+
     beforeEach(() => {
-      mockAuthService.extractTokenFromRequest.mockReturnValue('valid-token');
-      mockAuthService.validateJwtToken.mockResolvedValue({
-        isValid: true,
-        user: mockUser,
+      mockAuthService.resolveRequestAccess.mockResolvedValue(baseResolvedAccess);
+    });
+
+    it('should delegate request access resolution to AuthService', async () => {
+      const context = createMockContext({
+        authorization: 'Bearer valid-token',
+        'x-client-id': 'client-1',
       });
-      mockAuthService.extractOrganizationContextFromRequest.mockReturnValue({
-        requestedClientId: 'client-1',
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(mockAuthService.resolveRequestAccess).toHaveBeenCalledWith({
+        request: expect.any(Object),
+        allowPublic: false,
+        skipAccessGrantValidation: false,
+      });
+    });
+
+    it('should rethrow resolver errors', async () => {
+      mockAuthService.resolveRequestAccess.mockResolvedValue({
+        ...baseResolvedAccess,
+        error: new ForbiddenException('forbidden'),
+      });
+      const context = createMockContext();
+
+      await expect(guard.canActivate(context)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should write resolved access context to CLS', async () => {
+      const context = createMockContext();
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(mockApiClsService.set).toHaveBeenCalledWith(
+        'accessContext',
+        expect.objectContaining({ kind: 'tenant' }),
+      );
+      expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
+        kind: 'tenant',
+      });
+    });
+
+    it('should support public requests from resolver output', async () => {
+      mockAuthService.resolveRequestAccess.mockResolvedValue({
+        user: null,
+        person: null,
+        accessGrant: null,
         accessIntent: 'user',
+        accessContext: { kind: 'public' },
       });
-      mockAuthService.savePersonFromUserData.mockResolvedValue({
-        id: 'person-1',
-      });
-      mockAuthService.resolveAccessContext.mockReturnValue({
-        kind: 'tenant',
-      });
-    });
-
-    it('should allow system intent with SYSTEM scope', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SYSTEM,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'system',
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-    });
-
-    it('should throw 403 for system intent with non-SYSTEM scope', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.CLIENT,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'system',
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('should throw 403 for elevated intent with non-SYSTEM scope', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SITE,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'elevated',
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('should throw 400 for elevated intent without x-client-id', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SYSTEM,
-          capabilities: ['perform-inspections'],
-          clientId: '',
-          siteId: '',
-        },
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'elevated',
-      });
-
-      await expect(guard.canActivate(context)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('should allow elevated intent with SYSTEM scope and x-client-id', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SYSTEM,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'elevated',
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-    });
-
-    it('should allow user intent for any scope', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SITE,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'user',
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-    });
-
-    it('should default to user intent when header is absent', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SITE,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-
-      const context = createMockContext({
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-    });
-
-    it('should store accessContext.kind tenant for user intent', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SITE,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-      mockAuthService.resolveAccessContext.mockReturnValue({
-        kind: 'tenant',
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'user',
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
-        kind: 'tenant',
-      });
-    });
-
-    it('should store accessContext.kind support for elevated intent', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SYSTEM,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-      mockAuthService.resolveAccessContext.mockReturnValue({
-        kind: 'support',
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'elevated',
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
-        kind: 'support',
-      });
-    });
-
-    it('should store accessContext.kind system for system intent', async () => {
-      mockAuthService.getAccessGrantForUser.mockResolvedValue({
-        grant: {
-          scope: RoleScope.SYSTEM,
-          capabilities: ['perform-inspections'],
-          clientId: 'client-1',
-          siteId: 'site-1',
-        },
-      });
-      mockAuthService.resolveAccessContext.mockReturnValue({
-        kind: 'system',
-      });
-
-      const context = createMockContext({
-        'x-access-intent': 'system',
-        'x-client-id': 'client-1',
-      });
-
-      await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
-        kind: 'system',
-      });
-    });
-
-    it('should store accessContext.kind public for public unauthenticated requests', async () => {
       mockReflector.getAllAndOverride.mockImplementation((key: string) => {
         if (key === 'isPublic') return true;
         return false;
       });
-      mockAuthService.extractTokenFromRequest.mockReturnValue(undefined);
-      mockAuthService.validateJwtToken.mockResolvedValue({
-        isValid: false,
-        reason: 'Authentication token is required.',
-      });
-      mockAuthService.resolveAccessContext.mockReturnValue({
-        kind: 'public',
-      });
-
       const context = createMockContext();
-      await expect(guard.canActivate(context)).resolves.toBe(true);
 
+      await expect(guard.canActivate(context)).resolves.toBe(true);
       expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
         kind: 'public',
       });

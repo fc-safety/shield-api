@@ -1,25 +1,21 @@
 import {
-  BadRequestException,
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
   Logger,
   SetMetadata,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { isIPv4, isIPv6 } from 'net';
-import { AccessIntent, getAccessIntent } from 'src/common/utils';
+import { AccessIntent } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { ApiClsService } from './api-cls.service';
-import { AccessGrantException } from './auth.exception';
+import { ResolvedAccessContext } from './access-context.types';
+import { ApiClsService, CommonClsStore } from './api-cls.service';
 import { AuthService } from './auth.service';
 import { StatelessUser } from './user.schema';
 import { AccessGrant } from './utils/access-grants';
 import { getPolicyHandlers } from './utils/policies';
-import { RoleScope } from './utils/scope';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 /**
@@ -56,62 +52,24 @@ export class AuthGuard implements CanActivate {
     // Get the request from the context.
     const request = context.switchToHttp().getRequest<Request>();
 
-    // Validate the JWT token and get user data.
-    const token = this.authService.extractTokenFromRequest(request);
-    const { isValid, user, reason } =
-      await this.authService.validateJwtToken(token);
-
-    // Reject if token is not valid, unless the endpoint is public.
-    if (!isValid && !allowPublic) {
-      throw new UnauthorizedException(reason);
-    }
-
     // Check if the endpoint should skip access grant validation.
     const skipAccessGrantValidation = this.skipAccessGrantValidation(context);
-
-    // Get access intent from the request header.
-    const accessIntent = getAccessIntent(request);
-
-    // Get access grant for user if it exists.
-    let accessGrant: AccessGrant | null | undefined = undefined;
-    if (user) {
-      const accessGrantResult = await this.authService.getAccessGrantForUser(
-        user,
-        this.authService.extractOrganizationContextFromRequest(request),
-      );
-
-      if (
-        !accessGrantResult.grant &&
-        !allowPublic &&
-        !skipAccessGrantValidation
-      ) {
-        throw new AccessGrantException(accessGrantResult);
-      }
-
-      accessGrant =
-        accessGrantResult.grant && new AccessGrant(accessGrantResult.grant);
-
-      // Validate access intent against the user's scope.
-      if (accessGrant && accessIntent !== 'user') {
-        if (accessGrant.scope !== RoleScope.SYSTEM) {
-          throw new ForbiddenException(
-            `The '${accessIntent}' access intent requires SYSTEM scope.`,
-          );
-        }
-
-        if (accessIntent === 'elevated' && !request.headers['x-client-id']) {
-          throw new BadRequestException(
-            "The 'elevated' access intent requires the x-client-id header.",
-          );
-        }
-      }
+    const resolvedRequestAccess = await this.authService.resolveRequestAccess({
+      request,
+      allowPublic,
+      skipAccessGrantValidation,
+    });
+    if (resolvedRequestAccess.error) {
+      throw resolvedRequestAccess.error;
     }
 
     // Set the CLS context from the request.
     await this.setClsContextFromRequest(request, {
-      user,
-      accessGrant,
-      accessIntent,
+      user: resolvedRequestAccess.user,
+      person: resolvedRequestAccess.person,
+      accessGrant: resolvedRequestAccess.accessGrant,
+      accessIntent: resolvedRequestAccess.accessIntent,
+      accessContext: resolvedRequestAccess.accessContext,
       isPublic: allowPublic,
       skipAccessGrantValidation,
     });
@@ -157,14 +115,23 @@ export class AuthGuard implements CanActivate {
     request: Request,
     apiContext: {
       user: StatelessUser | undefined | null;
+      person: CommonClsStore['person'] | null;
       accessGrant: AccessGrant | undefined | null;
       accessIntent: AccessIntent;
+      accessContext: ResolvedAccessContext;
       isPublic: boolean;
       skipAccessGrantValidation: boolean;
     },
   ) {
-    const { user, accessGrant, accessIntent, isPublic, skipAccessGrantValidation } =
-      apiContext;
+    const {
+      user,
+      person,
+      accessGrant,
+      accessIntent,
+      accessContext,
+      isPublic,
+      skipAccessGrantValidation,
+    } = apiContext;
 
     this.cls.set('isPublic', isPublic);
     this.cls.set('skipAccessGrantValidation', skipAccessGrantValidation);
@@ -180,28 +147,11 @@ export class AuthGuard implements CanActivate {
 
     if (user) {
       this.cls.set('user', user);
-      const person = await this.authService.savePersonFromUserData(user);
-      this.cls.set('person', person);
-      this.cls.set(
-        'accessContext',
-        this.authService.resolveAccessContext({
-          user,
-          person,
-          accessGrant,
-          accessIntent,
-        }),
-      );
-    } else {
-      this.cls.set(
-        'accessContext',
-        this.authService.resolveAccessContext({
-          user,
-          person: null,
-          accessGrant,
-          accessIntent,
-        }),
-      );
     }
+    if (person) {
+      this.cls.set('person', person);
+    }
+    this.cls.set('accessContext', accessContext);
 
     if (accessGrant) {
       this.cls.set('accessGrant', accessGrant);
