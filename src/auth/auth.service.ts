@@ -1,4 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { init as cuid2Init } from '@paralleldrive/cuid2';
 import crypto from 'crypto';
@@ -12,6 +18,7 @@ import { ApiConfigService } from 'src/config/api-config.service';
 import { ClientStatus, Prisma, RoleScope } from 'src/generated/prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ResolvedAccessContext } from './access-context.types';
+import { AccessGrantException } from './auth.exception';
 import { TAccessGrantResult } from './auth.types';
 import {
   buildUserFromToken,
@@ -21,6 +28,7 @@ import {
 import {
   buildAccessGrantResponseCacheKey,
   type IAccessContext,
+  AccessGrant,
   type IAccessGrantData,
   reduceAccessGrants,
 } from './utils/access-grants';
@@ -533,6 +541,105 @@ export class AuthService {
       requestedClientId: firstOf(request.headers['x-client-id']),
       requestedSiteId: firstOf(request.headers['x-site-id']),
       accessIntent: getAccessIntent(request as any),
+    };
+  }
+
+  public async resolveRequestAccess(params: {
+    request: IncomingMessage;
+    allowPublic: boolean;
+    skipAccessGrantValidation: boolean;
+  }): Promise<{
+    user: StatelessUser | null;
+    person: Prisma.PersonGetPayload<object> | null;
+    accessGrant: AccessGrant | null;
+    accessIntent: AccessIntent;
+    accessContext: ResolvedAccessContext;
+    error?:
+      | UnauthorizedException
+      | AccessGrantException
+      | ForbiddenException
+      | BadRequestException;
+  }> {
+    const { request, allowPublic, skipAccessGrantValidation } = params;
+    const accessIntent = getAccessIntent(request as any);
+    const token = this.extractTokenFromRequest(request);
+    const tokenResult = await this.validateJwtToken(token);
+
+    if (!tokenResult.isValid) {
+      return {
+        user: null,
+        person: null,
+        accessGrant: null,
+        accessIntent,
+        accessContext: { kind: 'public' },
+        error: allowPublic
+          ? undefined
+          : new UnauthorizedException(tokenResult.reason),
+      };
+    }
+
+    const user = tokenResult.user;
+    const accessGrantResult = await this.getAccessGrantForUser(
+      user,
+      this.extractOrganizationContextFromRequest(request),
+    );
+    const accessGrant = accessGrantResult.grant
+      ? new AccessGrant(accessGrantResult.grant)
+      : null;
+
+    if (!accessGrant && !allowPublic && !skipAccessGrantValidation) {
+      return {
+        user,
+        person: null,
+        accessGrant,
+        accessIntent,
+        accessContext: { kind: 'public' },
+        error: new AccessGrantException(accessGrantResult),
+      };
+    }
+
+    if (accessGrant && accessIntent !== 'user') {
+      if (accessGrant.scope !== RoleScope.SYSTEM) {
+        return {
+          user,
+          person: null,
+          accessGrant,
+          accessIntent,
+          accessContext: { kind: 'public' },
+          error: new ForbiddenException(
+            `The '${accessIntent}' access intent requires SYSTEM scope.`,
+          ),
+        };
+      }
+
+      if (accessIntent === 'elevated' && !request.headers['x-client-id']) {
+        return {
+          user,
+          person: null,
+          accessGrant,
+          accessIntent,
+          accessContext: { kind: 'public' },
+          error: new BadRequestException(
+            "The 'elevated' access intent requires the x-client-id header.",
+          ),
+        };
+      }
+    }
+
+    const person = await this.savePersonFromUserData(user);
+    const accessContext = this.resolveAccessContext({
+      user,
+      person,
+      accessGrant,
+      accessIntent,
+    });
+
+    return {
+      user,
+      person,
+      accessGrant,
+      accessIntent,
+      accessContext,
     };
   }
 
