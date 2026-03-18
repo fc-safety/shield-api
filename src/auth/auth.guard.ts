@@ -11,9 +11,8 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { isIPv4, isIPv6 } from 'net';
-import { getAccessIntent } from 'src/common/utils';
+import { AccessIntent, getAccessIntent } from 'src/common/utils';
 import { ApiConfigService } from 'src/config/api-config.service';
-import { AccessIntent } from 'src/common/utils';
 import { ApiClsService } from './api-cls.service';
 import { AccessGrantException } from './auth.exception';
 import { AuthService } from './auth.service';

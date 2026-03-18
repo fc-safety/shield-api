@@ -206,6 +206,39 @@ describe('AuthService', () => {
       });
       expect(resolved.kind).toBe('system');
     });
+
+    it('throws for system intent when scope is not SYSTEM', () => {
+      expect(() =>
+        service.resolveAccessContext({
+          user,
+          person,
+          accessGrant: {
+            ...accessGrant,
+            scope: RoleScope.CLIENT,
+          },
+          accessIntent: 'system',
+        }),
+      ).toThrow(
+        "Invalid access context: 'system' access intent requires SYSTEM scope.",
+      );
+    });
+
+    it('throws for elevated intent when client/site identifiers are missing', () => {
+      expect(() =>
+        service.resolveAccessContext({
+          user,
+          person,
+          accessGrant: {
+            ...accessGrant,
+            clientId: '',
+            siteId: '',
+          },
+          accessIntent: 'elevated',
+        }),
+      ).toThrow(
+        "Invalid access context: 'elevated' access requires non-empty client and site IDs.",
+      );
+    });
   });
 
   describe('access-grant cache keys', () => {

@@ -543,6 +543,15 @@ export class AuthService {
     accessIntent: AccessIntent;
   }): ResolvedAccessContext {
     const { user, person, accessGrant, accessIntent } = params;
+
+    if (!user && !person && !accessGrant) {
+      return { kind: 'public' };
+    }
+
+    // This resolver is expected to run after AuthGuard validation. On public or
+    // skip-access-grant routes, we can have a partially authenticated request
+    // (e.g. user+person without a tenant grant); canonical context remains public
+    // and compatibility fields (`user`, `person`) continue to be set in CLS.
     if (!user || !person || !accessGrant) {
       return { kind: 'public' };
     }
@@ -551,6 +560,13 @@ export class AuthService {
     const authorization = { accessGrant, accessIntent };
 
     if (accessIntent === 'system') {
+      // Defense-in-depth: AuthGuard should enforce this path to SYSTEM users only.
+      if (accessGrant.scope !== RoleScope.SYSTEM) {
+        throw new Error(
+          "Invalid access context: 'system' access intent requires SYSTEM scope.",
+        );
+      }
+
       return {
         kind: 'system',
         actor,
@@ -558,14 +574,13 @@ export class AuthService {
       };
     }
 
+    const tenant = this.requireTenantContext(accessGrant, accessIntent);
+
     if (accessIntent === 'elevated') {
       return {
         kind: 'support',
         actor,
-        tenant: {
-          clientId: accessGrant.clientId,
-          siteId: accessGrant.siteId,
-        },
+        tenant,
         authorization,
       };
     }
@@ -573,11 +588,24 @@ export class AuthService {
     return {
       kind: 'tenant',
       actor,
-      tenant: {
-        clientId: accessGrant.clientId,
-        siteId: accessGrant.siteId,
-      },
+      tenant,
       authorization,
+    };
+  }
+
+  private requireTenantContext(
+    accessGrant: IAccessGrantData,
+    accessIntent: Exclude<AccessIntent, 'system'>,
+  ) {
+    if (!accessGrant.clientId || !accessGrant.siteId) {
+      throw new Error(
+        `Invalid access context: '${accessIntent}' access requires non-empty client and site IDs.`,
+      );
+    }
+
+    return {
+      clientId: accessGrant.clientId,
+      siteId: accessGrant.siteId,
     };
   }
 

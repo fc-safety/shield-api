@@ -27,6 +27,14 @@ export interface CommonClsStore extends ClsStore {
 export class ApiClsService {
   constructor(private readonly cls: ClsService<CommonClsStore>) {}
 
+  private getAuthenticatedAccessContext() {
+    const accessContext = this.get('accessContext');
+    if (!accessContext || accessContext.kind === 'public') {
+      return null;
+    }
+    return accessContext;
+  }
+
   public get<K extends keyof CommonClsStore>(
     key: K,
   ): CommonClsStore[K] | undefined {
@@ -38,10 +46,9 @@ export class ApiClsService {
   }
 
   public requireAccessGrant() {
+    const accessContext = this.getAuthenticatedAccessContext();
     const accessGrant =
-      this.get('accessContext')?.kind !== 'public'
-        ? this.get('accessContext')?.authorization.accessGrant
-        : this.get('accessGrant');
+      accessContext?.authorization.accessGrant ?? this.get('accessGrant');
     if (!accessGrant) {
       throw new Error(
         'Access grant was required but not found in CLS context.',
@@ -51,9 +58,10 @@ export class ApiClsService {
   }
 
   public requireUser() {
-    const accessContext = this.get('accessContext');
-    const user = accessContext?.kind !== 'public' ? accessContext.actor.user : null;
+    const accessContext = this.getAuthenticatedAccessContext();
+    const user = accessContext?.actor.user;
     if (!user) {
+      // TODO: Remove legacy fallback once all callers use accessContext.
       const legacyUser = this.get('user');
       if (legacyUser) {
         return legacyUser;
@@ -64,10 +72,10 @@ export class ApiClsService {
   }
 
   public requirePerson() {
-    const accessContext = this.get('accessContext');
-    const person =
-      accessContext?.kind !== 'public' ? accessContext.actor.person : null;
+    const accessContext = this.getAuthenticatedAccessContext();
+    const person = accessContext?.actor.person;
     if (!person) {
+      // TODO: Remove legacy fallback once all callers use accessContext.
       const legacyPerson = this.get('person');
       if (legacyPerson) {
         return legacyPerson;

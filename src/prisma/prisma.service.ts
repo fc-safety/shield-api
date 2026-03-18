@@ -315,50 +315,14 @@ export class PrismaService
   }
 
   private async buildPrimaryExtension(options: PrimaryExtensionOptions) {
-    const accessContext = this.cls.get('accessContext');
-    const accessIntent = getAccessIntentFromContext(accessContext, this.cls);
-    const accessContextKind = accessContext?.kind ?? 'public';
-    const person = getPersonFromAccessContext(accessContext, this.cls);
-    const accessGrant = getAccessGrantFromAccessContext(accessContext, this.cls);
-    const mode = this.cls.get('mode');
-    const bypassRLS = shouldBypassRLS({
-      mode,
+    const {
+      accessIntent,
       accessContextKind,
-    });
-
-    let rlsContext: IPrismaRLSContext | undefined = options.rlsContext;
-    if (
-      !rlsContext &&
-      accessContext &&
-      accessContext.kind !== 'public' &&
-      accessContext.kind !== 'system'
-    ) {
-      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
-        accessContext.tenant.siteId,
-      );
-      const allowedSiteIdsStr = allowedSiteIds.join(',');
-      rlsContext = {
-        personId: accessContext.actor.person.id,
-        clientId: accessContext.tenant.clientId,
-        siteId: accessContext.tenant.siteId,
-        allowedSiteIds,
-        allowedSiteIdsStr,
-        scope: accessContext.authorization.accessGrant.scope,
-      };
-    } else if (accessGrant && person) {
-      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
-        accessGrant.siteId,
-      );
-      const allowedSiteIdsStr = allowedSiteIds.join(',');
-      rlsContext = {
-        personId: person.id,
-        clientId: accessGrant.clientId,
-        siteId: accessGrant.siteId,
-        allowedSiteIds,
-        allowedSiteIdsStr,
-        scope: accessGrant.scope,
-      };
-    }
+      accessGrant,
+      mode,
+      bypassRLS,
+      rlsContext,
+    } = await this.derivePrismaAccessState(options);
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const thisPrismaService = this;
@@ -477,6 +441,69 @@ export class PrismaService
       });
     });
   }
+
+  private async derivePrismaAccessState(options: PrimaryExtensionOptions) {
+    const accessContext = this.cls.get('accessContext');
+    const mode = this.cls.get('mode');
+    const accessContextKind = accessContext?.kind ?? 'public';
+    const accessIntent =
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.authorization.accessIntent
+        : this.cls.accessIntent;
+    const accessGrant =
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.authorization.accessGrant
+        : this.cls.get('accessGrant');
+    const person =
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.actor.person
+        : this.cls.get('person');
+    const bypassRLS = shouldBypassRLS({
+      mode,
+      accessContextKind,
+    });
+
+    let rlsContext: IPrismaRLSContext | undefined = options.rlsContext;
+    if (
+      !rlsContext &&
+      accessContext &&
+      accessContext.kind !== 'public' &&
+      accessContext.kind !== 'system'
+    ) {
+      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
+        accessContext.tenant.siteId,
+      );
+      rlsContext = {
+        personId: accessContext.actor.person.id,
+        clientId: accessContext.tenant.clientId,
+        siteId: accessContext.tenant.siteId,
+        allowedSiteIds,
+        allowedSiteIdsStr: allowedSiteIds.join(','),
+        scope: accessContext.authorization.accessGrant.scope,
+      };
+    } else if (!rlsContext && accessGrant && person) {
+      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
+        accessGrant.siteId,
+      );
+      rlsContext = {
+        personId: person.id,
+        clientId: accessGrant.clientId,
+        siteId: accessGrant.siteId,
+        allowedSiteIds,
+        allowedSiteIdsStr: allowedSiteIds.join(','),
+        scope: accessGrant.scope,
+      };
+    }
+
+    return {
+      accessIntent,
+      accessContextKind,
+      accessGrant,
+      mode,
+      bypassRLS,
+      rlsContext,
+    };
+  }
 }
 
 export interface IPrismaRLSContext {
@@ -539,36 +566,6 @@ export function shouldBypassRLS(params: {
   accessContextKind: AccessContextKind;
 }): boolean {
   return params.mode === 'cron' || params.accessContextKind === 'system';
-}
-
-function getAccessIntentFromContext(
-  accessContext: ResolvedAccessContext | undefined,
-  cls: ApiClsService,
-) {
-  if (!accessContext || accessContext.kind === 'public') {
-    return cls.accessIntent;
-  }
-  return accessContext.authorization.accessIntent;
-}
-
-function getPersonFromAccessContext(
-  accessContext: ResolvedAccessContext | undefined,
-  cls: ApiClsService,
-) {
-  if (accessContext && accessContext.kind !== 'public') {
-    return accessContext.actor.person;
-  }
-  return cls.get('person');
-}
-
-function getAccessGrantFromAccessContext(
-  accessContext: ResolvedAccessContext | undefined,
-  cls: ApiClsService,
-) {
-  if (accessContext && accessContext.kind !== 'public') {
-    return accessContext.authorization.accessGrant;
-  }
-  return cls.get('accessGrant');
 }
 
 async function findManyForPageExtensionFn<T>(
