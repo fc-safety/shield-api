@@ -3,6 +3,7 @@ import { ApiClsService } from 'src/auth/api-cls.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MembersService } from 'src/clients/members/members.service';
+import { RedisService } from 'src/redis/redis.service';
 import { ConsumablesService } from '../consumables/consumables.service';
 import { AssetsService } from './assets.service';
 
@@ -44,6 +45,12 @@ describe('AssetsService', () => {
     set: jest.fn(),
   };
 
+  const mockRedisService = {
+    getPublisher: jest.fn().mockReturnValue({
+      set: jest.fn(),
+    }),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,6 +60,7 @@ describe('AssetsService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: MembersService, useValue: mockMembersService },
         { provide: ApiClsService, useValue: mockApiClsService },
+        { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
 
