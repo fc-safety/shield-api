@@ -94,6 +94,8 @@ export class ClientsService {
   }
 
   async create(createClientDto: CreateClientDto) {
+    // RLS bypass semantics are now centralized in PrismaService access-context handling.
+    // See `shouldBypassRLS` coverage in `src/prisma/prisma.service.spec.ts`.
     const prisma = await this.prisma.build();
 
     return prisma.$transaction(async (tx) => {
@@ -867,18 +869,23 @@ export class ClientsService {
       clientId: string;
     }> = [];
 
-    let inspectionQuestions =
-      options.inspectionQuestionCache?.getChildren(asset) ?? [];
+    let inspectionQuestions = options.inspectionQuestionCache?.getChildren(asset);
 
-    if (inspectionQuestions.length === 0) {
+    // An empty array can be a valid cached value ("no questions for this asset").
+    // Only re-fetch when cache is missing.
+    if (!inspectionQuestions) {
       inspectionQuestions = await this.assetQuestionsService.findByAsset(
         asset,
         AssetQuestionType.INSPECTION,
       );
-      options.inspectionQuestionCache?.addChildren(asset, inspectionQuestions);
+      if (inspectionQuestions) {
+        options.inspectionQuestionCache?.addChildren(asset, inspectionQuestions);
+      }
     }
 
-    inspectionResponses = inspectionQuestions.map((question) => {
+    const resolvedInspectionQuestions = inspectionQuestions ?? [];
+
+    inspectionResponses = resolvedInspectionQuestions.map((question) => {
       const responseValue = this.generateQuestionResponse(question, {
         assetSerialNumber: asset.serialNumber,
         isSetup: false,

@@ -461,5 +461,40 @@ describe('TagsService', () => {
 
       expect(bypassTagUpsert).toHaveBeenCalledTimes(1);
     });
+
+    it('does not use bypass upsert for tenant access context', async () => {
+      const bypassTagUpsert = jest.fn().mockResolvedValue({ id: 'tag-1' });
+      const bypassTagFindUnique = jest.fn().mockResolvedValue(null);
+
+      mockPrismaService.bypassRLS.mockReturnValue({
+        tag: {
+          upsert: bypassTagUpsert,
+          findUnique: bypassTagFindUnique,
+        },
+      });
+      mockPrismaService.build.mockResolvedValue({
+        $rlsContext: jest.fn().mockReturnValue(null),
+        tag: {
+          create: jest.fn(),
+          update: jest.fn(),
+        },
+      });
+      mockApiClsService.accessContextKind = 'tenant';
+
+      jest.spyOn(service as any, 'parseInspectionToken').mockReturnValue({
+        tagExternalId: 'ext-tag-1',
+        serialNumber: 'serial-1',
+      });
+
+      await expect(
+        service.registerTag('token', {
+          client: { connect: { id: 'client-1' } } as any,
+          site: { connect: { id: 'site-1' } } as any,
+        }),
+      ).rejects.toThrow();
+
+      expect(bypassTagFindUnique).toHaveBeenCalledTimes(1);
+      expect(bypassTagUpsert).not.toHaveBeenCalled();
+    });
   });
 });
