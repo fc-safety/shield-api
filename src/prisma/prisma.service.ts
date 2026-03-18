@@ -1,4 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  AccessContextKind,
+  ResolvedAccessContext,
+} from 'src/auth/access-context.types';
 import { ApiClsService } from 'src/auth/api-cls.service';
 import { TAccessGrant, TScope } from 'src/auth/auth.types';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
@@ -185,6 +189,7 @@ export class PrismaService
       const extendedPrisma = prisma.$extends({
         client: {
           $accessIntent: 'system' as const,
+          $accessContextKind: 'system' as const,
           $rlsContext: () => options.rlsContext,
           $mode: mode ?? 'request',
         },
@@ -310,36 +315,14 @@ export class PrismaService
   }
 
   private async buildPrimaryExtension(options: PrimaryExtensionOptions) {
-    const accessIntent = this.cls.accessIntent;
-    const person = this.cls.get('person');
-    const accessGrant = this.cls.get('accessGrant');
-
-    const mode = this.cls.get('mode');
-    const isSystemAdmin =
-      !!accessGrant && accessGrant.scope === RoleScope.SYSTEM;
-
-    const shouldBypassRLS =
-      mode === 'cron' ||
-      !!options.shouldBypassRLSAsSystemAdmin ||
-      accessIntent === 'system';
-    const canBypassRLS = mode === 'cron' || isSystemAdmin;
-    const bypassRLS = shouldBypassRLS && canBypassRLS;
-
-    let rlsContext: IPrismaRLSContext | undefined = options.rlsContext;
-    if (accessGrant && person) {
-      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
-        accessGrant.siteId,
-      );
-      const allowedSiteIdsStr = allowedSiteIds.join(',');
-      rlsContext = {
-        personId: person.id,
-        clientId: accessGrant.clientId,
-        siteId: accessGrant.siteId,
-        allowedSiteIds,
-        allowedSiteIdsStr,
-        scope: accessGrant.scope,
-      };
-    }
+    const {
+      accessIntent,
+      accessContextKind,
+      accessGrant,
+      mode,
+      bypassRLS,
+      rlsContext,
+    } = await this.derivePrismaAccessState(options);
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const thisPrismaService = this;
@@ -350,6 +333,7 @@ export class PrismaService
         client: {
           $rlsContext: () => rlsContext,
           $accessIntent: accessIntent,
+          $accessContextKind: accessContextKind,
           $mode: mode ?? 'request',
         },
         model: {
@@ -457,6 +441,69 @@ export class PrismaService
       });
     });
   }
+
+  private async derivePrismaAccessState(options: PrimaryExtensionOptions) {
+    const accessContext = this.cls.get('accessContext');
+    const mode = this.cls.get('mode');
+    const accessContextKind = accessContext?.kind ?? 'public';
+    const accessIntent =
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.authorization.accessIntent
+        : this.cls.accessIntent;
+    const accessGrant =
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.authorization.accessGrant
+        : this.cls.get('accessGrant');
+    const person =
+      accessContext && accessContext.kind !== 'public'
+        ? accessContext.actor.person
+        : this.cls.get('person');
+    const bypassRLS = shouldBypassRLS({
+      mode,
+      accessContextKind,
+    });
+
+    let rlsContext: IPrismaRLSContext | undefined = options.rlsContext;
+    if (
+      !rlsContext &&
+      accessContext &&
+      accessContext.kind !== 'public' &&
+      accessContext.kind !== 'system'
+    ) {
+      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
+        accessContext.tenant.siteId,
+      );
+      rlsContext = {
+        personId: accessContext.actor.person.id,
+        clientId: accessContext.tenant.clientId,
+        siteId: accessContext.tenant.siteId,
+        allowedSiteIds,
+        allowedSiteIdsStr: allowedSiteIds.join(','),
+        scope: accessContext.authorization.accessGrant.scope,
+      };
+    } else if (!rlsContext && accessGrant && person) {
+      const allowedSiteIds = await this.getAllowedSiteIdsForSite(
+        accessGrant.siteId,
+      );
+      rlsContext = {
+        personId: person.id,
+        clientId: accessGrant.clientId,
+        siteId: accessGrant.siteId,
+        allowedSiteIds,
+        allowedSiteIdsStr: allowedSiteIds.join(','),
+        scope: accessGrant.scope,
+      };
+    }
+
+    return {
+      accessIntent,
+      accessContextKind,
+      accessGrant,
+      mode,
+      bypassRLS,
+      rlsContext,
+    };
+  }
 }
 
 export interface IPrismaRLSContext {
@@ -469,10 +516,6 @@ export interface IPrismaRLSContext {
 }
 
 export interface PrimaryExtensionOptions {
-  /**
-   * If true, RLS will be bypassed for all queries when the context contains system admin scope or cron mode.
-   */
-  shouldBypassRLSAsSystemAdmin?: boolean;
   rlsContext?: IPrismaRLSContext;
 }
 
@@ -480,21 +523,21 @@ export interface BypassRLSExtensionOptions {
   rlsContext?: IPrismaRLSContext;
 }
 
-function buildRLSContextStatements(
+export function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: true,
 ): Prisma.PrismaPromise<any>[];
-function buildRLSContextStatements(
+export function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: false,
   rlsContext: IPrismaRLSContext,
 ): Prisma.PrismaPromise<any>[];
-function buildRLSContextStatements(
+export function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: boolean,
   rlsContext?: IPrismaRLSContext,
 ): Prisma.PrismaPromise<any>[];
-function buildRLSContextStatements(
+export function buildRLSContextStatements(
   prismaClient: Pick<PrismaClient, '$executeRaw'>,
   shouldBypassRLS: boolean,
   rlsContext?: IPrismaRLSContext,
@@ -516,6 +559,13 @@ function buildRLSContextStatements(
     prismaClient.$executeRaw`SELECT set_config('app.current_person_id', ${rlsContext.personId}, TRUE)`,
     prismaClient.$executeRaw`SELECT set_config('app.current_user_scope', ${rlsContext.scope}, TRUE)`,
   ];
+}
+
+export function shouldBypassRLS(params: {
+  mode?: 'cron' | 'request';
+  accessContextKind: AccessContextKind;
+}): boolean {
+  return params.mode === 'cron' || params.accessContextKind === 'system';
 }
 
 async function findManyForPageExtensionFn<T>(
