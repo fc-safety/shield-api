@@ -13,12 +13,14 @@ import {
   ConsumableQuestionConfig,
   Prisma,
 } from 'src/generated/prisma/client';
+import { buildIdempotencyKey } from 'src/notifications/lib/idempotency';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import TeamInspectionReminderTemplateReact, {
   TeamInspectionReminderTemplateProps,
   TeamInspectionReminderTemplateSms,
 } from 'src/notifications/templates/team-inspection-reminder';
 import { PrismaService, PrismaTxClient } from 'src/prisma/prisma.service';
+import { RedisService } from 'src/redis/redis.service';
 import {
   CreateAssetAlertCriterionRuleSchema,
   CreateSetAssetMetadataConfigSchema,
@@ -35,6 +37,8 @@ import { UpdateSetupAssetDto } from './dto/update-setup-asset.dto';
 @Injectable()
 export class AssetsService {
   private readonly logger = new Logger(AssetsService.name);
+  private static readonly REMINDER_DEDUP_TTL_SECONDS = 15 * 60;
+  private static readonly REMINDER_LOCK_PREFIX = 'idempotency:team-reminder';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -42,6 +46,7 @@ export class AssetsService {
     private readonly notifications: NotificationsService,
     private readonly membersService: MembersService,
     private readonly cls: ApiClsService,
+    private readonly redis: RedisService,
   ) {}
 
   async create(createAssetDto: Prisma.AssetCreateInput) {
@@ -559,9 +564,11 @@ ORDER BY metadata_value
     });
 
     if (!skipNotifications) {
-      for (const result of results) {
-        this.notifications.queueInspectionAlertTriggeredEmail(result.id);
-      }
+      await Promise.all(
+        results.map((result) =>
+          this.notifications.queueInspectionAlertTriggeredEmail(result.id),
+        ),
+      );
     }
   }
 
@@ -699,16 +706,35 @@ ORDER BY metadata_value
       requestorName: `${user.givenName} ${user.familyName}`,
     };
 
-    await this.notifications.sendEmails(
-      members.results.map((member) => ({
-        react: jsx(TeamInspectionReminderTemplateReact, {
-          ...templateProps,
-          firstName: member.firstName,
+    const emailPayloads = (
+      await Promise.all(
+        members.results.map(async (member) => {
+          const shouldSend = await this.acquireReminderDeliveryLock(
+            buildIdempotencyKey(
+              AssetsService.REMINDER_LOCK_PREFIX,
+              'email',
+              id,
+              member.id,
+            ),
+          );
+          if (!shouldSend) {
+            return null;
+          }
+          return {
+            react: jsx(TeamInspectionReminderTemplateReact, {
+              ...templateProps,
+              firstName: member.firstName,
+            }),
+            to: [member.email],
+            subject: 'Team Inspection Reminder',
+          };
         }),
-        to: [member.email],
-        subject: 'Team Inspection Reminder',
-      })),
-    );
+      )
+    ).filter((payload): payload is NonNullable<typeof payload> => !!payload);
+
+    if (emailPayloads.length > 0) {
+      await this.notifications.sendEmails(emailPayloads);
+    }
 
     await Promise.allSettled(
       members.results
@@ -718,6 +744,17 @@ ORDER BY metadata_value
         )
         .map(async (user) => {
           const phoneNumber = formatPhoneNumber(user.phoneNumber);
+          const shouldSend = await this.acquireReminderDeliveryLock(
+            buildIdempotencyKey(
+              AssetsService.REMINDER_LOCK_PREFIX,
+              'sms',
+              id,
+              user.id,
+            ),
+          );
+          if (!shouldSend) {
+            return;
+          }
           return this.notifications
             .sendSms({
               to: phoneNumber,
@@ -733,6 +770,24 @@ ORDER BY metadata_value
             });
         }),
     );
+  }
+
+  private async acquireReminderDeliveryLock(key: string) {
+    try {
+      const result = await this.redis
+        .getPublisher()
+        .set(key, '1', {
+          NX: true,
+          EX: AssetsService.REMINDER_DEDUP_TTL_SECONDS,
+        });
+      return result === 'OK';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Reminder idempotency lock unavailable (${key}): ${message}`,
+      );
+      return true;
+    }
   }
 }
 
