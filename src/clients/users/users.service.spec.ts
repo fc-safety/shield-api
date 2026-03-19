@@ -490,7 +490,9 @@ describe('UsersService', () => {
         }),
       );
 
-      await expect(service.addRole('nonexistent', addRoleDto)).rejects.toThrow();
+      await expect(
+        service.addRole('nonexistent', addRoleDto),
+      ).rejects.toThrow();
     });
 
     it('should throw NotFoundException when site not found for client', async () => {
