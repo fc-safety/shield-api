@@ -8,7 +8,7 @@ export const CreateProductSchema = z.object({
   active: z.boolean().optional(),
   manufacturer: z.object({
     connect: z.object({
-      id: z.string(),
+      id: z.cuid2(),
     }),
   }),
   type: z.enum(['PRIMARY', 'CONSUMABLE']),
@@ -20,7 +20,7 @@ export const CreateProductSchema = z.object({
   metadata: z.record(z.string(), z.string()).optional(),
   productCategory: z.object({
     connect: z.object({
-      id: z.string(),
+      id: z.cuid2(),
     }),
   }),
   parentProduct: z
