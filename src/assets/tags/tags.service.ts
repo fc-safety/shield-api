@@ -483,27 +483,32 @@ export class TagsService {
   }: BulkGenerateSignedTagUrlDto) {
     const keyId = inputKeyId ?? this.config.get('DEFAULT_SIGNING_KEY_ID');
 
+    // Split serial number into prefix + numeric suffix
+    // e.g. "FE-2024-WH-001" -> { prefix: "FE-2024-WH-", numeric: "001" }
+    // e.g. "00123" -> { prefix: "", numeric: "00123" }
+    const parseSerialNumber = (serial: string) => {
+      const match = serial.match(/^(.*?)(\d+)$/);
+      if (!match) return { prefix: '', numeric: serial };
+      return { prefix: match[1], numeric: match[2] };
+    };
+
+    const start = parseSerialNumber(serialNumberRangeStart ?? '0');
+    const end = parseSerialNumber(serialNumberRangeEnd ?? '0');
+
     const serialNumberCount = Math.max(
       method === 'sequential'
-        ? parseInt(serialNumberRangeEnd ?? '0') -
-            parseInt(serialNumberRangeStart ?? '0') +
-            1
+        ? parseInt(end.numeric) - parseInt(start.numeric) + 1
         : (serialNumbers?.length ?? 0),
       0,
     );
 
-    const padSize =
-      serialNumberRangeStart && serialNumberRangeStart.startsWith('0')
-        ? serialNumberRangeStart.length
-        : null;
+    const padSize = start.numeric.length;
     const getSerialNumber = (idx: number) => {
       if (method === 'sequential') {
-        const incrementedNumber = parseInt(serialNumberRangeStart ?? '0') + idx;
-        if (padSize) {
-          return String(incrementedNumber).padStart(padSize, '0');
-        }
-
-        return String(incrementedNumber);
+        return (
+          start.prefix +
+          String(parseInt(start.numeric) + idx).padStart(padSize, '0')
+        );
       }
 
       return serialNumbers?.at(idx) ?? null;
