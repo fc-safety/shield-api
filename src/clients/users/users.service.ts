@@ -33,6 +33,7 @@ export interface UserResponse {
   firstName: string;
   lastName: string;
   email: string;
+  username: string | null;
   phoneNumber: string | null;
   position: string | null;
   active: boolean;

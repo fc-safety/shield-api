@@ -1,17 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Prisma } from 'src/generated/prisma/client';
 import { KeycloakService } from 'src/auth/keycloak/keycloak.service';
 import { MemoryCacheService } from 'src/cache/memory-cache.service';
 import { ApiConfigService } from 'src/config/api-config.service';
+import { Prisma } from 'src/generated/prisma/client';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { QueryUserDto } from './dto/query-user.dto';
-import { UsersService } from './users.service';
+import { UserResponse, UsersService } from './users.service';
 
 describe('UsersService', () => {
   let service: UsersService;
 
-  const mockPersonResults = [
+  const mockPersonResults: UserResponse[] = [
     {
       id: 'person-1',
       createdOn: new Date('2024-01-01'),
@@ -167,14 +167,15 @@ describe('UsersService', () => {
   describe('findAll', () => {
     it('should return users from Person table with clientAccess', async () => {
       const result = await service.findAll();
+      const users = result.results as unknown as UserResponse[];
 
       expect(mockPrismaService.bypassRLS).toHaveBeenCalled();
-      expect(result.results).toHaveLength(2);
+      expect(users).toHaveLength(2);
       expect(result.count).toBe(2);
       expect(result.offset).toBe(0);
 
       // Verify first user
-      expect(result.results[0]).toMatchObject({
+      expect(users[0]).toMatchObject({
         id: 'person-1',
         firstName: 'John',
         lastName: 'Doe',
@@ -184,8 +185,8 @@ describe('UsersService', () => {
       });
 
       // Verify clientAccess is included
-      expect(result.results[0].clientAccess).toHaveLength(1);
-      expect(result.results[0].clientAccess[0].role.name).toBe('Admin');
+      expect(users[0].clientAccess).toHaveLength(1);
+      expect(users[0].clientAccess[0].role.name).toBe('Admin');
     });
 
     it('should apply pagination correctly', async () => {
