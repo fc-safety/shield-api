@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { type ClsStore, ClsService } from 'nestjs-cls';
+import {
+  AccessContextKind,
+  ResolvedAccessContext,
+} from 'src/auth/access-context.types';
 import { TAccessGrant } from 'src/auth/auth.types';
 import { StatelessUser } from 'src/auth/user.schema';
 import { AccessIntent } from 'src/common/utils';
@@ -12,6 +16,7 @@ export interface CommonClsStore extends ClsStore {
   person?: Prisma.PersonGetPayload<object>;
   accessGrant?: TAccessGrant;
   accessIntent?: AccessIntent;
+  accessContext?: ResolvedAccessContext;
   useragent?: string;
   ipv4?: string;
   ipv6?: string;
@@ -21,6 +26,14 @@ export interface CommonClsStore extends ClsStore {
 @Injectable()
 export class ApiClsService {
   constructor(private readonly cls: ClsService<CommonClsStore>) {}
+
+  private getAuthenticatedAccessContext() {
+    const accessContext = this.get('accessContext');
+    if (!accessContext || accessContext.kind === 'public') {
+      return null;
+    }
+    return accessContext;
+  }
 
   public get<K extends keyof CommonClsStore>(
     key: K,
@@ -33,7 +46,9 @@ export class ApiClsService {
   }
 
   public requireAccessGrant() {
-    const accessGrant = this.get('accessGrant');
+    const accessContext = this.getAuthenticatedAccessContext();
+    const accessGrant =
+      accessContext?.authorization.accessGrant ?? this.get('accessGrant');
     if (!accessGrant) {
       throw new Error(
         'Access grant was required but not found in CLS context.',
@@ -43,19 +58,43 @@ export class ApiClsService {
   }
 
   public requireUser() {
-    const user = this.get('user');
+    const accessContext = this.getAuthenticatedAccessContext();
+    const user = accessContext?.actor.user;
     if (!user) {
+      // TODO: Remove legacy fallback once all callers use accessContext.
+      const legacyUser = this.get('user');
+      if (legacyUser) {
+        return legacyUser;
+      }
       throw new Error('User was required but not found in CLS context.');
     }
     return user;
   }
 
   public requirePerson() {
-    const person = this.get('person');
+    const accessContext = this.getAuthenticatedAccessContext();
+    const person = accessContext?.actor.person;
     if (!person) {
+      // TODO: Remove legacy fallback once all callers use accessContext.
+      const legacyPerson = this.get('person');
+      if (legacyPerson) {
+        return legacyPerson;
+      }
       throw new Error('Person was required but not found in CLS context.');
     }
     return person;
+  }
+
+  public requireAccessContext() {
+    const accessContext = this.get('accessContext');
+    if (!accessContext) {
+      throw new Error('Access context was required but not found in CLS context.');
+    }
+    return accessContext;
+  }
+
+  public get accessContextKind(): AccessContextKind {
+    return this.get('accessContext')?.kind ?? 'public';
   }
 
   public get accessIntent() {

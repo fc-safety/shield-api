@@ -25,6 +25,7 @@ describe('AuthGuard', () => {
     getAccessGrantForUser: jest.fn(),
     extractOrganizationContextFromRequest: jest.fn(),
     savePersonFromUserData: jest.fn(),
+    resolveAccessContext: jest.fn(),
   };
 
   const mockApiConfigService = {
@@ -89,6 +90,9 @@ describe('AuthGuard', () => {
       });
       mockAuthService.savePersonFromUserData.mockResolvedValue({
         id: 'person-1',
+      });
+      mockAuthService.resolveAccessContext.mockReturnValue({
+        kind: 'tenant',
       });
     });
 
@@ -220,6 +224,100 @@ describe('AuthGuard', () => {
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
+    });
+
+    it('should store accessContext.kind tenant for user intent', async () => {
+      mockAuthService.getAccessGrantForUser.mockResolvedValue({
+        grant: {
+          scope: RoleScope.SITE,
+          capabilities: ['perform-inspections'],
+          clientId: 'client-1',
+          siteId: 'site-1',
+        },
+      });
+      mockAuthService.resolveAccessContext.mockReturnValue({
+        kind: 'tenant',
+      });
+
+      const context = createMockContext({
+        'x-access-intent': 'user',
+        'x-client-id': 'client-1',
+      });
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
+        kind: 'tenant',
+      });
+    });
+
+    it('should store accessContext.kind support for elevated intent', async () => {
+      mockAuthService.getAccessGrantForUser.mockResolvedValue({
+        grant: {
+          scope: RoleScope.SYSTEM,
+          capabilities: ['perform-inspections'],
+          clientId: 'client-1',
+          siteId: 'site-1',
+        },
+      });
+      mockAuthService.resolveAccessContext.mockReturnValue({
+        kind: 'support',
+      });
+
+      const context = createMockContext({
+        'x-access-intent': 'elevated',
+        'x-client-id': 'client-1',
+      });
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
+        kind: 'support',
+      });
+    });
+
+    it('should store accessContext.kind system for system intent', async () => {
+      mockAuthService.getAccessGrantForUser.mockResolvedValue({
+        grant: {
+          scope: RoleScope.SYSTEM,
+          capabilities: ['perform-inspections'],
+          clientId: 'client-1',
+          siteId: 'site-1',
+        },
+      });
+      mockAuthService.resolveAccessContext.mockReturnValue({
+        kind: 'system',
+      });
+
+      const context = createMockContext({
+        'x-access-intent': 'system',
+        'x-client-id': 'client-1',
+      });
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
+        kind: 'system',
+      });
+    });
+
+    it('should store accessContext.kind public for public unauthenticated requests', async () => {
+      mockReflector.getAllAndOverride.mockImplementation((key: string) => {
+        if (key === 'isPublic') return true;
+        return false;
+      });
+      mockAuthService.extractTokenFromRequest.mockReturnValue(undefined);
+      mockAuthService.validateJwtToken.mockResolvedValue({
+        isValid: false,
+        reason: 'Authentication token is required.',
+      });
+      mockAuthService.resolveAccessContext.mockReturnValue({
+        kind: 'public',
+      });
+
+      const context = createMockContext();
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+
+      expect(mockApiClsService.set).toHaveBeenCalledWith('accessContext', {
+        kind: 'public',
+      });
     });
   });
 });
