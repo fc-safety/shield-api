@@ -14,6 +14,14 @@ const UpdateSiteSchema = CreateSiteSchema.partial()
     subsites: z.object({
       set: z.array(z.object({ id: z.string() })).min(1),
     }),
+    parentSite: z
+      .object({
+        connect: z.object({
+          id: z.string(),
+        }),
+        disconnect: z.boolean(),
+      })
+      .partial(),
   })
   .partial() satisfies z.Schema<Prisma.SiteUpdateInput>;
 
