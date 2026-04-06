@@ -328,6 +328,8 @@ MonthlyConsumableReportTemplateReact.PreviewProps = {
   },
 } satisfies MonthlyConsumableReportProps;
 
-MonthlyConsumableReportTemplateReact.Subject = 'Monthly Supplies Report';
+MonthlyConsumableReportTemplateReact.Subject = ({
+  clientName,
+}: MonthlyConsumableReportProps) => `[${clientName}] Monthly Supplies Report`;
 
 MonthlyConsumableReportTemplateReact.Text = MonthlyConsumableReportText;

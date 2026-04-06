@@ -16,6 +16,12 @@ export const keycloakTokenPayloadSchema = z.object({
   given_name: z.string().optional(),
   family_name: z.string().optional(),
   picture: z.string().optional(),
+  attributes: z
+    .object({
+      phoneNumber: z.array(z.string()),
+    })
+    .partial()
+    .optional(),
 });
 
 export type TokenPayload = z.infer<typeof keycloakTokenPayloadSchema>;
@@ -32,6 +38,7 @@ export interface StatelessUserData {
   givenName?: string;
   familyName?: string;
   picture?: string;
+  phoneNumber?: string | null;
 }
 
 /**
@@ -61,6 +68,7 @@ export class StatelessUser {
   readonly givenName?: string;
   readonly familyName?: string;
   readonly picture?: string;
+  readonly phoneNumber?: string | null;
 
   constructor(data: StatelessUserData) {
     this.idpId = data.idpId;
@@ -70,6 +78,7 @@ export class StatelessUser {
     this.givenName = data.givenName;
     this.familyName = data.familyName;
     this.picture = data.picture;
+    this.phoneNumber = data.phoneNumber;
   }
 }
 
@@ -89,5 +98,10 @@ export const buildUserFromToken = (payload: unknown): StatelessUser => {
     givenName: parsed.given_name ?? undefined,
     familyName: parsed.family_name ?? undefined,
     picture: parsed.picture ?? undefined,
+    // Treat empty arrays as NULL, indicating phone number is EMPTY.
+    // Undefined should be treated as UNKNOWN.
+    phoneNumber: parsed.attributes?.phoneNumber
+      ? (parsed.attributes.phoneNumber.at(0) ?? null)
+      : undefined,
   });
 };
