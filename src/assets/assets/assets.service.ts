@@ -1,8 +1,7 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { subDays } from 'date-fns';
 import { jsx } from 'react/jsx-runtime';
 import { ApiClsService } from 'src/auth/api-cls.service';
-import { MembersService } from 'src/clients/members/members.service';
 import { testAlertRule } from 'src/common/alert-utils';
 import { SendNotificationsBodyDto } from 'src/common/dto/send-notifications-body.dto';
 import { as404OrThrow } from 'src/common/utils';
@@ -40,7 +39,6 @@ export class AssetsService {
     private readonly prisma: PrismaService,
     private readonly consumablesService: ConsumablesService,
     private readonly notifications: NotificationsService,
-    private readonly membersService: MembersService,
     private readonly cls: ApiClsService,
   ) {}
 
@@ -678,19 +676,26 @@ ORDER BY metadata_value
   }
 
   async sendReminderNotifications(id: string, body: SendNotificationsBodyDto) {
-    const user = this.cls.get('user');
+    const user = this.cls.requireUser();
 
-    if (!user) {
-      throw new UnauthorizedException();
-    }
-
-    const members = await this.membersService.findAll({
-      id: { in: body.userIds },
-      limit: 10000,
-      offset: 0,
+    const prisma = await this.prisma.build();
+    const members = await prisma.person.findMany({
+      where: {
+        id: { in: body.userIds },
+      },
     });
 
-    const asset = await this.findOne(id);
+    const asset = await prisma.asset
+      .findUniqueOrThrow({
+        where: { id },
+        include: {
+          site: true,
+          tag: true,
+          product: true,
+        },
+      })
+      .catch(as404OrThrow);
+
     const templateProps: Omit<
       TeamInspectionReminderTemplateProps,
       'firstName'
@@ -700,7 +705,7 @@ ORDER BY metadata_value
     };
 
     await this.notifications.sendEmails(
-      members.results.map((member) => ({
+      members.map((member) => ({
         react: jsx(TeamInspectionReminderTemplateReact, {
           ...templateProps,
           firstName: member.firstName,
@@ -711,19 +716,19 @@ ORDER BY metadata_value
     );
 
     await Promise.allSettled(
-      members.results
+      members
         .filter(
-          (user): user is typeof user & { phoneNumber: string } =>
-            !!user.phoneNumber,
+          (member): member is typeof member & { phoneNumber: string } =>
+            !!member.phoneNumber,
         )
-        .map(async (user) => {
-          const phoneNumber = formatPhoneNumber(user.phoneNumber);
+        .map(async (member) => {
+          const phoneNumber = formatPhoneNumber(member.phoneNumber);
           return this.notifications
             .sendSms({
               to: phoneNumber,
               text: TeamInspectionReminderTemplateSms({
                 ...templateProps,
-                firstName: user.firstName,
+                firstName: member.firstName,
               }),
             })
             .catch((e) => {

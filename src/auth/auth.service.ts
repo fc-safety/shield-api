@@ -687,6 +687,7 @@ export class AuthService {
       lastName: user.familyName ?? '',
       email: user.email,
       username: user.username,
+      phoneNumber: user.phoneNumber,
     };
 
     const cacheKey = `person:idpId=${user.idpId}`;
@@ -709,7 +710,9 @@ export class AuthService {
       personInput.firstName !== person.firstName ||
       personInput.lastName !== person.lastName ||
       personInput.email !== person.email ||
-      personInput.username !== person.username
+      personInput.username !== person.username ||
+      (personInput.phoneNumber !== undefined &&
+        personInput.phoneNumber !== person.phoneNumber)
     ) {
       person = await prisma.person.update({
         where: { id: person.id },
