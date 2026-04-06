@@ -10,6 +10,7 @@ import { Paragraph } from './paragraph.js';
 
 interface InspectionReminderLayoutProps {
   recipientFirstName: string;
+  clientName: string;
   assetsDueForInspectionBySite: {
     siteId: string;
     siteName: string;
@@ -34,12 +35,15 @@ interface InspectionReminderLayoutProps {
 
 export function InspectionReminderTextLayout({
   recipientFirstName,
+  clientName,
   assetsDueForInspectionBySite,
   singleSite,
   openingMessage,
   closingMessage,
 }: InspectionReminderLayoutProps) {
   return `
+  ${clientName}
+
   Hi ${recipientFirstName},
 
   ${openingMessage}
@@ -67,6 +71,7 @@ export function InspectionReminderTextLayout({
 }
 export function InspectionReminderLayout({
   recipientFirstName,
+  clientName,
   assetsDueForInspectionBySite,
   singleSite,
   openingMessage,
@@ -77,6 +82,9 @@ export function InspectionReminderLayout({
   return (
     <Layout>
       <Block>
+        <Paragraph className="text-sm font-semibold text-gray-500 p-0 m-0 mb-2">
+          {clientName}
+        </Paragraph>
         {urgency !== undefined && urgency !== 'normal' && (
           <Heading className="text-[16px] font-bold text-gray-800 mt-[10px] mb-[20px]">
             Reminder: Inspections Due Soon

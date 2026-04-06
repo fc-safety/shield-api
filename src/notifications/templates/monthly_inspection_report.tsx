@@ -237,6 +237,8 @@ MonthlyInspectionReportTemplateReact.PreviewProps = {
   ...MONTHLY_INSPECTION_REPORT_PREVIEW_PROPS,
 };
 
-MonthlyInspectionReportTemplateReact.Subject = 'Monthly Compliance Report';
+MonthlyInspectionReportTemplateReact.Subject = ({
+  clientName,
+}: MonthlyInspectionReportProps) => `[${clientName}] Monthly Compliance Report`;
 
 MonthlyInspectionReportTemplateReact.Text = MonthlyInspectionReportTemplateText;

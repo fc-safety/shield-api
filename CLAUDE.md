@@ -41,6 +41,7 @@ npm test -- --testNamePattern="AssetsService"   # Run specific test suite
 # Linting/Formatting
 npm run lint           # ESLint with auto-fix
 npm run format         # Prettier
+npx prettier --write <file>  # Format a specific file
 
 # Database (Prisma)
 npm run db:generate    # Generate Prisma client
@@ -54,6 +55,10 @@ npm run email:dev      # Start email template development server
 # Sentry
 npm run sentry:sourcemaps  # Upload sourcemaps to Sentry
 ```
+
+## Formatting
+
+**Always run Prettier on files after modifying them.** Use `npx prettier --write <file>` on each changed file before committing or finishing a task.
 
 ## Code Generation
 

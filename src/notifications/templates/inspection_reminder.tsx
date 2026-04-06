@@ -7,12 +7,17 @@ import {
 
 type InspectionReminderTemplateReactProps = Pick<
   React.ComponentProps<typeof InspectionReminderLayout>,
-  'recipientFirstName' | 'assetsDueForInspectionBySite' | 'singleSite' | 'frontendUrl'
+  | 'recipientFirstName'
+  | 'clientName'
+  | 'assetsDueForInspectionBySite'
+  | 'singleSite'
+  | 'frontendUrl'
 >;
 
 export const INSPECTION_REMINDER_TEMPLATE_TEST_PROPS: InspectionReminderTemplateReactProps =
   {
     recipientFirstName: 'Sarah',
+    clientName: 'Safety Solutions',
     frontendUrl: 'http://localhost:5173',
     assetsDueForInspectionBySite: [
       {
@@ -87,11 +92,13 @@ const INSPECTION_REMINDER_TEXT_CLOSING_MESSAGE =
 
 function InspectionReminderTemplateText({
   recipientFirstName,
+  clientName,
   assetsDueForInspectionBySite: assetsDueForInspection,
   frontendUrl,
 }: InspectionReminderTemplateReactProps) {
   return InspectionReminderTextLayout({
     recipientFirstName,
+    clientName,
     assetsDueForInspectionBySite: assetsDueForInspection,
     openingMessage: INSPECTION_REMINDER_TEXT_OPENING_MESSAGE,
     closingMessage: INSPECTION_REMINDER_TEXT_CLOSING_MESSAGE,
@@ -101,12 +108,14 @@ function InspectionReminderTemplateText({
 
 export default function InspectionReminderTemplateReact({
   recipientFirstName,
+  clientName,
   assetsDueForInspectionBySite: assetsDueForInspection,
   frontendUrl,
 }: InspectionReminderTemplateReactProps): React.ReactElement {
   return (
     <InspectionReminderLayout
       recipientFirstName={recipientFirstName}
+      clientName={clientName}
       assetsDueForInspectionBySite={assetsDueForInspection}
       openingMessage={INSPECTION_REMINDER_TEXT_OPENING_MESSAGE}
       closingMessage={INSPECTION_REMINDER_TEXT_CLOSING_MESSAGE}
@@ -120,6 +129,9 @@ InspectionReminderTemplateReact.PreviewProps = {
   ...INSPECTION_REMINDER_TEMPLATE_TEST_PROPS,
 };
 
-InspectionReminderTemplateReact.Subject = 'Inspection Reminder';
+InspectionReminderTemplateReact.Subject = ({
+  clientName,
+}: InspectionReminderTemplateReactProps) =>
+  `[${clientName}] Inspection Reminder`;
 
 InspectionReminderTemplateReact.Text = InspectionReminderTemplateText;
