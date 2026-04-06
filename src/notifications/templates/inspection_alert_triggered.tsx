@@ -40,6 +40,7 @@ interface AlertAsset {
 
 interface InspectionAlertTriggeredTemplateProps {
   recipientFirstName: string;
+  clientName: string;
   siteName: string;
   alert: TriggeredAlert;
   asset: AlertAsset;
@@ -49,6 +50,7 @@ interface InspectionAlertTriggeredTemplateProps {
 
 export default function InspectionAlertTriggeredTemplateReact({
   recipientFirstName,
+  clientName,
   siteName,
   alert,
   asset,
@@ -130,6 +132,9 @@ export default function InspectionAlertTriggeredTemplateReact({
   return (
     <Layout preview="Inspection Alert Triggered">
       <Block>
+        <Paragraph className="text-sm font-semibold text-gray-500 p-0 m-0 mb-2">
+          {clientName}
+        </Paragraph>
         <Heading className="text-[16px] font-bold text-gray-800 mt-[10px] mb-[20px]">
           Inspection Alert Triggered
         </Heading>
@@ -179,6 +184,7 @@ export default function InspectionAlertTriggeredTemplateReact({
 
 InspectionAlertTriggeredTemplateReact.Text = ({
   recipientFirstName,
+  clientName,
   siteName,
   alert,
   asset,
@@ -186,6 +192,8 @@ InspectionAlertTriggeredTemplateReact.Text = ({
   frontendUrl,
 }: InspectionAlertTriggeredTemplateProps) => {
   return `
+    ${clientName}
+
     Hi ${recipientFirstName},
 
     An inspection alert has been triggered at the site "${siteName}".
@@ -214,10 +222,14 @@ InspectionAlertTriggeredTemplateReact.Text = ({
   `;
 };
 
-InspectionAlertTriggeredTemplateReact.Subject = 'Inspection Alert Triggered';
+InspectionAlertTriggeredTemplateReact.Subject = ({
+  clientName,
+}: InspectionAlertTriggeredTemplateProps) =>
+  `[${clientName}] Inspection Alert Triggered`;
 
 InspectionAlertTriggeredTemplateReact.PreviewProps = {
   recipientFirstName: 'Sarah',
+  clientName: 'Safety Solutions',
   siteName: 'Downtown Manufacturing Facility',
   alert: {
     id: 'alert-urgent-001',

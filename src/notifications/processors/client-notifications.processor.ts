@@ -256,6 +256,7 @@ export class ClientNotificationsProcessor
         // Prepare presentation properties to be passed to the template.
         const props: SharedInspectionReminderTemplateProps = {
           recipientFirstName: member.firstName,
+          clientName: client.name,
           singleSite: isSingleSiteUser(member, job.data.clientId),
           frontendUrl: this.config.get('FRONTEND_URL'),
           assetsDueForInspectionBySite: Object.entries(assetsBySite).map(
@@ -586,6 +587,7 @@ export class ClientNotificationsProcessor
     const alert = await this.prisma.bypassRLS().alert.findUnique({
       where: { id: alertId },
       include: {
+        client: true,
         site: true,
         asset: {
           include: {
@@ -616,6 +618,7 @@ export class ClientNotificationsProcessor
       >,
       'recipientFirstName'
     > = {
+      clientName: alert.client.name,
       siteName: alert.site.name,
       alert: {
         id: alert.id,

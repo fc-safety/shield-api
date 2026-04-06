@@ -7,12 +7,17 @@ import {
 
 type InspectionDueSoonAlertLevel4TemplateReactProps = Pick<
   React.ComponentProps<typeof InspectionReminderLayout>,
-  'recipientFirstName' | 'assetsDueForInspectionBySite' | 'singleSite' | 'frontendUrl'
+  | 'recipientFirstName'
+  | 'clientName'
+  | 'assetsDueForInspectionBySite'
+  | 'singleSite'
+  | 'frontendUrl'
 >;
 
 export const INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEMPLATE_TEST_PROPS: InspectionDueSoonAlertLevel4TemplateReactProps =
   {
     recipientFirstName: 'Robert',
+    clientName: 'Safety Solutions',
     frontendUrl: 'http://localhost:5173',
     assetsDueForInspectionBySite: [
       {
@@ -97,11 +102,13 @@ const INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_CLOSING_MESSAGE =
 
 function InspectionDueSoonAlertLevel4TemplateText({
   recipientFirstName,
+  clientName,
   assetsDueForInspectionBySite: assetsDueForInspection,
   frontendUrl,
 }: InspectionDueSoonAlertLevel4TemplateReactProps) {
   return InspectionReminderTextLayout({
     recipientFirstName,
+    clientName,
     assetsDueForInspectionBySite: assetsDueForInspection,
     openingMessage: INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_OPENING_MESSAGE,
     closingMessage: INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_CLOSING_MESSAGE,
@@ -111,12 +118,14 @@ function InspectionDueSoonAlertLevel4TemplateText({
 
 export default function InspectionDueSoonAlertLevel4TemplateReact({
   recipientFirstName,
+  clientName,
   assetsDueForInspectionBySite: assetsDueForInspection,
   frontendUrl,
 }: InspectionDueSoonAlertLevel4TemplateReactProps): React.ReactElement {
   return (
     <InspectionReminderLayout
       recipientFirstName={recipientFirstName}
+      clientName={clientName}
       assetsDueForInspectionBySite={assetsDueForInspection}
       openingMessage={INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_OPENING_MESSAGE}
       closingMessage={INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEXT_CLOSING_MESSAGE}
@@ -130,8 +139,10 @@ InspectionDueSoonAlertLevel4TemplateReact.PreviewProps = {
   ...INSPECTION_DUE_SOON_ALERT_LEVEL_4_TEMPLATE_TEST_PROPS,
 };
 
-InspectionDueSoonAlertLevel4TemplateReact.Subject =
-  'Compliance Alert: Inspections Due Soon';
+InspectionDueSoonAlertLevel4TemplateReact.Subject = ({
+  clientName,
+}: InspectionDueSoonAlertLevel4TemplateReactProps) =>
+  `[${clientName}] Compliance Alert: Inspections Due Soon`;
 
 InspectionDueSoonAlertLevel4TemplateReact.Text =
   InspectionDueSoonAlertLevel4TemplateText;
