@@ -4,10 +4,17 @@ import { Block } from './components/block';
 import { Layout } from './components/layout';
 import { Paragraph } from './components/paragraph';
 
+interface Assignment {
+  // Omitted for client-wide (or higher) scope roles where the site is irrelevant.
+  siteName?: string;
+  roleName: string;
+}
+
 interface InvitationTemplateProps {
   clientName: string;
-  siteName: string;
-  roleName: string;
+  siteName?: string;
+  roleName?: string;
+  assignments?: Assignment[];
   inviterFirstName: string;
   inviterLastName: string;
   inviteeEmail: string;
@@ -15,16 +22,42 @@ interface InvitationTemplateProps {
   expiresOn: string;
 }
 
-export default function InvitationTemplateReact({
-  clientName,
-  siteName,
-  roleName,
-  inviterFirstName,
-  inviterLastName,
-  inviteeEmail,
-  inviteUrl,
-  expiresOn,
-}: InvitationTemplateProps): React.ReactElement {
+function getAssignments(props: InvitationTemplateProps): Assignment[] {
+  // Note: `siteName` is omitted for client-wide+ scope roles, so the legacy
+  // fallback must trigger on `roleName` alone — not `siteName && roleName`.
+  const raw =
+    props.assignments && props.assignments.length > 0
+      ? props.assignments
+      : props.roleName
+        ? [{ siteName: props.siteName, roleName: props.roleName }]
+        : [];
+
+  // Defensive dedupe — callers should already dedupe, but a duplicate slipping
+  // through would render visibly broken in the email.
+  const seen = new Set<string>();
+  return raw.filter((a) => {
+    const key = `${a.siteName}|${a.roleName}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export default function InvitationTemplateReact(
+  props: InvitationTemplateProps,
+): React.ReactElement {
+  const {
+    clientName,
+    inviterFirstName,
+    inviterLastName,
+    inviteeEmail,
+    inviteUrl,
+    expiresOn,
+  } = props;
+
+  const assignments = getAssignments(props);
+  const isSingle = assignments.length === 1;
+
   const formattedExpiry = new Date(expiresOn).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -45,13 +78,34 @@ export default function InvitationTemplateReact({
           <strong>{clientName}</strong> on the FC Safety Shield. Here are your
           invitation details:
         </Paragraph>
-        <Paragraph>
-          <strong>Organization:</strong> {clientName}
-          <br />
-          <strong>Site:</strong> {siteName}
-          <br />
-          <strong>Role:</strong> {roleName}
-        </Paragraph>
+        {isSingle ? (
+          <Paragraph>
+            <strong>Organization:</strong> {clientName}
+            {assignments[0].siteName ? (
+              <>
+                <br />
+                <strong>Site:</strong> {assignments[0].siteName}
+              </>
+            ) : null}
+            <br />
+            <strong>Role:</strong> {assignments[0].roleName}
+          </Paragraph>
+        ) : (
+          <>
+            <Paragraph>
+              <strong>Organization:</strong> {clientName}
+            </Paragraph>
+            <Paragraph>
+              <strong>Assigned roles:</strong>
+            </Paragraph>
+            {assignments.map((a, i) => (
+              <Paragraph key={i} className="ml-4 my-0">
+                &bull; <strong>{a.roleName}</strong>
+                {a.siteName ? <> at {a.siteName}</> : null}
+              </Paragraph>
+            ))}
+          </>
+        )}
       </Block>
       <Hr />
       <Block>
@@ -109,24 +163,50 @@ InvitationTemplateReact.PreviewProps = {
   expiresOn: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
 };
 
+InvitationTemplateReact.MultiPreviewProps = {
+  clientName: 'Acme Corporation',
+  assignments: [
+    { siteName: 'Main Campus', roleName: 'Inspector' },
+    { siteName: 'Downtown Office', roleName: 'Manager' },
+    { siteName: 'Warehouse B', roleName: 'Inspector' },
+  ],
+  inviterFirstName: 'Jane',
+  inviterLastName: 'Smith',
+  inviteeEmail: 'john.doe@example.com',
+  inviteUrl: 'https://shield.fc-safety.com/accept-invite/abc123xyz456',
+  expiresOn: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+};
+
 InvitationTemplateReact.Subject = ({ clientName }: InvitationTemplateProps) =>
   `You've been invited to join ${clientName} on the FC Safety Shield`;
 
-InvitationTemplateReact.Text = ({
-  clientName,
-  siteName,
-  roleName,
-  inviterFirstName,
-  inviterLastName,
-  inviteeEmail,
-  inviteUrl,
-  expiresOn,
-}: InvitationTemplateProps) => {
+InvitationTemplateReact.Text = (props: InvitationTemplateProps) => {
+  const {
+    clientName,
+    inviterFirstName,
+    inviterLastName,
+    inviteeEmail,
+    inviteUrl,
+    expiresOn,
+  } = props;
+  const assignments = getAssignments(props);
+  const isSingle = assignments.length === 1;
+
   const formattedExpiry = new Date(expiresOn).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
+
+  const assignmentText = isSingle
+    ? `  Organization: ${clientName}${
+        assignments[0].siteName ? `\n  Site: ${assignments[0].siteName}` : ''
+      }\n  Role: ${assignments[0].roleName}`
+    : `  Organization: ${clientName}\n  Assigned roles:\n${assignments
+        .map(
+          (a) => `    - ${a.roleName}${a.siteName ? ` at ${a.siteName}` : ''}`,
+        )
+        .join('\n')}`;
 
   return `
   You've been invited to join ${clientName} on the FC Safety Shield
@@ -135,9 +215,7 @@ InvitationTemplateReact.Text = ({
 
   ${inviterFirstName} ${inviterLastName} has invited you to join ${clientName} on the FC Safety Shield. Here are your invitation details:
 
-  Organization: ${clientName}
-  Site: ${siteName}
-  Role: ${roleName}
+${assignmentText}
 
   ---
 
