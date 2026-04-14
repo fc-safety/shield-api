@@ -442,9 +442,11 @@ export class InvitationsService {
         });
       }
 
+      const now = new Date();
+
       // Expiry is derived from `expiresOn`; status is not mutated on expiry
       // (intentionally deprecated). Frontend filters PENDING + date.
-      if (new Date() > invitation.expiresOn) {
+      if (now > invitation.expiresOn) {
         throw new GoneException({
           code: 'INVITATION_INVALID',
           message: 'This invitation is no longer valid.',
@@ -458,7 +460,11 @@ export class InvitationsService {
       }[] = [];
       if (invitation.groupId) {
         assignments = await tx.invitation.findMany({
-          where: { groupId: invitation.groupId, status: 'PENDING' },
+          where: {
+            groupId: invitation.groupId,
+            status: 'PENDING',
+            expiresOn: { gt: now },
+          },
           select: {
             site: { select: { name: true } },
             role: { select: { name: true, scope: true } },
@@ -689,17 +695,14 @@ export class InvitationsService {
 
     // Revoke this invitation and all grouped siblings
     if (invitation.groupId) {
-      const toRevoke = await prisma.invitation.findMany({
-        where: { groupId: invitation.groupId, status: 'PENDING' },
-        select: { id: true },
-      });
-      await prisma.invitation.updateMany({
+      const revoked = await prisma.invitation.updateManyAndReturn({
         where: { groupId: invitation.groupId, status: 'PENDING' },
         data: { status: 'REVOKED' },
+        select: { id: true },
       });
       return {
         groupId: invitation.groupId,
-        revokedIds: toRevoke.map((r) => r.id),
+        revokedIds: revoked.map((r) => r.id),
       };
     }
 

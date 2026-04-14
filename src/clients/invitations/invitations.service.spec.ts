@@ -707,19 +707,18 @@ describe('InvitationsService', () => {
         groupId: 'group-1',
         status: 'PENDING',
       });
-      mockBuildResult.invitation.updateMany.mockResolvedValue({ count: 3 });
-
-      mockBuildResult.invitation.findMany.mockResolvedValueOnce([
-        { id: 'inv-1' },
-        { id: 'inv-2' },
-        { id: 'inv-3' },
-      ]);
+      (mockBuildResult.invitation as any).updateManyAndReturn = jest
+        .fn()
+        .mockResolvedValue([{ id: 'inv-1' }, { id: 'inv-2' }, { id: 'inv-3' }]);
 
       const result = await service.revoke('inv-1');
 
-      expect(mockBuildResult.invitation.updateMany).toHaveBeenCalledWith({
+      expect(
+        (mockBuildResult.invitation as any).updateManyAndReturn,
+      ).toHaveBeenCalledWith({
         where: { groupId: 'group-1', status: 'PENDING' },
         data: { status: 'REVOKED' },
+        select: { id: true },
       });
       expect(result).toEqual({
         groupId: 'group-1',
@@ -863,6 +862,103 @@ describe('InvitationsService', () => {
             siteId: 'site-clicked',
             isPrimary: true,
           }),
+        }),
+      );
+    });
+
+    it('falls back to index 0 when clicked code is not in the PENDING sibling list', async () => {
+      // Race: between fetching `invitation` and re-querying PENDING siblings,
+      // the clicked invite was concurrently moved out of PENDING. findIndex
+      // returns -1; Math.max(0, -1) = 0 anchors primary on the first sibling.
+      const clicked = {
+        id: 'inv-clicked',
+        code: 'clickedcode',
+        status: 'PENDING',
+        groupId: 'group-1',
+        email: 'test@example.com',
+        expiresOn: new Date(Date.now() + 86400000),
+        clientId: 'client-1',
+        siteId: 'site-clicked',
+        roleId: 'role-clicked',
+        client: { name: 'Test Client', id: 'client-1', externalId: 'ext-1' },
+        site: { name: 'Clicked Site', id: 'site-clicked' },
+        role: { name: 'Clicked Role', id: 'role-clicked', scope: 'SITE' },
+        createdBy: { firstName: 'Admin', lastName: 'User', id: 'admin-1' },
+      };
+      const otherSibling = {
+        ...clicked,
+        id: 'inv-other',
+        code: 'othercode',
+        siteId: 'site-other',
+        roleId: 'role-other',
+        site: { name: 'Other Site', id: 'site-other' },
+        role: { name: 'Other Role', id: 'role-other', scope: 'SITE' },
+      };
+
+      mockBypassTx.invitation.findUnique.mockResolvedValue(clicked);
+      // PENDING list does NOT include the clicked invite.
+      mockBypassTx.invitation.findMany.mockResolvedValue([otherSibling]);
+      mockBypassTx.invitation.count.mockResolvedValue(2);
+      mockBypassTx.personClientAccess.findFirst.mockResolvedValue(null);
+      mockBypassTx.personClientAccess.upsert.mockResolvedValue({
+        clientId: 'client-1',
+        siteId: 'site-other',
+        roleId: 'role-other',
+      });
+      mockBypassTx.invitation.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.accept('clickedcode');
+
+      // Fallback: first (and only) sibling gets primary.
+      expect(mockBypassTx.personClientAccess.upsert).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          create: expect.objectContaining({
+            siteId: 'site-other',
+            isPrimary: true,
+          }),
+        }),
+      );
+    });
+
+    it('invalidates the access-grant cache for every affected client/site', async () => {
+      const { clearAccessGrantResponseCache } = jest.requireMock(
+        'src/auth/utils/access-grants',
+      );
+      clearAccessGrantResponseCache.mockClear();
+
+      const clicked = {
+        id: 'inv-1',
+        code: 'abc123',
+        status: 'PENDING',
+        groupId: null,
+        email: 'test@example.com',
+        expiresOn: new Date(Date.now() + 86400000),
+        clientId: 'client-1',
+        siteId: 'site-1',
+        roleId: 'role-1',
+        client: { name: 'Test Client', id: 'client-1', externalId: 'ext-1' },
+        site: { name: 'Site A', id: 'site-1' },
+        role: { name: 'Inspector', id: 'role-1', scope: 'SITE' },
+        createdBy: { firstName: 'Admin', lastName: 'User', id: 'admin-1' },
+      };
+
+      mockBypassTx.invitation.findUnique.mockResolvedValue(clicked);
+      mockBypassTx.personClientAccess.findFirst.mockResolvedValue(null);
+      mockBypassTx.personClientAccess.upsert.mockResolvedValue({
+        clientId: 'client-1',
+        siteId: 'site-1',
+        roleId: 'role-1',
+      });
+      mockBypassTx.invitation.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.accept('abc123');
+
+      expect(clearAccessGrantResponseCache).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idpId: 'idp-1',
+          clientId: 'client-1',
+          siteId: 'site-1',
         }),
       );
     });
@@ -1169,7 +1265,10 @@ describe('InvitationsService', () => {
       ]);
       expect(mockBypassTx.invitation.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { groupId: 'group-1', status: 'PENDING' },
+          where: expect.objectContaining({
+            groupId: 'group-1',
+            status: 'PENDING',
+          }),
         }),
       );
     });
