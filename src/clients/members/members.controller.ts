@@ -7,9 +7,11 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { ZodValidationPipe } from 'nestjs-zod';
 import { CheckCapability, CheckScope } from 'src/auth/policies.guard';
 import { AddRoleDto } from './dto/add-role.dto';
-import { InviteMemberDto } from './dto/invite-member.dto';
+import type { InviteMemberDto } from './dto/invite-member.dto';
+import { inviteMemberSchema } from './dto/invite-member.dto';
 import { QueryMemberDto } from './dto/query-member.dto';
 import { RemoveRoleDto } from './dto/remove-role.dto';
 import { MembersService } from './members.service';
@@ -31,8 +33,11 @@ export class MembersController {
   }
 
   @Post('invite')
-  invite(@Body() dto: InviteMemberDto) {
-    return this.membersService.invite(dto);
+  async invite(
+    @Body(new ZodValidationPipe(inviteMemberSchema)) dto: InviteMemberDto,
+  ) {
+    const results = await this.membersService.invite(dto);
+    return dto.kind === 'multi' ? results : results[0];
   }
 
   @Post(':id/reset-password-email')

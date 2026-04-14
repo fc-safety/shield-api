@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  HttpCode,
   Param,
   Post,
   Query,
@@ -13,6 +12,7 @@ import { CheckCapability, CheckIsAuthenticated } from 'src/auth/utils/policies';
 import { Public, SkipAccessGrantValidation } from '../../auth/auth.guard';
 import { CreateInvitationsDto } from './dto/create-invitation.dto';
 import { QueryInvitationDto } from './dto/query-invitation.dto';
+import { RenewInvitationDto } from './dto/renew-invitation.dto';
 import { InvitationsService } from './invitations.service';
 
 @Controller('invitations')
@@ -36,6 +36,15 @@ export class InvitationsController {
   @Get()
   async findAll(@Query() query: QueryInvitationDto) {
     return this.invitationsService.findAll(query);
+  }
+
+  /**
+   * Bulk-expire all PENDING invitations for the current client whose
+   * `expiresOn` is in the past. Idempotent; safe to call repeatedly.
+   */
+  @Post('expire-stale')
+  async expireStale() {
+    return this.invitationsService.expireStale();
   }
 
   /**
@@ -72,6 +81,15 @@ export class InvitationsController {
   }
 
   /**
+   * Renew an invitation — bump expiresOn, mint a new code, and re-send the
+   * email. Works on PENDING and EXPIRED. Grouped invites renew together.
+   */
+  @Post(':id/renew')
+  async renew(@Param('id') id: string, @Body() dto: RenewInvitationDto) {
+    return this.invitationsService.renew(id, dto);
+  }
+
+  /**
    * Accept an invitation.
    * Any authenticated user can accept an invitation, even if they don't have
    * a client/site assigned yet (which is the typical case for new users).
@@ -87,7 +105,6 @@ export class InvitationsController {
    * Revoke an invitation.
    */
   @Delete(':id')
-  @HttpCode(204)
   async revoke(@Param('id') id: string) {
     return this.invitationsService.revoke(id);
   }
