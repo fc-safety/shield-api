@@ -60,7 +60,7 @@ describe('MembersService', () => {
   };
 
   const mockInvitationsService = {
-    create: jest.fn(),
+    createBulk: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -91,6 +91,63 @@ describe('MembersService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('invite', () => {
+    it('should call createBulk with single assignment', async () => {
+      const mockResult = [{ id: 'inv-1', inviteUrl: 'http://test/abc' }];
+      mockInvitationsService.createBulk.mockResolvedValue(mockResult);
+
+      const dto = {
+        email: 'user@example.com',
+        assignments: [{ roleId: 'role-1', siteId: 'site-1' }],
+        expiresInDays: 7,
+        kind: 'single' as const,
+      };
+
+      const result = await service.invite(dto);
+
+      expect(result).toEqual(mockResult);
+      expect(mockInvitationsService.createBulk).toHaveBeenCalledWith({
+        invitations: [
+          {
+            email: 'user@example.com',
+            siteId: 'site-1',
+            roleId: 'role-1',
+          },
+        ],
+        expiresInDays: 7,
+      });
+    });
+
+    it('should call createBulk with multiple assignments', async () => {
+      const mockResult = [
+        { id: 'inv-1', inviteUrl: 'http://test/abc' },
+        { id: 'inv-2', inviteUrl: 'http://test/def' },
+      ];
+      mockInvitationsService.createBulk.mockResolvedValue(mockResult);
+
+      const dto = {
+        email: 'user@example.com',
+        assignments: [
+          { roleId: 'role-1', siteId: 'site-1' },
+          { roleId: 'role-2', siteId: 'site-2' },
+        ],
+        expiresInDays: undefined,
+        kind: 'multi' as const,
+      };
+
+      const result = await service.invite(dto);
+
+      expect(result).toEqual(mockResult);
+      expect(mockInvitationsService.createBulk).toHaveBeenCalledWith({
+        invitations: [
+          { email: 'user@example.com', siteId: 'site-1', roleId: 'role-1' },
+          { email: 'user@example.com', siteId: 'site-2', roleId: 'role-2' },
+        ],
+        expiresInDays: undefined,
+      });
+    });
   });
 
   describe('removeRole', () => {

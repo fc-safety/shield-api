@@ -728,6 +728,7 @@ model Invitation {
   email        String
   roleId       String
   siteId       String
+  groupId      String?
   status       InvitationStatus @default(PENDING)
   expiresOn    DateTime         @db.Timestamptz()
   acceptedById String?
@@ -744,11 +745,17 @@ model Invitation {
   @@index([clientId])
   @@index([code])
   @@index([status])
+  @@index([groupId])
 }
 
 enum InvitationStatus {
   PENDING
   ACCEPTED
+  /// @deprecated — no new rows will be written with EXPIRED. Expiry is derived
+  /// from `expiresOn`; anything with `status = PENDING AND expiresOn < now` is
+  /// considered expired. Legacy EXPIRED rows are treated identically to REVOKED
+  /// (soft-deleted, hidden from UI). Kept in the enum for backwards compat with
+  /// historical data; do not write.
   EXPIRED
   REVOKED
 }
