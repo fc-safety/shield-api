@@ -587,10 +587,7 @@ export class TagsService {
       keyId: kid,
     });
 
-    let isValid = false;
-    if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(sig))) {
-      isValid = true;
-    }
+    const isValid = safeEqualStrings(signature, sig);
 
     let inspectionToken: string | undefined;
     if (isValid) {
@@ -686,12 +683,7 @@ export class TagsService {
         keyId,
       });
 
-      if (
-        !crypto.timingSafeEqual(
-          Buffer.from(validSignature),
-          Buffer.from(signature),
-        )
-      ) {
+      if (!safeEqualStrings(validSignature, signature)) {
         reason = 'Invalid inspection token signature';
       } else {
         isValid = true;
@@ -729,4 +721,19 @@ export class TagsService {
       throw error;
     }
   }
+}
+
+/**
+ * Constant-time string comparison that returns false for mismatched lengths
+ * instead of throwing. `crypto.timingSafeEqual` raises RangeError when the
+ * two buffers differ in length, which turns tampered (wrong-length) user
+ * signatures into 500s. A length check before compare keeps the check
+ * constant-time for equal-length inputs and makes mismatched inputs a normal
+ * "not valid" outcome.
+ */
+function safeEqualStrings(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
 }

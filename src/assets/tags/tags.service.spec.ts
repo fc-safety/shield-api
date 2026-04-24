@@ -719,4 +719,39 @@ describe('TagsService', () => {
       });
     });
   });
+
+  describe('validateTagSignature', () => {
+    it('returns isValid:false for a tampered signature with a different length instead of throwing', async () => {
+      // Regression: crypto.timingSafeEqual throws RangeError when the two
+      // buffers differ in length. That turned wrong-length user signatures
+      // into 500s in the Shield UI instead of the invalid-tag screen. See
+      // SHIELD-API-6 in Sentry.
+      mockAuthService.generateSignature.mockResolvedValueOnce('mock-signature');
+      const result = await service.validateTagSignature({
+        sn: 'sn-1',
+        id: 'ext-1',
+        t: 1_700_000_000,
+        sig: 'short',
+        kid: 'kid-1',
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.inspectionToken).toBeUndefined();
+    });
+
+    it('returns isValid:true for a matching signature', async () => {
+      mockAuthService.generateSignature.mockResolvedValueOnce('mock-signature');
+      jest
+        .spyOn(service, 'generateInspectionToken')
+        .mockResolvedValueOnce('token-abc' as unknown as never);
+      const result = await service.validateTagSignature({
+        sn: 'sn-1',
+        id: 'ext-1',
+        t: 1_700_000_000,
+        sig: 'mock-signature',
+        kid: 'kid-1',
+      });
+      expect(result.isValid).toBe(true);
+      expect(result.inspectionToken).toBe('token-abc');
+    });
+  });
 });
